@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@media print {
+  header, aside {
+    display: none !important;
+  }
+  main {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .print-no-break {
+    page-break-inside: avoid;
+  }
+}

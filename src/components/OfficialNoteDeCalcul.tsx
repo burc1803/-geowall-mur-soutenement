@@ -1,0 +1,711 @@
+import React, { useState } from 'react';
+import { AnalysisResult, WallGeometry, SoilProperties, ConcreteProperties, LoadsConfig } from '../lib/types';
+import { BearingPressureDiagram } from './BearingPressureDiagram';
+import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
+
+interface OfficialNoteDeCalculProps {
+  geo: WallGeometry;
+  soil: SoilProperties;
+  conc: ConcreteProperties;
+  result: AnalysisResult;
+  loads?: LoadsConfig; // charges saisies (absentes : « non disponible »)
+}
+
+const fmt = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : 'non disponible');
+
+function SectionTitle({ n, title }: { n: string; title: string }) {
+  return (
+    <h2 className="text-base font-black text-slate-950 border-b border-slate-400 pb-1 pt-2 break-after-avoid print:break-after-avoid">
+      {n}. {title}
+    </h2>
+  );
+}
+
+function SubTitle({ n, title }: { n: string; title: string }) {
+  return <h3 className="text-sm font-bold text-slate-900 break-after-avoid print:break-after-avoid">{n} {title}</h3>;
+}
+
+/** Valeur numérique simple (ex. « 12.00 », « −0,25 ») : alignée à droite en police à chasse fixe, comme le tableau 1. */
+const isNumeric = (s: string) => /^[−-]?\d+([.,]\d+)?$/.test(s.trim());
+
+/** Tableau compact, même mise en forme que le tableau 1 (en-tête foncé, lignes alternées, valeurs à chasse fixe). */
+function DataTable({ head, rows }: { head: string[]; rows: string[][] }) {
+  return (
+    <div className="inline-block max-w-full overflow-x-auto rounded-xl border border-slate-200 align-top break-inside-avoid print:break-inside-avoid">
+      <table className="w-auto text-left text-[11px] border-collapse">
+        <thead>
+          <tr className="bg-slate-800 text-white">
+            {head.map(h => <th key={h} className="px-2.5 py-1.5 font-bold whitespace-nowrap">{h}</th>)}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200">
+          {rows.map((r, i) => (
+            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+              {r.map((c, j) => (
+                <td
+                  key={j}
+                  className={`px-2.5 py-1 ${isNumeric(c) ? 'text-right font-mono whitespace-nowrap' : j === 0 && head[0] === 'N°' ? 'text-slate-500' : 'max-w-[22rem]'}`}
+                >
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Croquis coté de la coupe : rectangles et cotes issus de la géométrie (pas de moteur de dessin). */
+function WallSketch({ geo, B, totalHeight }: { geo: WallGeometry; B: number; totalHeight: number }) {
+  const sc = 150 / Math.max(B, totalHeight);
+  const ox = 30;
+  const oy = 20;
+  const H = totalHeight * sc;
+  const x = (m: number) => ox + m * sc;
+  const y = (m: number) => oy + H - m * sc; // m depuis la sous-face de la semelle
+  return (
+    <svg viewBox={`0 0 ${ox + B * sc + 50} ${H + 60}`} className="w-full max-w-xs border border-slate-300 rounded-lg bg-white" role="img" aria-label="Croquis coté du mur">
+      <rect x={x(0)} y={y(geo.epBase)} width={B * sc} height={geo.epBase * sc} fill="#e2e8f0" stroke="#0f172a" />
+      <rect x={x(geo.ePiedAv)} y={y(totalHeight)} width={geo.epStem * sc} height={geo.hMur * sc} fill="#e2e8f0" stroke="#0f172a" />
+      <line x1={x(geo.ePiedAv + geo.epStem)} y1={y(totalHeight)} x2={x(B)} y2={y(totalHeight)} stroke="#64748b" strokeDasharray="3 2" />
+      <text x={x(B) - 2} y={y(totalHeight) - 3} fontSize="7" textAnchor="end" fill="#475569">remblai</text>
+      <text x={x(0)} y={y(0) + 12} fontSize="7" fill="#0f172a">B = {B.toFixed(2)} m</text>
+      <text x={x(0)} y={y(geo.epBase) - 3} fontSize="7" fill="#0f172a">Lp {geo.ePiedAv.toFixed(2)}</text>
+      <text x={x(geo.ePiedAv + geo.epStem + 0.05)} y={y(geo.epBase) - 3} fontSize="7" fill="#0f172a">Lt {geo.ePiedAr.toFixed(2)}</text>
+      <text x={x(geo.ePiedAv + geo.epStem / 2)} y={y(totalHeight) - 4} fontSize="7" textAnchor="middle" fill="#0f172a">t {geo.epStem.toFixed(2)}</text>
+      <text x={x(B) + 4} y={y(geo.epBase + geo.hMur / 2)} fontSize="7" fill="#0f172a">h {geo.hMur.toFixed(2)}</text>
+      <text x={x(B) + 4} y={y(geo.epBase / 2) + 2} fontSize="7" fill="#0f172a">ts {geo.epBase.toFixed(2)}</text>
+      <text x={4} y={y(totalHeight / 2)} fontSize="7" fill="#0f172a">H {totalHeight.toFixed(2)}</text>
+    </svg>
+  );
+}
+
+export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: OfficialNoteDeCalculProps) {
+  const [table1Filter, setTable1Filter] = useState<'all' | 'ULS' | 'SLS'>('all');
+  const [engineerComment, setEngineerComment] = useState<string>(
+    'Commentaire de l\'ingénieur : à compléter.'
+  );
+  const [showToleranceBox, setShowToleranceBox] = useState<boolean>(true);
+
+  const B = geo.ePiedAv + geo.epStem + geo.ePiedAr;
+  const B_over_6 = B / 6;
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const ulsCombs = result.combinations.filter(c => c.type === 'ULS');
+  const slsCombs = result.combinations.filter(c => c.type === 'SLS');
+  const displayedTable1Combs = table1Filter === 'all' 
+    ? result.combinations 
+    : result.combinations.filter(c => c.type === table1Filter);
+
+  const seismicOn = result.soilMethodConfig.seismicMethod !== 'none';
+  const ep = result.earthPressures;
+  const wn = result.weights_nominal;
+  const xStem = geo.ePiedAv + geo.epStem / 2;
+  const xHeel = geo.ePiedAv + geo.epStem + geo.ePiedAr / 2;
+  type LoadRow = { desc: string; type: string; value: string; unit: string; pos: string };
+  const loadRows: LoadRow[] = [];
+  if (loads) {
+    if (loads.surcharge > 0) loadRows.push({ desc: 'Surcharge amont', type: loads.surchargeType, value: fmt(loads.surcharge, 2), unit: 'kPa', pos: 'Surface du remblai amont (sur le talon)' });
+    if ((loads.surchargeAval ?? 0) > 0) loadRows.push({ desc: 'Surcharge aval', type: loads.surchargeAvalType ?? 'L', value: fmt(loads.surchargeAval ?? 0, 2), unit: 'kPa', pos: 'Surface du sol à l\'avant (sur le patin)' });
+    const pt = loads.pointLoadTop;
+    if (pt?.enabled) {
+      const ty = pt.loadType ?? 'L';
+      const pos = `Tête du voile : x = ${fmt(xStem, 2)} m, y = ${fmt(result.totalHeight, 2)} m`;
+      if (pt.Fy) loadRows.push({ desc: `Charge en tête Fy${pt.name ? ' (' + pt.name + ')' : ''}`, type: ty, value: fmt(pt.Fy, 2), unit: 'kN/m', pos });
+      if (pt.Fx) loadRows.push({ desc: 'Charge en tête Fx', type: ty, value: fmt(pt.Fx, 2), unit: 'kN/m', pos });
+      if (pt.Mz) loadRows.push({ desc: 'Moment en tête Mz', type: ty, value: fmt(pt.Mz, 2), unit: 'kN·m/m', pos });
+    }
+    for (const al of loads.additionalLoads ?? []) {
+      const dist = al.isDistributed && al.length;
+      loadRows.push({
+        desc: `${al.name} (${al.nature})`, type: al.caseType, value: fmt(al.magnitude, 2),
+        unit: al.nature === 'Mz' ? 'kN·m/m' : dist ? 'kN/m par m' : 'kN/m',
+        pos: `x = ${fmt(al.x, 2)} m, y = ${fmt(al.y, 2)} m${dist ? `, longueur ${fmt(al.length ?? 0, 2)} m` : ''}`
+      });
+    }
+    if (loads.reactionsTop) {
+      for (const k of Object.keys(loads.reactionsTop) as (keyof typeof loads.reactionsTop)[]) {
+        const r = loads.reactionsTop[k];
+        const pos = `Tête du voile : y = ${fmt(result.totalHeight, 2)} m`;
+        if (r?.Rx) loadRows.push({ desc: 'Réaction en tête Rx', type: k, value: fmt(r.Rx, 2), unit: 'kN/m', pos });
+        if (r?.Ry) loadRows.push({ desc: 'Réaction en tête Ry', type: k, value: fmt(r.Ry, 2), unit: 'kN/m', pos });
+        if (r?.M) loadRows.push({ desc: 'Réaction en tête M', type: k, value: fmt(r.M, 2), unit: 'kN·m/m', pos });
+      }
+    }
+  } else {
+    loadRows.push({ desc: 'Charges saisies (surcharges, charges de tête, charges supplémentaires)', type: '—', value: 'non disponible', unit: '—', pos: '—' });
+  }
+  if (result.hydro.hasWater) loadRows.push({ desc: 'Nappe phréatique : niveau', type: 'H', value: fmt(result.hydro.hw, 2), unit: 'm', pos: 'Au-dessus de la sous-face de la semelle' });
+  // Composantes horizontales non pondérées réellement utilisées par le moteur (celles qui entrent dans ΣH)
+  const latLabel = (n: string): string => {
+    if (n === 'Pa_sol') return 'Poussée active des terres (γ)';
+    if (n === 'Pa_sol_sec') return 'Poussée active des terres, sol au-dessus de la nappe (γ)';
+    if (n === 'Pa_sol_sub_surch') return 'Poussée active sous la nappe due au sol sec sus-jacent';
+    if (n === 'Pa_sol_déjaugé') return 'Poussée active des terres sous la nappe (γ′)';
+    if (n === 'Pw_eau_hydrostatique') return 'Poussée hydrostatique de l\'eau';
+    if (n.startsWith('Pa_surcharge_amont')) return 'Poussée de la surcharge amont';
+    if (n.startsWith('P_seismic_soil')) return 'Incrément sismique de poussée ΔPAE';
+    if (n === 'E_stem_inertia') return 'Inertie sismique du voile';
+    if (n === 'E_base_inertia') return 'Inertie sismique de la semelle';
+    return n;
+  };
+  for (const c of result.lateral_nominal.filter(c => !c.applied)) {
+    loadRows.push({ desc: latLabel(c.name), type: c.type, value: fmt(c.Fx, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(c.y, 2)} m` });
+  }
+  if (result.hydro.hasWater) {
+    loadRows.push({ desc: 'Sous-pression sous la semelle (uniforme sur B)', type: 'H', value: fmt(result.hydro.uplift_nominal, 2), unit: 'kN/m', pos: `Vers le haut, x = ${fmt(B / 2, 2)} m` });
+  }
+  loadRows.push({ desc: 'Poids propre du voile', type: 'D', value: fmt(wn.stem, 2), unit: 'kN/m', pos: `x = ${fmt(xStem, 2)} m` });
+  loadRows.push({ desc: 'Poids propre de la semelle', type: 'D', value: fmt(wn.base, 2), unit: 'kN/m', pos: `x = ${fmt(B / 2, 2)} m` });
+  loadRows.push({ desc: 'Poids du sol sur le talon (γ′ sous la nappe)', type: 'D', value: fmt(wn.heelSoil, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
+  if (soil.hSolAv > 0) loadRows.push({ desc: 'Poids du sol sur le patin (γ′ sous la nappe)', type: 'D', value: fmt(wn.toeSoil, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
+  if (wn.waterHeel > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du talon', type: 'H', value: fmt(wn.waterHeel, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
+  if (wn.waterToe > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du patin', type: 'H', value: fmt(wn.waterToe, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
+
+  return (
+    <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-2 md:p-6 print:p-0 print:max-w-none text-slate-800">
+      {/* Action Bar (Print / Export) */}
+      <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-blue-50 text-blue-700 rounded-xl">
+            <FileText size={22} />
+          </div>
+          <div>
+            <h3 className="text-base font-black text-slate-900">Note de Calcul Officielle (CNB {result.cnbEdition} / CSA A23.3-19)</h3>
+            <p className="text-xs text-slate-500">
+              Format homologué prêt pour révision de l'ingénieur, approbation municipale et impression PDF
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handlePrint}
+          className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all"
+        >
+          <Printer size={16} />
+          Imprimer / Exporter PDF
+        </button>
+      </div>
+
+      {/* Sheet Content Container (Styled like a formal calculation document) */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-8 md:p-12 space-y-8 print:border-none print:shadow-none print:p-4">
+        {/* Document Header */}
+        <div className="border-b-2 border-slate-900 pb-6 flex flex-col md:flex-row md:items-start justify-between gap-6">
+          <div className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+              RAPPORT D'INGÉNIERIE GÉOTECHNIQUE ET STRUCTURALE
+            </span>
+            <h1 className="text-2xl font-black text-slate-950 mt-1">
+              PROJET : CALCUL MUR DE SOUTÈNEMENT
+            </h1>
+            <p className="text-xs font-bold text-slate-600">
+              Références de calcul : CNB {result.cnbEdition} (partie 4), CFEM 5e éd. (Manuel canadien d'ingénierie des fondations) & CSA A23.3-19 (articles béton du mur)
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div className="col-span-2 font-semibold text-slate-700">Projet au Québec — code applicable : Code de construction du Québec, Chapitre I – Bâtiment (CNB adopté avec modifications) ; référence de calcul : CNB {result.cnbEdition}</div>
+            <div><strong>Date :</strong> {new Date().toLocaleDateString('fr-CA')}</div>
+            <div><strong>Logiciel :</strong> GeoWall PRO v2.4</div>
+            <div><strong>Type d'Écran :</strong> {geo.wallType === 'cantilever' ? 'Mur Cantilever Autostable' : 'Mur de Sous-sol Bloqué'}</div>
+            <div><strong>Méthode Séisme :</strong> {result.soilMethodConfig.seismicMethod === 'seed_whitman' ? 'Seed & Whitman (1970)' : (result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Statique')}</div>
+          </div>
+        </div>
+
+        {/* 1. DONNÉES DE CALCUL */}
+        <SectionTitle n="1" title="Données de calcul" />
+
+        <div className="space-y-2">
+          <SubTitle n="1.1" title="Géométrie et dimensions" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+            <div className="lg:col-span-2">
+              <DataTable
+                head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
+                rows={[
+                  ['Type d\'écran', '—', geo.wallType === 'cantilever' ? 'Mur en porte-à-faux (cantilever)' : 'Mur de sous-sol appuyé en tête', '—'],
+                  ['Hauteur du voile', 'h', fmt(geo.hMur, 2), 'm'],
+                  ['Épaisseur du voile (en tête et en pied)', 't', `${fmt(geo.epStem, 3)} (constante ; fruit non modélisé)`, 'm'],
+                  ['Longueur du patin (avant)', 'Lp', fmt(geo.ePiedAv, 2), 'm'],
+                  ['Longueur du talon (arrière)', 'Lt', fmt(geo.ePiedAr, 2), 'm'],
+                  ['Épaisseur de la semelle', 'ts', fmt(geo.epBase, 3), 'm'],
+                  ['Largeur totale de la semelle', 'B', fmt(B, 2), 'm'],
+                  ['Sixième de la largeur', 'B/6', fmt(B_over_6, 3), 'm'],
+                  ['Hauteur totale (sous-face de la semelle au haut du voile)', 'H', fmt(result.totalHeight, 2), 'm'],
+                  ['Hauteur de sol à l\'avant', 'hs,av', fmt(soil.hSolAv, 2), 'm'],
+                  ['Pente du remblai', 'β', 'non disponible (remblai horizontal seulement)', '°'],
+                  ['Clé de cisaillement', '—', 'non disponible (non modélisée)', '—'],
+                ]}
+              />
+            </div>
+            <WallSketch geo={geo} B={B} totalHeight={result.totalHeight} />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <SubTitle n="1.2" title="Matériaux et masses volumiques" />
+          <DataTable
+            head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
+            rows={[
+              ['Béton : poids volumique utilisé par le calcul', 'γc', fmt(conc.gamma_c, 1), 'kN/m³'],
+              ['Béton du voile : résistance en compression', 'f′c voile', fmt(conc.fc_mur, 0), 'MPa'],
+              ['Béton de la semelle : résistance en compression', 'f′c semelle', fmt(conc.fc_semelle, 0), 'MPa'],
+              ['Acier d\'armature : limite élastique', 'fy', fmt(conc.fy, 0), 'MPa'],
+              ['Enrobage du voile', 'c voile', fmt(conc.cover_h, 0), 'mm'],
+              ['Enrobage du talon (lit supérieur)', 'c talon', fmt(conc.cover_v, 0), 'mm'],
+              ['Enrobage de l\'orteil (lit inférieur)', 'c orteil', fmt(conc.cover_base_bottom, 0), 'mm'],
+              ['Remblai : poids volumique', 'γ', fmt(soil.gamma, 1), 'kN/m³'],
+              ['Remblai : angle de frottement interne', 'φ′', fmt(soil.phi, 1), '°'],
+              ['Remblai : cohésion (négligée dans la poussée active)', 'c′', fmt(soil.cohesion ?? 0, 1), 'kPa'],
+              ['Sol de fondation : poids volumique', 'γ', fmt(result.foundationSoil.gamma, 1), 'kN/m³'],
+              ['Sol de fondation : angle de frottement interne', 'φ′', fmt(result.foundationSoil.phi, 1), '°'],
+              ['Sol de fondation : cohésion', 'c′', fmt(result.foundationSoil.cohesion, 1), 'kPa'],
+              ['Frottement de base sol-béton', 'μ', fmt(soil.mu, 2), '—'],
+              ['Eau : poids volumique', 'γw', fmt(result.hydro.gamma_w, 2), 'kN/m³'],
+              ['Nappe : hauteur au-dessus de la sous-face de la semelle', 'hw', result.hydro.hasWater ? fmt(result.hydro.hw, 2) : 'nappe inactive', result.hydro.hasWater ? 'm' : '—'],
+              ['Poids volumique déjaugé retenu (γ − γw, hypothèse : γ saisi = γ saturé)', 'γ′', result.hydro.hasWater ? fmt(result.hydro.gamma_prime, 2) : 'sans objet', result.hydro.hasWater ? 'kN/m³' : '—'],
+              ['Portance admissible saisie (ÉLS)', 'qadm', fmt(soil.qAllowable_SLS, 0), 'kPa'],
+              ['Portance ultime saisie (ÉLU, avant facteur φ)', 'qu', fmt(soil.qUltimate_ULS, 0), 'kPa'],
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <SubTitle n="1.3" title="Coefficients de poussée" />
+          <DataTable
+            head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
+            rows={[
+              ['Méthode de poussée active retenue', '—', geo.wallType === 'basement' ? 'K0 (mur de sous-sol, tête non déplaçable)' : ({ rankine: 'Rankine', coulomb: 'Coulomb', at_rest: 'Repos (K0)' } as Record<string, string>)[result.soilMethodConfig.activeMethod], '—'],
+              ['Coefficient de poussée actif utilisé', 'Ka', fmt(result.K_active, 4), '—'],
+              ['Coefficient de poussée au repos', 'K0', fmt(result.K_0, 4), '—'],
+              ['Méthode de butée', '—', ({ rankine: 'Rankine', coulomb: 'Coulomb', reduced_cfem: 'Rankine réduit', neglected: 'Butée négligée' } as Record<string, string>)[result.soilMethodConfig.passiveMethod], '—'],
+              ['Coefficient de butée utilisé (sol de fondation)', 'Kp', fmt(result.K_passive, 4), '—'],
+              ['Séisme : méthode', '—', result.soilMethodConfig.seismicMethod === 'seed_whitman' ? 'Seed & Whitman (1970)' : result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Statique (séisme non pris en compte)', '—'],
+              ['Séisme : coefficient horizontal', 'kh', loads && seismicOn ? fmt(loads.kh, 3) : seismicOn ? 'non disponible' : 'sans objet', '—'],
+              ['Séisme : coefficient vertical', 'kv', loads && seismicOn ? fmt(loads.kv, 3) : seismicOn ? 'non disponible' : 'sans objet', '—'],
+              ['Séisme : coefficient de poussée dynamique (Mononobe-Okabe)', 'KAE', result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? fmt(result.earthPressures.Kae_mo, 4) : 'sans objet', '—'],
+            ]}
+          />
+        </div>
+
+        {/* 2. CHARGES APPLIQUÉES */}
+        <SectionTitle n="2" title="Charges appliquées" />
+        <div className="space-y-2">
+          <p className="text-xs text-slate-600">
+            Valeurs caractéristiques, non pondérées. Les facteurs de la section 3 s'appliquent ensuite. Positions mesurées depuis l'orteil (x) et la sous-face de la semelle (y).
+          </p>
+          <DataTable
+            head={['N°', 'Description', 'Type CNB', 'Valeur', 'Unité', 'Point d\'application ou position']}
+            rows={loadRows.map((r, i) => [String(i + 1), r.desc, r.type, r.value, r.unit, r.pos])}
+          />
+        </div>
+
+        {/* 3. COMBINAISONS DE CHARGES */}
+        <SectionTitle n="3" title="Combinaisons de charges" />
+        <div className="space-y-3 text-xs text-slate-700">
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Édition retenue :</strong> CNB {result.cnbEdition}, 4.1.3.2 et tableau 4.1.3.2.-A (défaut : 2020 ; option : 2025).</li>
+            <li><strong>Cas 5 :</strong> {result.cnbEdition === '2020' ? '1,0D + 1,0E + 1,0H + 0,5L + 0,25S' : '1,0D + 1,0E + 1,0H + 0,5L + 0,15S'}.</li>
+            <li><strong>Facteur 1,0H au cas 5 :</strong> note A-4.1.3.2.(4) (1,5H pour les cas 2, 3 et 4) et tableau A-3 du Commentaire A du CNB 2020 (1,0 pour D, H, T et P avec E). Commentaire 2025 : À CONFIRMER.</li>
+            <li>Charges variables favorables prises à zéro ; 0,9D ou 1,0D (cas 5) pour la charge permanente qui s'oppose ; poids du sol porté selon 4.1.3.2.(8) et (9).</li>
+          </ul>
+          <DataTable
+            head={['Cas', 'Charges principales', 'Charges d\'accompagnement']}
+            rows={
+              result.cnbEdition === '2020'
+                ? [
+                    ['1', '1,4D', '—'],
+                    ['2', '(1,25D ou 0,9D) + 1,5L', '1,0S ou 0,4W'],
+                    ['3', '(1,25D ou 0,9D) + 1,5S', '1,0L ou 0,4W'],
+                    ['4', '(1,25D ou 0,9D) + 1,4W', '0,5L ou 0,5S'],
+                    ['5', '1,0D + 1,0E', '0,5L + 0,25S'],
+                  ]
+                : [
+                    ['1', '1,4D', '—'],
+                    ['2', '(1,25D ou 0,9D) + 1,5L', '0,7S ou 0,3W'],
+                    ['3', '(1,25D ou 0,9D) + 1,0S', '1,0L ou 0,3W'],
+                    ['4', '(1,25D ou 0,9D) + 1,0W', '0,5L ou 0,35S'],
+                    ['5', '1,0D + 1,0E', '0,5L + 0,15S'],
+                  ]
+            }
+          />
+          <p className="text-[11px] text-slate-500">La poussée des terres H est affectée du facteur 1,5 aux cas 1 à 4 et 1,0 au cas 5 (voir ci-dessus). Chaque cas est aussi évalué avec les charges d'accompagnement prises égales à zéro (4.1.3.2.(3)).</p>
+        </div>
+
+        {/* 4. VÉRIFICATIONS */}
+        <SectionTitle n="4" title="Vérifications" />
+        <div className="text-xs bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
+          <div>
+            <strong>Critère de renversement et de portance :</strong>{' '}
+            {result.stabilityCriterion === 'moments'
+              ? 'moments (FS = Ms/Mr) et pression linéaire q = V/B·(1 ± 6e/B)'
+              : "excentricité, largeur réduite B′ = B − 2e, pression uniforme V/B′ (limite d'excentricité du CFEM 5e éd. : À CONFIRMER, aucune conclusion tirée de e)"}
+            {' '}— combinaison de portance gouvernante : e = {result.governingBearing.ecc.toFixed(3)} m, B′ = B − 2e = {result.governingBearing.B_eff.toFixed(3)} m.
+          </div>
+          {result.warnings.map((w, i) => (
+            <div key={i} className="text-rose-700 font-bold">{w}</div>
+          ))}
+          {result.combinations.filter(c => c.stability_message).map(c => (
+            <div key={c.combName} className="text-rose-700 font-bold">{c.combName} : {c.stability_message}</div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['Glissement', result.governingSliding.status_sliding === 'OK', `FS = ${result.governingSliding.FOS_sliding.toFixed(2)}`],
+              ['Renversement', result.governingOverturning.status_overturning === 'OK', result.governingOverturning.outside_base ? 'hors base' : `FS = ${result.governingOverturning.FOS_overturning.toFixed(2)}`],
+              ['Portance ÉLU', result.governingBearing.status_bearing === 'OK', result.governingBearing.outside_base ? 'non vérifiable (résultante hors base)' : `q = ${result.governingBearing.q_design.toFixed(1)} / ${result.governingBearing.q_capacity.toFixed(1)} kPa`],
+              ['Béton du mur et de la semelle', Object.values(result.concreteDesign).every((d: any) => (d.checks_ok ?? d.status_ok) === true), 'flexion, cisaillement, As,min, ductilité, fissuration, ancrage, frottement']
+            ].map(([label, ok, detail]) => (
+              <span key={label as string} className={`px-2 py-1 rounded font-bold ${!result.verifiable ? 'bg-amber-100 text-amber-800' : ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                {label as string} : {!result.verifiable ? 'NON VÉRIFIABLE' : ok ? 'CONFORME' : 'NON CONFORME'} ({detail as string})
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* TABLE 1: COMBINAISONS — PRESSION DE CONTACT, EXCENTRICITÉ & PORTANCE */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+              Tableau 1 : {table1Filter === 'all' ? `Toutes les Combinaisons CNB ${result.cnbEdition} (${displayedTable1Combs.length} Combinaisons ÉLU & ÉLS)` : table1Filter === 'ULS' ? `Combinaisons ÉLU — Capacité Portante Facturée (${displayedTable1Combs.length} Combinaisons)` : `Combinaisons ÉLS — Pression de Contact & Tiers Central (${displayedTable1Combs.length} Combinaisons)`}
+            </h3>
+
+            {/* Filter buttons for Table 1 */}
+            <div className="flex items-center gap-2 print:hidden">
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-[11px] font-bold">
+                <button
+                  onClick={() => setTable1Filter('all')}
+                  className={`px-3 py-1 rounded-lg transition-all ${table1Filter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                >
+                  Toutes ({result.combinations.length})
+                </button>
+                <button
+                  onClick={() => setTable1Filter('ULS')}
+                  className={`px-3 py-1 rounded-lg transition-all ${table1Filter === 'ULS' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-purple-700'}`}
+                >
+                  ÉLU ({ulsCombs.length})
+                </button>
+                <button
+                  onClick={() => setTable1Filter('SLS')}
+                  className={`px-3 py-1 rounded-lg transition-all ${table1Filter === 'SLS' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-700'}`}
+                >
+                  ÉLS ({slsCombs.length})
+                </button>
+              </div>
+            </div>
+
+            <span className="text-[11px] font-bold text-slate-500">
+              q_adm (ÉLS) = {soil.qAllowable_SLS.toFixed(1)} kPa | q_res (ÉLU) = {(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white text-[11px]">
+                  <th className="p-2.5 font-bold">No</th>
+                  <th className="p-2.5 font-bold text-center">État</th>
+                  <th className="p-2.5 font-bold">Combinaison</th>
+                  <th className="p-2.5 font-bold text-center">D</th>
+                  <th className="p-2.5 font-bold text-center">L</th>
+                  <th className="p-2.5 font-bold text-center">S</th>
+                  <th className="p-2.5 font-bold text-center">W</th>
+                  <th className="p-2.5 font-bold text-center">E</th>
+                  <th className="p-2.5 font-bold text-center">H</th>
+                  <th className="p-2.5 font-bold text-right">Rv (kN/m)</th>
+                  <th className="p-2.5 font-bold text-right">e (m)</th>
+                  <th className="p-2.5 font-bold text-right">B/6 (m)</th>
+                  <th className="p-2.5 font-bold text-right">x1 (m)</th>
+                  <th className="p-2.5 font-bold text-right bg-blue-900">q1 (kPa)</th>
+                  <th className="p-2.5 font-bold text-right">q2 (kPa)</th>
+                  <th className="p-2.5 font-bold text-right">Limite (kPa)</th>
+                  <th className="p-2.5 font-bold text-center">Ratio</th>
+                  <th className="p-2.5 font-bold text-center">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+                {displayedTable1Combs.map((c, idx) => {
+                  const qLimit = c.type === 'SLS' 
+                    ? soil.qAllowable_SLS 
+                    : (soil.qUltimate_ULS * soil.geotechFactors.phi_gu);
+                  const isExceeded = c.status_bearing === 'NON';
+                  const isGoverning = c.type === 'SLS' 
+                    ? (result.governingSLS && result.governingSLS.combName === c.combName)
+                    : (result.governingBearing && result.governingBearing.combName === c.combName);
+                  const ratio = qLimit > 0 ? (c.q_design / qLimit) : 0;
+
+                  return (
+                    <tr
+                      key={c.combName}
+                      className={`${isGoverning ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
+                    >
+                      <td className="p-2 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="p-2 text-center font-sans">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                          c.type === 'ULS' 
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                            : 'bg-blue-100 text-blue-800 border border-blue-200'
+                        }`}>
+                          {c.type}
+                        </span>
+                      </td>
+                      <td className="p-2 text-slate-800 font-sans font-bold whitespace-nowrap">
+                        {c.combName}
+                        {isGoverning && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-bold">
+                            Gouvernant
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-center text-slate-600">{c.factors.D}</td>
+                      <td className="p-2 text-center text-slate-600">{c.factors.L}</td>
+                      <td className="p-2 text-center text-slate-600">{c.factors.S}</td>
+                      <td className="p-2 text-center text-slate-600">{c.factors.W}</td>
+                      <td className="p-2 text-center text-slate-600">{c.factors.E || 0}</td>
+                      <td className="p-2 text-center text-slate-600">{c.factors.H}</td>
+                      <td className="p-2 text-right">{c.sumV_max.toFixed(1)}</td>
+                      <td className="p-2 text-right">{Math.abs(c.ecc).toFixed(3)}</td>
+                      <td className="p-2 text-right text-slate-500">{B_over_6.toFixed(3)}</td>
+                      <td className="p-2 text-right">{c.x1.toFixed(3)}</td>
+                      <td className="p-2 text-right font-black text-blue-900 bg-blue-50/50">{c.outside_base ? 'non vérifiable' : c.q_toe.toFixed(1)}</td>
+                      <td className="p-2 text-right">{c.outside_base ? 'non vérifiable' : c.q_heel.toFixed(1)}</td>
+                      <td className="p-2 text-right text-slate-600 font-semibold">{qLimit.toFixed(1)}</td>
+                      <td className="p-2 text-center">{c.outside_base ? '—' : `${(ratio * 100).toFixed(0)} %`}</td>
+                      <td className="p-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
+                          !isExceeded ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {!isExceeded ? 'OK' : (c.stability_message ? 'NON' : 'Surcharge')}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* TABLE 2: ELU - MUR */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+              Tableau 2 : ÉLU — Sollicitations du Voile (Flexion Mf & Cisaillement Vf) ({ulsCombs.length} Combinaisons ÉLU)
+            </h3>
+            <span className="text-[11px] font-bold text-slate-500">
+              Armature fournie : {result.concreteDesign.mur_interieur.bar_designation} (Mr = {result.concreteDesign.mur_interieur.Mr.toFixed(1)} kNm/m)
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white text-[11px]">
+                  <th className="p-2.5 font-bold">No</th>
+                  <th className="p-2.5 font-bold">Combinaison</th>
+                  <th className="p-2.5 font-bold text-right">Poussée Terre (kN)</th>
+                  <th className="p-2.5 font-bold text-right">Surcharge (kN)</th>
+                  <th className="p-2.5 font-bold text-right">Séisme (kN)</th>
+                  <th className="p-2.5 font-bold text-right bg-indigo-900">Mf (kNm/m)</th>
+                  <th className="p-2.5 font-bold text-right">Vf (kN/m)</th>
+                  <th className="p-2.5 font-bold text-right">As fournie (mm²/m)</th>
+                  <th className="p-2.5 font-bold text-center">Ratio Mf/Mr</th>
+                  <th className="p-2.5 font-bold text-center">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+                {ulsCombs.map((c, idx) => {
+                  const mr = result.concreteDesign.mur_interieur.Mr;
+                  const ratio = mr > 0 ? (c.mur_Mf / mr) : 0;
+                  const isOk = c.mur_Mf <= mr;
+                  const isGovStem = result.governingStem && result.governingStem.combName === c.combName;
+
+                  return (
+                    <tr key={c.combName} className={`${isGovStem ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                      <td className="p-2 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="p-2 text-slate-800 font-sans font-bold whitespace-nowrap">
+                        {c.combName}
+                        {isGovStem && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-bold">
+                            Gouvernant Mf
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right">{(result.earthPressures.P_active_nominal * c.factors.H).toFixed(1)}</td>
+                      <td className="p-2 text-right">{(result.earthPressures.P_surcharge_nominal * c.factors.L).toFixed(1)}</td>
+                      <td className="p-2 text-right">{(result.earthPressures.delta_Pae_seed * (c.factors.E || 0)).toFixed(1)}</td>
+                      <td className="p-2 text-right font-black text-indigo-900 bg-indigo-50/50">{c.mur_Mf.toFixed(1)}</td>
+                      <td className="p-2 text-right">{c.mur_Vf.toFixed(1)}</td>
+                      <td className="p-2 text-right">{result.concreteDesign.mur_interieur.As_provided.toFixed(0)}</td>
+                      <td className="p-2 text-center">{(ratio * 100).toFixed(0)} %</td>
+                      <td className="p-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
+                          isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {isOk ? 'OK' : 'Dépassement'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* TABLE 3: ELU - SEMELLE */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+              Tableau 3 : ÉLU — Sollicitations de la Semelle (Patin Avant & Talon Arrière) ({ulsCombs.length} Combinaisons ÉLU)
+            </h3>
+            <span className="text-[11px] font-bold text-slate-500">
+              Patin : {result.concreteDesign.semelle_orteil.bar_designation} | Talon : {result.concreteDesign.semelle_talon.bar_designation}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white text-[11px]">
+                  <th className="p-2.5 font-bold">No</th>
+                  <th className="p-2.5 font-bold">Combinaison</th>
+                  <th className="p-2.5 font-bold text-right bg-emerald-900">Patin Mf (kNm)</th>
+                  <th className="p-2.5 font-bold text-right">Patin Vf (kN)</th>
+                  <th className="p-2.5 font-bold text-right bg-emerald-900">Talon Mf (kNm)</th>
+                  <th className="p-2.5 font-bold text-right">Talon Vf (kN)</th>
+                  <th className="p-2.5 font-bold text-center">Ratio Patin</th>
+                  <th className="p-2.5 font-bold text-center">Ratio Talon</th>
+                  <th className="p-2.5 font-bold text-center">Statut Semelle</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+                {ulsCombs.map((c, idx) => {
+                  const mrToe = result.concreteDesign.semelle_orteil.Mr;
+                  const mrHeel = result.concreteDesign.semelle_talon.Mr;
+                  const ratioToe = mrToe > 0 ? (c.toe_Mf / mrToe) : 0;
+                  const ratioHeel = mrHeel > 0 ? (c.heel_Mf / mrHeel) : 0;
+                  const isOk = c.toe_Mf <= mrToe && c.heel_Mf <= mrHeel;
+                  const isGovToe = result.governingToe && result.governingToe.combName === c.combName;
+                  const isGovHeel = result.governingHeel && result.governingHeel.combName === c.combName;
+
+                  return (
+                    <tr key={c.combName} className={`${isGovToe || isGovHeel ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
+                      <td className="p-2 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="p-2 text-slate-800 font-sans font-bold whitespace-nowrap">
+                        {c.combName}
+                        {isGovToe && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-emerald-200 text-emerald-900 font-bold">
+                            Gov. Patin
+                          </span>
+                        )}
+                        {isGovHeel && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-blue-200 text-blue-900 font-bold">
+                            Gov. Talon
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2 text-right font-black text-emerald-900 bg-emerald-50/40">{c.toe_Mf.toFixed(1)}</td>
+                      <td className="p-2 text-right">{c.toe_Vf.toFixed(1)}</td>
+                      <td className="p-2 text-right font-black text-emerald-900 bg-emerald-50/40">{c.heel_Mf.toFixed(1)}</td>
+                      <td className="p-2 text-right">{c.heel_Vf.toFixed(1)}</td>
+                      <td className="p-2 text-center">{(ratioToe * 100).toFixed(0)} %</td>
+                      <td className="p-2 text-center">{(ratioHeel * 100).toFixed(0)} %</td>
+                      <td className="p-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
+                          isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {isOk ? 'OK' : 'Vérifier'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* EMBEDDED PRESSURE AND RESULTANT DIAGRAM */}
+        <div className="space-y-3 pt-2">
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+            Diagramme des Pressions au Sol & Vecteur Résultante Rv
+          </h3>
+          <BearingPressureDiagram geo={geo} soil={soil} result={result} />
+        </div>
+
+        {/* 5. HYPOTHÈSES ET LIMITES */}
+        <SectionTitle n="5" title="Hypothèses et limites" />
+        <div className="text-xs text-slate-700 space-y-2">
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Non vérifié :</strong> stabilité d'ensemble (glissement profond), gel et profondeur de la semelle, drainage, tassement calculé, pression de compactage.</li>
+            <li>Sous-pression sous la semelle uniforme γw·hw sur la largeur B (hypothèse conservatrice, drainage non défini) ; facteur 1,5 appliqué à l'eau : classement À CONFIRMER.</li>
+            <li>γ′ du sol sous la nappe = γ − γw (le γ saisi est pris comme poids volumique saturé ; hypothèse).</li>
+            <li>Limite d'excentricité du CFEM 5e éd. : À CONFIRMER, aucune conclusion tirée de e. Numérotation des tableaux et figures du CFEM (4e éd.) à reconfirmer pour la 5e éd.</li>
+            <li>Facteurs φ géotechniques, kh et méthode Mononobe-Okabe : en révision (fiche suivante). Commentaire 2025 sur le facteur de H au cas 5 : À CONFIRMER.</li>
+            <li>Cisaillement-friction : c = 0,25 MPa et μ = 0,60 (état de surface du joint non précisé) ; article de l'armature minimale du voile : À CONFIRMER.</li>
+            <li>Géométrie : remblai horizontal, voile sans fruit, sans clé de cisaillement.</li>
+          </ul>
+        </div>
+
+        {/* HIGHLIGHTED BLUE CALLOUT BOX (AS SEEN IN USER NOTE) */}
+        {showToleranceBox && (
+          <div className="p-5 rounded-2xl bg-sky-50 border-2 border-sky-300 text-sky-950 space-y-2 relative">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-wider text-sky-700 flex items-center gap-1.5">
+                <Info size={15} className="text-sky-600" />
+                NOTE ET JUSTIFICATION DE CONFORMITÉ STRUCTURALE (INGÉNIEUR CONSEIL)
+              </span>
+              <button
+                onClick={() => setShowToleranceBox(false)}
+                className="text-sky-400 hover:text-sky-700 text-xs print:hidden"
+              >
+                Masquer
+              </button>
+            </div>
+
+            <textarea
+              value={engineerComment}
+              onChange={(e) => setEngineerComment(e.target.value)}
+              className="w-full bg-transparent border-0 font-medium text-xs text-sky-950 focus:ring-0 resize-none leading-relaxed p-0 italic"
+              rows={2}
+            />
+            
+            <p className="text-[10px] text-sky-700 pt-1 border-t border-sky-200">
+              * Références : CNB {result.cnbEdition}, 4.1.3.2 ; CFEM 5e éd. (numérotation des tableaux et figures de la 4e éd. à reconfirmer) ; CSA A23.3-19. Éléments NON VÉRIFIÉS : stabilité d'ensemble, gel, drainage, tassement.
+            </p>
+          </div>
+        )}
+
+        {/* Signatures Strip */}
+        <div className="pt-8 border-t border-slate-300 grid grid-cols-2 md:grid-cols-3 gap-6 text-xs text-slate-600">
+          <div>
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Conçu et Calculé par :</span>
+            <div className="h-12 border-b border-slate-300 mt-2"></div>
+            <span className="text-[11px] font-bold text-slate-700 mt-1 block">Ingénieur Concepteur, ing.</span>
+          </div>
+
+          <div>
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Vérifié par :</span>
+            <div className="h-12 border-b border-slate-300 mt-2"></div>
+            <span className="text-[11px] font-bold text-slate-700 mt-1 block">Ingénieur Vérificateur, ing.</span>
+          </div>
+
+          <div className="hidden md:block">
+            <span className="block text-[10px] uppercase font-bold text-slate-400">Sceau & Signature de l'Ordre (OIQ) :</span>
+            <div className="h-12 border border-dashed border-slate-300 rounded-lg mt-2 flex items-center justify-center text-[10px] text-slate-400 font-mono">
+              [Emplacement Sceau Numérique]
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
