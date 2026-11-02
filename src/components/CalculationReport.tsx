@@ -73,7 +73,8 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
               <tr><th className="py-1.5 font-semibold text-slate-700">Poids volumique sol (γ)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.gamma.toFixed(1)} kN/m³</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Angle de frottement interne (φ)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.phi.toFixed(1)} °</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Coeff. frottement base (μ = tan δ)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.mu.toFixed(2)}</td></tr>
-              <tr><th className="py-1.5 font-semibold text-slate-700">Hauteur sol avant (butée) (h1)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.hSolAv.toFixed(2)} m</td></tr>
+              <tr><th className="py-1.5 font-semibold text-slate-700">Hauteur de sol à l'avant (hs,av, depuis le dessus de la semelle)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.hSolAv.toFixed(2)} m</td></tr>
+              <tr><th className="py-1.5 font-semibold text-slate-700">Profondeur de butée (hp, depuis la sous-face)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{result.earthPressures.h_pass.toFixed(2)} m</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Capacité portante admissible ELS (q_adm)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.qAllowable_SLS.toFixed(1)} kPa</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Capacité portante ultime ULS (q_ult)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.qUltimate_ULS.toFixed(1)} kPa</td></tr>
               <tr className="bg-indigo-50/50">
@@ -167,7 +168,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             <tbody className="divide-y divide-slate-100">
               {result.combinations.map((c, i) => {
                 const frictionPart = (Math.max(c.sumV_min, 0) * soil.mu * (c.type === 'ULS' ? soil.geotechFactors.phi_gs : 1.0));
-                const passivePart = (0.5 * result.K_passive * result.foundationSoil.gamma * soil.hSolAv * soil.hSolAv * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
+                const passivePart = (result.earthPressures.P_passive_nominal * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
                 return (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
                     <td className="p-2 font-bold text-slate-900">{c.combName}</td>
@@ -226,7 +227,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             </thead>
             <tbody className="divide-y divide-slate-100">
               {result.combinations.map((c, i) => {
-                const passiveMomentPart = (0.5 * result.K_passive * result.foundationSoil.gamma * Math.pow(soil.hSolAv, 3) / 3) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
+                const passiveMomentPart = (result.earthPressures.P_passive_nominal * result.earthPressures.y_Pp) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
                 const vertMomPart = c.Ms - passiveMomentPart;
                 return (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">

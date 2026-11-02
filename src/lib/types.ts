@@ -287,6 +287,7 @@ export interface EarthPressureCalculations {
   y_Pa: number; // m
   P_passive_nominal: number; // kN/m
   y_Pp: number; // m
+  h_pass: number; // m — profondeur de butée depuis la sous-face (hSolAv + epBase ; 0 si hSolAv <= 0)
   P_surcharge_nominal: number; // kN/m
   y_Psur: number; // m
   E_stem_nominal: number; // kN/m

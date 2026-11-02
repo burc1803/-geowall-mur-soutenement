@@ -236,6 +236,22 @@ describe('Audit MUR-01 - D défavorable au facteur maximal', () => {
   });
 });
 
+describe('Amendement A2 - hauteur de butée depuis la sous-face', () => {
+  const geoA2: WallGeometry = { ...GEO_R, epBase: 0.35 };
+  it('hSolAv = 1,50, epBase = 0,35, φ = 29°, γ = 19 : Kp = 2,8821, Pp = 93,70 kN/m à 0,617 m', () => {
+    const r = analyzeRetainingWall(geoA2, soilR({ phi: 29, hSolAv: 1.5 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    close(r.K_passive, 2.8821, 0.001);
+    close(r.earthPressures.h_pass, 1.85, 1e-9);
+    close(r.earthPressures.P_passive_nominal, 93.70, 0.001);
+    close(r.earthPressures.y_Pp, 0.617, 0.001);
+  });
+  it('hSolAv = 0 : butée nulle', () => {
+    const r = analyzeRetainingWall(geoA2, soilR({ phi: 29, hSolAv: 0 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    expect(r.earthPressures.P_passive_nominal).toBe(0);
+    expect(r.earthPressures.h_pass).toBe(0);
+  });
+});
+
 describe('Note de calcul - composantes horizontales exposées', () => {
   it('somme des composantes = ΣH non pondéré du moteur, avec et sans nappe', () => {
     for (const water of [false, true]) {

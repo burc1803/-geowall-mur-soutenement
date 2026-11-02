@@ -392,7 +392,9 @@ export function analyzeRetainingWall(
   // Static nominal forces
   const P_active_nominal = 0.5 * K_active * soil.gamma * totalHeight * totalHeight;
   const y_Pa = totalHeight / 3;
-  const h_pass = soil.hSolAv;
+  // Amendement A2 de MUR-01 : hSolAv est mesurée depuis le dessus de la semelle ; la butée s'exerce depuis la sous-face
+  // (h_pass = hSolAv + epBase). Sans sol à l'avant (hSolAv <= 0), la butée est nulle.
+  const h_pass = soil.hSolAv > 0 ? soil.hSolAv + geo.epBase : 0;
   const P_passive_nominal = 0.5 * Kp * foundation.gamma * h_pass * h_pass;
   const y_Pp = h_pass / 3;
   const P_surcharge_nominal = K_active * loads.surcharge * totalHeight;
@@ -416,6 +418,7 @@ export function analyzeRetainingWall(
     y_Pa,
     P_passive_nominal,
     y_Pp,
+    h_pass,
     P_surcharge_nominal,
     y_Psur,
     E_stem_nominal,
@@ -792,7 +795,7 @@ export function analyzeRetainingWall(
   }
 
   // Poussée passive avant
-  const M_passive_nominal = P_passive_nominal * (h_pass / 3);
+  const M_passive_nominal = P_passive_nominal * y_Pp; // moment par rapport à la sous-face (bras = y_Pp = h_pass/3)
 
   // ---------------------------------------------------------------------------
   // Charges latérales sur le voile, avec TOUTES les charges latérales (E01) :

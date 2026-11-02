@@ -185,11 +185,15 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   Kp = tan²(45° + φ / 2) = (1 + sin φ) / (1 - sin φ)
                 </div>
                 <p className="text-xs text-slate-600 mb-2">
-                  Selon le CFEM (Tableau 8.1), la résistance passive mobilisée doit être pondérée avec Φ_p = 0.50 (ou négliger les 300 mm supérieurs sensibles au gel/affouillement).
+                  Selon le CFEM (Tableau 8.1), la résistance passive mobilisée est pondérée avec Φ_p ({soil.geotechFactors.phi_p}, valeur saisie) ; la profondeur de gel ou d'affouillement à négliger n'est pas déduite (point À CONFIRMER).
                 </p>
                 <div className="bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-200 text-xs font-mono flex justify-between items-center">
                   <span className="text-slate-600">Kp Rankine = {ep.Kp_rankine.toFixed(4)}</span>
-                  <span className="font-bold text-emerald-900">Kp utile (Φ_p=0.5) = {(ep.Kp_rankine * 0.5).toFixed(4)}</span>
+                  <span className="font-bold text-emerald-900">
+                    {result.soilMethodConfig.passiveMethod === 'neglected'
+                      ? 'Butée négligée (Kp = 0)'
+                      : `Kp retenu (${({ rankine: 'Rankine', coulomb: 'Coulomb', reduced_cfem: 'Rankine réduit', neglected: '' } as Record<string, string>)[result.soilMethodConfig.passiveMethod]}) = ${ep.K_passive_used.toFixed(4)} ; Φ_p = ${soil.geotechFactors.phi_p}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -387,7 +391,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 </div>
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Butée Passive Mobilisée :</span>
-                  <strong className="font-mono">P_p · Φ_p = {(0.5 * ep.Kp_rankine * result.foundationSoil.gamma * Math.pow(soil.hSolAv, 2) * soil.geotechFactors.phi_p).toFixed(1)} kN/m</strong>
+                  <strong className="font-mono">P_p · Φ_p = {(ep.P_passive_nominal * soil.geotechFactors.phi_p).toFixed(1)} kN/m</strong>
                 </div>
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Combinaison critique ÉLU :</span>

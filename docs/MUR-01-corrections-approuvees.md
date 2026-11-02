@@ -99,3 +99,16 @@ Textes relus le 2026-11-01 :
   - l'édition par défaut est 2020.
 - `tsc`, les tests et le build sont OK.
 - La note affiche l'édition choisie et la source du facteur de H au cas 5.
+
+## 6. Amendement A2 — hauteur de la butée (APPROUVÉ le 2026-11-01)
+
+Décision de l'utilisateur : « finalement c'est correct butée. corriger [l'incohérence de hs,av] ». La butée reste comptée selon la méthode choisie dans « Sol & Séisme » ; seule la hauteur est corrigée.
+
+- **Constat :** `soil.hSolAv` est la hauteur de sol **au-dessus du dessus de la semelle**. C'est ainsi que l'utilisent le poids sur le patin, la nappe (`hSubToe`) et le dessin (`Visualizer`). Or la butée prend h_pass = hSolAv avec y = h/3 **depuis la sous-face**. Elle omet donc l'épaisseur de la semelle.
+- **Correction :** h_pass = hSolAv + epBase, mesurée depuis la sous-face de la semelle. Pp = ½·Kp·γ·h_pass² et y_Pp = h_pass/3. Si hSolAv = 0, la butée reste nulle : le sol avant est absent, et la semelle seule n'est pas comptée.
+- **Affichage :** les recalculs de Pp et de Mp écrits dans l'interface (`CalculationReport.tsx`, `CalculationStepsTheory.tsx`) doivent lire les valeurs du moteur (`P_passive_nominal`, `y_Pp`) et ne plus recalculer avec hSolAv.
+- **Hors périmètre :** butée avec nappe à l'avant (γ′), profondeur de gel, butée au séisme. Ces points relèvent de MUR-02 (D9).
+- **Critères d'acceptation :**
+  - test : hSolAv = 1,50, epBase = 0,35, Kp = 2,8821, γ = 19 donnent Pp = ½·2,8821·19·1,85² = 93,70 kN/m et y = 0,617 m ;
+  - test : hSolAv = 0 donne Pp = 0 ;
+  - tsc, tests et build OK.

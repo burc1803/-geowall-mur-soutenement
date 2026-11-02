@@ -675,10 +675,10 @@ export default function App() {
          </aside>
 
          {/* Main Content Area */}
-         <section className="flex-1 overflow-y-auto bg-slate-50/50 p-6 lg:p-10 flex flex-col gap-6">
+         <section className="flex-1 overflow-y-auto bg-slate-50/50 p-6 lg:p-10 flex flex-col gap-6 print:p-0 print:bg-white print:gap-0">
             
             {/* Dashboard Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2 print:hidden">
                 <StatBox label="Crit. Glissement ELU" nonVerifiable={!result.verifiable} value={result.critical_sliding_ULS === Infinity ? '∞' : result.critical_sliding_ULS.toFixed(2)} unit="FS (Req > 1.0)" status={result.critical_sliding_ULS >= 1.0 ? 'ok' : 'error'} />
                 <StatBox label="Crit. Renvers. ELU" nonVerifiable={!result.verifiable} value={result.governingOverturning.outside_base ? 'hors base' : result.critical_overturning_ULS === Infinity ? '∞' : result.critical_overturning_ULS.toFixed(2)} unit={result.governingOverturning.outside_base ? '(résultante hors base)' : 'FS (Req > 1.0)'} status={result.critical_overturning_ULS >= 1.0 && result.governingOverturning.status_overturning === 'OK' ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELS)' : 'Pression Max (ELS)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_SLS.toFixed(0)} unit={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.critical_q_toe_SLS <= soil.qAllowable_SLS ? 'ok' : 'error'} />
@@ -686,13 +686,13 @@ export default function App() {
             </div>
 
             {result.warnings.length > 0 && (
-              <div role="alert" className="bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold rounded-xl p-3">
+              <div role="alert" className="bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold rounded-xl p-3 print:hidden">
                 {result.warnings.map((w, i) => <div key={i}>{w}</div>)}
               </div>
             )}
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-px">
+            <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-px print:hidden">
                 <button 
                     className={`pb-3 px-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${activeTab === 'geom' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                     onClick={() => setActiveTab('geom')}

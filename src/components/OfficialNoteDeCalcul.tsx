@@ -57,33 +57,110 @@ function DataTable({ head, rows }: { head: string[]; rows: string[][] }) {
   );
 }
 
-/** Croquis coté de la coupe : rectangles et cotes issus de la géométrie (pas de moteur de dessin). */
-function WallSketch({ geo, B, totalHeight }: { geo: WallGeometry; B: number; totalHeight: number }) {
-  const sc = 150 / Math.max(B, totalHeight);
-  const ox = 30;
-  const oy = 20;
+/** Croquis coté de la coupe : formes et cotes issues de la géométrie (pas de moteur de dessin). */
+function WallSketch({ geo, B, totalHeight, hSolAv, hPass }: { geo: WallGeometry; B: number; totalHeight: number; hSolAv: number; hPass: number }) {
+  const sc = 200 / Math.max(B, totalHeight);
+  const ox = hSolAv > 0 ? 74 : 46; // marge gauche (cotes H, hp et hs,av)
+  const oy = 26; // marge haute (cote t)
   const H = totalHeight * sc;
+  const W = B * sc;
   const x = (m: number) => ox + m * sc;
   const y = (m: number) => oy + H - m * sc; // m depuis la sous-face de la semelle
+  const xs0 = x(geo.ePiedAv);
+  const xs1 = x(geo.ePiedAv + geo.epStem);
+  const dimC = '#1d4ed8';
+  const yDimB = y(0) + 30; // cotes horizontales sous la semelle
+  const yDimParts = y(0) + 14;
+  const xDimRight = x(B) + 16; // cotes verticales à droite
+  const xDimH = ox - 22 - (hSolAv > 0 ? 28 : 0);
+  const xDimP = ox - 36; // cote hp (profondeur de butée)
+  const xDimS = ox - 18; // cote hs,av
+
+  /** Cote avec traits d'attache et flèches aux deux bouts ; le texte est centré. */
+  const Dim = ({ x1, y1, x2, y2, label, vertical }: { x1: number; y1: number; x2: number; y2: number; label: string; vertical?: boolean }) => (
+    <g>
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={dimC} strokeWidth="0.8" markerStart="url(#skArrow)" markerEnd="url(#skArrow)" />
+      {vertical ? (
+        <text x={x1 - 3} y={(y1 + y2) / 2} fontSize="8" fill={dimC} stroke="#ffffff" strokeWidth="3" paintOrder="stroke" textAnchor="middle" transform={`rotate(-90 ${x1 - 3} ${(y1 + y2) / 2})`}>{label}</text>
+      ) : (
+        <text x={(x1 + x2) / 2} y={y1 - 3} fontSize="8" fill={dimC} stroke="#ffffff" strokeWidth="3" paintOrder="stroke" textAnchor="middle">{label}</text>
+      )}
+    </g>
+  );
+  const ext = { stroke: '#94a3b8', strokeWidth: 0.5 };
+
   return (
-    <svg viewBox={`0 0 ${ox + B * sc + 50} ${H + 60}`} className="w-full max-w-xs border border-slate-300 rounded-lg bg-white" role="img" aria-label="Croquis coté du mur">
-      <rect x={x(0)} y={y(geo.epBase)} width={B * sc} height={geo.epBase * sc} fill="#e2e8f0" stroke="#0f172a" />
-      <rect x={x(geo.ePiedAv)} y={y(totalHeight)} width={geo.epStem * sc} height={geo.hMur * sc} fill="#e2e8f0" stroke="#0f172a" />
-      <line x1={x(geo.ePiedAv + geo.epStem)} y1={y(totalHeight)} x2={x(B)} y2={y(totalHeight)} stroke="#64748b" strokeDasharray="3 2" />
-      <text x={x(B) - 2} y={y(totalHeight) - 3} fontSize="7" textAnchor="end" fill="#475569">remblai</text>
-      <text x={x(0)} y={y(0) + 12} fontSize="7" fill="#0f172a">B = {B.toFixed(2)} m</text>
-      <text x={x(0)} y={y(geo.epBase) - 3} fontSize="7" fill="#0f172a">Lp {geo.ePiedAv.toFixed(2)}</text>
-      <text x={x(geo.ePiedAv + geo.epStem + 0.05)} y={y(geo.epBase) - 3} fontSize="7" fill="#0f172a">Lt {geo.ePiedAr.toFixed(2)}</text>
-      <text x={x(geo.ePiedAv + geo.epStem / 2)} y={y(totalHeight) - 4} fontSize="7" textAnchor="middle" fill="#0f172a">t {geo.epStem.toFixed(2)}</text>
-      <text x={x(B) + 4} y={y(geo.epBase + geo.hMur / 2)} fontSize="7" fill="#0f172a">h {geo.hMur.toFixed(2)}</text>
-      <text x={x(B) + 4} y={y(geo.epBase / 2) + 2} fontSize="7" fill="#0f172a">ts {geo.epBase.toFixed(2)}</text>
-      <text x={4} y={y(totalHeight / 2)} fontSize="7" fill="#0f172a">H {totalHeight.toFixed(2)}</text>
+    <svg viewBox={`0 0 ${ox + W + 70} ${oy + H + 44}`} className="w-full max-w-sm border border-slate-300 rounded-lg bg-white" role="img" aria-label="Croquis coté du mur">
+      <defs>
+        <marker id="skArrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill={dimC} />
+        </marker>
+        <pattern id="skSoil" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" fill="#fde68a" />
+          <line x1="0" y1="0" x2="0" y2="6" stroke="#d97706" strokeWidth="0.6" />
+        </pattern>
+        <pattern id="skConcrete" width="8" height="8" patternUnits="userSpaceOnUse">
+          <rect width="8" height="8" fill="#cbd5e1" />
+          <circle cx="2" cy="2" r="0.6" fill="#64748b" />
+          <circle cx="6" cy="5" r="0.5" fill="#64748b" />
+        </pattern>
+      </defs>
+
+      {/* Sol avant sur le patin et terrain naturel à gauche (hs,av) */}
+      {hSolAv > 0 && (
+        <g>
+          <rect x={x(0)} y={y(geo.epBase + hSolAv)} width={xs0 - x(0)} height={hSolAv * sc} fill="url(#skSoil)" opacity="0.8" />
+          <rect x={2} y={y(geo.epBase + hSolAv)} width={x(0) - 2} height={(geo.epBase + hSolAv) * sc} fill="url(#skSoil)" opacity="0.8" />
+          <line x1={2} y1={y(geo.epBase + hSolAv)} x2={xs0} y2={y(geo.epBase + hSolAv)} stroke="#b45309" strokeWidth="1" />
+          <text x={(x(0) + xs0) / 2} y={y(geo.epBase + hSolAv) - 3} fontSize="8" fontWeight="bold" fill="#92400e" textAnchor="middle">Sol avant</text>
+        </g>
+      )}
+
+      {/* Remblai sur le talon */}
+      <rect x={xs1} y={y(totalHeight)} width={x(B) - xs1} height={geo.hMur * sc} fill="url(#skSoil)" opacity="0.8" />
+      <line x1={xs1} y1={y(totalHeight)} x2={x(B) + 8} y2={y(totalHeight)} stroke="#b45309" strokeWidth="1" />
+      <text x={(xs1 + x(B)) / 2} y={y(totalHeight) + 12} fontSize="8" fontWeight="bold" fill="#92400e" textAnchor="middle">Remblai</text>
+
+      {/* Béton : semelle et voile */}
+      <rect x={x(0)} y={y(geo.epBase)} width={W} height={geo.epBase * sc} fill="url(#skConcrete)" stroke="#0f172a" strokeWidth="1.2" />
+      <rect x={xs0} y={y(totalHeight)} width={geo.epStem * sc} height={geo.hMur * sc} fill="url(#skConcrete)" stroke="#0f172a" strokeWidth="1.2" />
+      <text x={(xs0 + xs1) / 2} y={y(geo.epBase + geo.hMur / 2)} fontSize="8" fontWeight="bold" fill="#0f172a" textAnchor="middle" transform={`rotate(-90 ${(xs0 + xs1) / 2} ${y(geo.epBase + geo.hMur / 2)})`}>Voile</text>
+      <text x={x(geo.ePiedAv / 2)} y={y(geo.epBase / 2) + 3} fontSize="7" fill="#0f172a" textAnchor="middle">Patin</text>
+      <text x={(xs1 + x(B)) / 2} y={y(geo.epBase / 2) + 3} fontSize="7" fill="#0f172a" textAnchor="middle">Talon</text>
+      {/* Sol de fondation */}
+      <line x1={x(0) - 10} y1={y(0)} x2={x(B) + 10} y2={y(0)} stroke="#78350f" strokeWidth="0.8" strokeDasharray="4 2" />
+
+      {/* Cote t (épaisseur du voile), en haut */}
+      <line x1={xs0} y1={y(totalHeight) - 2} x2={xs0} y2={y(totalHeight) - 16} {...ext} />
+      <line x1={xs1} y1={y(totalHeight) - 2} x2={xs1} y2={y(totalHeight) - 16} {...ext} />
+      <Dim x1={xs0} y1={y(totalHeight) - 12} x2={xs1} y2={y(totalHeight) - 12} label={`t = ${geo.epStem.toFixed(2)}`} />
+
+      {/* Cotes horizontales sous la semelle : patin, voile, talon, puis B */}
+      {[x(0), xs0, xs1, x(B)].map((xx, i) => <line key={i} x1={xx} y1={y(0) + 2} x2={xx} y2={yDimB + 4} {...ext} />)}
+      <Dim x1={x(0)} y1={yDimParts} x2={xs0} y2={yDimParts} label={`Lp = ${geo.ePiedAv.toFixed(2)}`} />
+      <Dim x1={xs1} y1={yDimParts} x2={x(B)} y2={yDimParts} label={`Lt = ${geo.ePiedAr.toFixed(2)}`} />
+      <Dim x1={x(0)} y1={yDimB} x2={x(B)} y2={yDimB} label={`B = ${B.toFixed(2)} m`} />
+
+      {/* Cotes verticales à droite : ts et h ; à gauche : H */}
+      {[y(0), y(geo.epBase), y(totalHeight)].map((yy, i) => <line key={i} x1={x(B) + 2} y1={yy} x2={xDimRight + 4} y2={yy} {...ext} />)}
+      <Dim vertical x1={xDimRight} y1={y(0)} x2={xDimRight} y2={y(geo.epBase)} label="" />
+      <text x={xDimRight + 4} y={y(geo.epBase / 2) + 3} fontSize="8" fill={dimC} stroke="#ffffff" strokeWidth="3" paintOrder="stroke">ts = {geo.epBase.toFixed(2)}</text>
+      <Dim vertical x1={xDimRight} y1={y(geo.epBase)} x2={xDimRight} y2={y(totalHeight)} label={`h = ${geo.hMur.toFixed(2)}`} />
+      {[y(0), y(totalHeight)].map((yy, i) => <line key={i} x1={(i === 0 ? x(0) : xs0) - 2} y1={yy} x2={xDimH - 4} y2={yy} {...ext} />)}
+      <Dim vertical x1={xDimH} y1={y(0)} x2={xDimH} y2={y(totalHeight)} label={`H = ${totalHeight.toFixed(2)}`} />
+      {hSolAv > 0 && (
+        <g>
+          {[y(geo.epBase + hSolAv), y(geo.epBase), y(0)].map((yy, i) => <line key={i} x1={xDimP - 4} y1={yy} x2={x(0) - 2} y2={yy} {...ext} />)}
+          <Dim vertical x1={xDimS} y1={y(geo.epBase)} x2={xDimS} y2={y(geo.epBase + hSolAv)} label={`hs,av = ${hSolAv.toFixed(2)}`} />
+          <Dim vertical x1={xDimP} y1={y(0)} x2={xDimP} y2={y(hPass)} label={`hp = ${hPass.toFixed(2)}`} />
+        </g>
+      )}
+      <text x={ox + W + 64} y={oy + H + 42} fontSize="7" fill="#64748b" textAnchor="end">Cotes en m</text>
     </svg>
   );
 }
 
 export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: OfficialNoteDeCalculProps) {
-  const [table1Filter, setTable1Filter] = useState<'all' | 'ULS' | 'SLS'>('all');
   const [engineerComment, setEngineerComment] = useState<string>(
     'Commentaire de l\'ingénieur : à compléter.'
   );
@@ -98,9 +175,6 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
   const ulsCombs = result.combinations.filter(c => c.type === 'ULS');
   const slsCombs = result.combinations.filter(c => c.type === 'SLS');
-  const displayedTable1Combs = table1Filter === 'all' 
-    ? result.combinations 
-    : result.combinations.filter(c => c.type === table1Filter);
 
   const seismicOn = result.soilMethodConfig.seismicMethod !== 'none';
   const ep = result.earthPressures;
@@ -168,7 +242,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
   if (wn.waterToe > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du patin', type: 'H', value: fmt(wn.waterToe, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
 
   return (
-    <div className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-2 md:p-6 print:p-0 print:max-w-none text-slate-800">
+    <div id="note-officielle" className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-2 md:p-6 print:p-0 print:max-w-none text-slate-800">
       {/* Action Bar (Print / Export) */}
       <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex items-center gap-3">
@@ -237,12 +311,13 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                   ['Sixième de la largeur', 'B/6', fmt(B_over_6, 3), 'm'],
                   ['Hauteur totale (sous-face de la semelle au haut du voile)', 'H', fmt(result.totalHeight, 2), 'm'],
                   ['Hauteur de sol à l\'avant', 'hs,av', fmt(soil.hSolAv, 2), 'm'],
+                  ['Profondeur de butée (depuis la sous-face)', 'hp', soil.hSolAv > 0 ? fmt(result.earthPressures.h_pass, 2) : '0 (sans sol à l\'avant, butée nulle)', 'm'],
                   ['Pente du remblai', 'β', 'non disponible (remblai horizontal seulement)', '°'],
                   ['Clé de cisaillement', '—', 'non disponible (non modélisée)', '—'],
                 ]}
               />
             </div>
-            <WallSketch geo={geo} B={B} totalHeight={result.totalHeight} />
+            <WallSketch geo={geo} B={B} totalHeight={result.totalHeight} hSolAv={soil.hSolAv} hPass={result.earthPressures.h_pass} />
           </div>
         </div>
 
@@ -366,69 +441,45 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </div>
         </div>
 
-        {/* TABLE 1: COMBINAISONS — PRESSION DE CONTACT, EXCENTRICITÉ & PORTANCE */}
-        <div className="space-y-2">
+        {/* TABLEAUX 1a (ÉLU) et 1b (ÉLS) : PRESSION DE CONTACT, EXCENTRICITÉ & PORTANCE */}
+        {([
+          { key: 'ULS', combs: ulsCombs, dot: 'bg-purple-600', title: `Tableau 1a : Combinaisons ÉLU — portance pondérée (CNB ${result.cnbEdition}, ${ulsCombs.length} combinaisons)`, limit: `q_res (ÉLU) = φ·qu = ${(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa` },
+          { key: 'SLS', combs: slsCombs, dot: 'bg-blue-600', title: `Tableau 1b : Combinaisons ÉLS — pression de contact et tiers central (${slsCombs.length} combinaisons)`, limit: `q_adm (ÉLS) = ${soil.qAllowable_SLS.toFixed(1)} kPa` },
+        ] as const).map(({ key, combs, dot, title, limit }) => (
+        <div key={key} className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-              Tableau 1 : {table1Filter === 'all' ? `Toutes les Combinaisons CNB ${result.cnbEdition} (${displayedTable1Combs.length} Combinaisons ÉLU & ÉLS)` : table1Filter === 'ULS' ? `Combinaisons ÉLU — Capacité Portante Facturée (${displayedTable1Combs.length} Combinaisons)` : `Combinaisons ÉLS — Pression de Contact & Tiers Central (${displayedTable1Combs.length} Combinaisons)`}
+              <span className={`w-2.5 h-2.5 rounded-full ${dot}`}></span>
+              {title}
             </h3>
-
-            {/* Filter buttons for Table 1 */}
-            <div className="flex items-center gap-2 print:hidden">
-              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-[11px] font-bold">
-                <button
-                  onClick={() => setTable1Filter('all')}
-                  className={`px-3 py-1 rounded-lg transition-all ${table1Filter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-                >
-                  Toutes ({result.combinations.length})
-                </button>
-                <button
-                  onClick={() => setTable1Filter('ULS')}
-                  className={`px-3 py-1 rounded-lg transition-all ${table1Filter === 'ULS' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-purple-700'}`}
-                >
-                  ÉLU ({ulsCombs.length})
-                </button>
-                <button
-                  onClick={() => setTable1Filter('SLS')}
-                  className={`px-3 py-1 rounded-lg transition-all ${table1Filter === 'SLS' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-700'}`}
-                >
-                  ÉLS ({slsCombs.length})
-                </button>
-              </div>
-            </div>
-
-            <span className="text-[11px] font-bold text-slate-500">
-              q_adm (ÉLS) = {soil.qAllowable_SLS.toFixed(1)} kPa | q_res (ÉLU) = {(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa
-            </span>
+            <span className="text-[11px] font-bold text-slate-500">{limit}</span>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-[11px] border-collapse">
               <thead>
                 <tr className="bg-slate-800 text-white text-[11px]">
-                  <th className="p-2.5 font-bold">No</th>
-                  <th className="p-2.5 font-bold text-center">État</th>
-                  <th className="p-2.5 font-bold">Combinaison</th>
-                  <th className="p-2.5 font-bold text-center">D</th>
-                  <th className="p-2.5 font-bold text-center">L</th>
-                  <th className="p-2.5 font-bold text-center">S</th>
-                  <th className="p-2.5 font-bold text-center">W</th>
-                  <th className="p-2.5 font-bold text-center">E</th>
-                  <th className="p-2.5 font-bold text-center">H</th>
-                  <th className="p-2.5 font-bold text-right">Rv (kN/m)</th>
-                  <th className="p-2.5 font-bold text-right">e (m)</th>
-                  <th className="p-2.5 font-bold text-right">B/6 (m)</th>
-                  <th className="p-2.5 font-bold text-right">x1 (m)</th>
-                  <th className="p-2.5 font-bold text-right bg-blue-900">q1 (kPa)</th>
-                  <th className="p-2.5 font-bold text-right">q2 (kPa)</th>
-                  <th className="p-2.5 font-bold text-right">Limite (kPa)</th>
-                  <th className="p-2.5 font-bold text-center">Ratio</th>
-                  <th className="p-2.5 font-bold text-center">Statut</th>
+                  <th className="px-1.5 py-2 font-bold">No</th>
+                  <th className="px-1.5 py-2 font-bold">Combinaison</th>
+                  <th className="px-1.5 py-2 font-bold text-center">D</th>
+                  <th className="px-1.5 py-2 font-bold text-center">L</th>
+                  <th className="px-1.5 py-2 font-bold text-center">S</th>
+                  <th className="px-1.5 py-2 font-bold text-center">W</th>
+                  <th className="px-1.5 py-2 font-bold text-center">E</th>
+                  <th className="px-1.5 py-2 font-bold text-center">H</th>
+                  <th className="px-1.5 py-2 font-bold text-right">Rv (kN/m)</th>
+                  <th className="px-1.5 py-2 font-bold text-right">e (m)</th>
+                  <th className="px-1.5 py-2 font-bold text-right">B/6 (m)</th>
+                  <th className="px-1.5 py-2 font-bold text-right">x1 (m)</th>
+                  <th className="px-1.5 py-2 font-bold text-right bg-blue-900">q1 (kPa)</th>
+                  <th className="px-1.5 py-2 font-bold text-right">q2 (kPa)</th>
+                  <th className="px-1.5 py-2 font-bold text-right">Limite (kPa)</th>
+                  <th className="px-1.5 py-2 font-bold text-center">Ratio</th>
+                  <th className="px-1.5 py-2 font-bold text-center">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
-                {displayedTable1Combs.map((c, idx) => {
+                {combs.map((c, idx) => {
                   const qLimit = c.type === 'SLS' 
                     ? soil.qAllowable_SLS 
                     : (soil.qUltimate_ULS * soil.geotechFactors.phi_gu);
@@ -443,39 +494,31 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                       key={c.combName}
                       className={`${isGoverning ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                     >
-                      <td className="p-2 text-slate-500 font-sans">{idx + 1}</td>
-                      <td className="p-2 text-center font-sans">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
-                          c.type === 'ULS' 
-                            ? 'bg-purple-100 text-purple-800 border border-purple-200' 
-                            : 'bg-blue-100 text-blue-800 border border-blue-200'
-                        }`}>
-                          {c.type}
-                        </span>
-                      </td>
-                      <td className="p-2 text-slate-800 font-sans font-bold whitespace-nowrap">
-                        {c.combName}
+                      <td className="px-1.5 py-1 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="px-1.5 py-1 text-slate-800 font-sans font-bold min-w-[10rem]">
+                        {/* « Combinaison ELS 1 (1D + 1H + 1L) » → « 1D + 1H + 1L » : l'en-tête dit déjà « Combinaison » */}
+                        {c.combName.replace(/^Combinaison\s+\S+\s+\d+\s*\((.*)\)$/, '$1')}
                         {isGoverning && (
                           <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-bold">
                             Gouvernant
                           </span>
                         )}
                       </td>
-                      <td className="p-2 text-center text-slate-600">{c.factors.D}</td>
-                      <td className="p-2 text-center text-slate-600">{c.factors.L}</td>
-                      <td className="p-2 text-center text-slate-600">{c.factors.S}</td>
-                      <td className="p-2 text-center text-slate-600">{c.factors.W}</td>
-                      <td className="p-2 text-center text-slate-600">{c.factors.E || 0}</td>
-                      <td className="p-2 text-center text-slate-600">{c.factors.H}</td>
-                      <td className="p-2 text-right">{c.sumV_max.toFixed(1)}</td>
-                      <td className="p-2 text-right">{Math.abs(c.ecc).toFixed(3)}</td>
-                      <td className="p-2 text-right text-slate-500">{B_over_6.toFixed(3)}</td>
-                      <td className="p-2 text-right">{c.x1.toFixed(3)}</td>
-                      <td className="p-2 text-right font-black text-blue-900 bg-blue-50/50">{c.outside_base ? 'non vérifiable' : c.q_toe.toFixed(1)}</td>
-                      <td className="p-2 text-right">{c.outside_base ? 'non vérifiable' : c.q_heel.toFixed(1)}</td>
-                      <td className="p-2 text-right text-slate-600 font-semibold">{qLimit.toFixed(1)}</td>
-                      <td className="p-2 text-center">{c.outside_base ? '—' : `${(ratio * 100).toFixed(0)} %`}</td>
-                      <td className="p-2 text-center">
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.D}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.L}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.S}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.W}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.E || 0}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.H}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.sumV_max.toFixed(1)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{Math.abs(c.ecc).toFixed(3)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right text-slate-500">{B_over_6.toFixed(3)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.x1.toFixed(3)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right font-black text-blue-900 bg-blue-50/50">{c.outside_base ? 'n. v.' : c.q_toe.toFixed(1)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.outside_base ? 'n. v.' : c.q_heel.toFixed(1)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-right text-slate-600 font-semibold">{qLimit.toFixed(1)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center">{c.outside_base ? '—' : `${(ratio * 100).toFixed(0)} %`}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
                           !isExceeded ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}>
@@ -488,7 +531,11 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               </tbody>
             </table>
           </div>
+          {combs.some(c => c.outside_base) && (
+            <p className="text-[10px] text-slate-500">n. v. : non vérifiable, la résultante sort de la base.</p>
+          )}
         </div>
+        ))}
 
         {/* TABLE 2: ELU - MUR */}
         <div className="space-y-2">

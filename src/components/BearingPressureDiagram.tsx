@@ -24,8 +24,11 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
   const Rv = selectedComb.sumV_max; // kN/m
   const ecc = Math.abs(selectedComb.ecc); // m
   const x1 = selectedComb.x1; // Distance du patin avant à la résultante en m
-  const q1 = selectedComb.q_toe; // kPa à l'orteil
-  const q2 = selectedComb.q_heel; // kPa au talon
+  // Résultante hors base : la pression calculée est fictive (largeur comprimée ~ 0) -> non dessinée, non vérifiable
+  const outside = !!selectedComb.outside_base;
+  const NV = 'non vérifiable';
+  const q1 = outside ? 0 : selectedComb.q_toe; // kPa à l'orteil
+  const q2 = outside ? 0 : selectedComb.q_heel; // kPa au talon
 
   // Factored resistance or allowable bearing
   const q_limit = selectedComb.type === 'ULS' 
@@ -35,7 +38,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
   const isTensionSeparation = ecc > B_over_6;
   const contactRatio = isTensionSeparation ? Math.min((3 * x1) / B, 1.0) : 1.0;
   const bearingRatio = q_limit > 0 ? (q1 / q_limit) : 0;
-  const isBearingOk = bearingRatio <= 1.0;
+  const isBearingOk = !outside && bearingRatio <= 1.0;
 
   // SVG coordinate transformation
   const svgWidth = 720;
@@ -177,14 +180,14 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             <optgroup label="Combinaisons ÉLU (États Limites Ultimes)">
               {result.combinations.filter(c => c.type === 'ULS').map(c => (
                 <option key={c.combName} value={c.combName}>
-                  {c.combName} — q1 = {c.q_toe.toFixed(1)} kPa | e = {Math.abs(c.ecc).toFixed(3)} m
+                  {c.combName} — q1 = {c.outside_base ? NV : `${c.q_toe.toFixed(1)} kPa`} | e = {Math.abs(c.ecc).toFixed(3)} m
                 </option>
               ))}
             </optgroup>
             <optgroup label="Combinaisons ÉLTS (États Limites d'Utilisation / Tassement)">
               {result.combinations.filter(c => c.type === 'SLS').map(c => (
                 <option key={c.combName} value={c.combName}>
-                  {c.combName} — q1 = {c.q_toe.toFixed(1)} kPa | e = {Math.abs(c.ecc).toFixed(3)} m
+                  {c.combName} — q1 = {c.outside_base ? NV : `${c.q_toe.toFixed(1)} kPa`} | e = {Math.abs(c.ecc).toFixed(3)} m
                 </option>
               ))}
             </optgroup>
@@ -199,7 +202,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             isBearingOk ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'
           }`}>
             {isBearingOk ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-            q1 / q_cap = {(bearingRatio * 100).toFixed(1)} % {isBearingOk ? '(Conforme)' : '(Surcharge)'}
+            {outside ? 'q1 / q_cap : non vérifiable (hors base)' : <>q1 / q_cap = {(bearingRatio * 100).toFixed(1)} % {isBearingOk ? '(Conforme)' : '(Surcharge)'}</>}
           </span>
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
             !isTensionSeparation ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
@@ -208,6 +211,13 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
           </span>
         </div>
       </div>
+
+      {outside && (
+        <div role="alert" className="mx-4 mt-3 flex items-start gap-2 bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold rounded-lg p-3">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+          <span>Résultante hors base, pression non vérifiable. {selectedComb.stability_message}</span>
+        </div>
+      )}
 
       {/* SVG Interactive Canvas */}
       <div className="p-4 flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100/60 overflow-x-auto">
@@ -416,9 +426,13 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             fontSize="12"
             fontWeight="black"
           >
-            q1 = {q1.toFixed(1)} kPa
+            q1 = {outside ? NV : `${q1.toFixed(1)} kPa`}
           </text>
-          {!isTensionSeparation ? (
+          {outside ? (
+            <text x={heelEndX} y={baseBottomY + 16} textAnchor="end" fill="#e11d48" fontSize="11" fontWeight="bold">
+              q2 = {NV}
+            </text>
+          ) : !isTensionSeparation ? (
             <text
               x={heelEndX}
               y={baseBottomY + q2Px + 16}
@@ -617,7 +631,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               </span>
             </div>
             <div className="text-xl font-black text-slate-900 mt-1">
-              {q1.toFixed(1)} <span className="text-xs font-semibold text-slate-500">kPa</span>
+              {outside ? NV : <>{q1.toFixed(1)} <span className="text-xs font-semibold text-slate-500">kPa</span></>}
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
               Capacité : <strong className="text-slate-800">{q_limit.toFixed(1)} kPa</strong> ({selectedComb.type === 'ULS' ? 'φgu·qu' : 'q_adm'}).
@@ -626,7 +640,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
           <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] flex justify-between items-center">
             <span className="text-slate-500">Taux d'utilisation :</span>
             <span className={`font-black ${isBearingOk ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {(bearingRatio * 100).toFixed(1)} %
+              {outside ? NV : `${(bearingRatio * 100).toFixed(1)} %`}
             </span>
           </div>
         </div>
@@ -639,16 +653,16 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-800">q2</span>
             </div>
             <div className="text-xl font-black text-slate-900 mt-1">
-              {q2.toFixed(1)} <span className="text-xs font-semibold text-slate-500">kPa</span>
+              {outside ? NV : <>{q2.toFixed(1)} <span className="text-xs font-semibold text-slate-500">kPa</span></>}
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
-              {q2 > 0 ? 'Pression positive continue sous le remblai arrière.' : 'Tension théorique nulle (non transmise au sol).'}
+              {outside ? 'Résultante hors base : contact non vérifiable.' : q2 > 0 ? 'Pression positive continue sous le remblai arrière.' : 'Tension théorique nulle (non transmise au sol).'}
             </p>
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between">
             <span>Statut de contact :</span>
-            <strong className={q2 > 0 ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
-              {q2 > 0 ? 'Comprimé' : 'Non comprimé'}
+            <strong className={outside ? 'text-rose-700 font-bold' : q2 > 0 ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>
+              {outside ? 'Non vérifiable' : q2 > 0 ? 'Comprimé' : 'Non comprimé'}
             </strong>
           </div>
         </div>

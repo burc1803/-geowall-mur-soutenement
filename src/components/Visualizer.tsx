@@ -1748,9 +1748,9 @@ export function Visualizer({
                     <>
                       <polygon 
                         points={`
-                          ${tx(geo.ePiedAv)},${ty(geo.epBase)}
-                          ${tx(geo.ePiedAv - Math.min(1.2, geo.ePiedAv))},${ty(geo.epBase)}
-                          ${tx(geo.ePiedAv)},${ty(geo.epBase + soil.hSolAv)}
+                          ${tx(geo.ePiedAv)},${ty(0)}
+                          ${tx(geo.ePiedAv - Math.min(1.2, geo.ePiedAv))},${ty(0)}
+                          ${tx(geo.ePiedAv)},${ty(result.earthPressures.h_pass)}
                         `}
                         fill="#f59e0b"
                         fillOpacity="0.22"
@@ -1759,7 +1759,7 @@ export function Visualizer({
                       />
                       <text 
                         x={tx(geo.ePiedAv - 0.1)} 
-                        y={ty(geo.epBase + soil.hSolAv / 3)} 
+                        y={ty(result.earthPressures.y_Pp)} 
                         fill="#fcd34d" 
                         fontSize="10" 
                         fontWeight="bold"

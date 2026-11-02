@@ -186,7 +186,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
               <tbody className="divide-y divide-slate-100">
                 {filteredCombinations.map((c, i) => {
                   const frictionPart = (Math.max(c.sumV_min, 0) * soil.mu * (c.type === 'ULS' ? soil.geotechFactors.phi_gs : 1.0));
-                  const passivePart = (0.5 * result.K_passive * result.foundationSoil.gamma * soil.hSolAv * soil.hSolAv * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
+                  const passivePart = (result.earthPressures.P_passive_nominal * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
                       <td className="p-3 font-bold text-slate-900">
@@ -264,7 +264,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCombinations.map((c, i) => {
-                  const passiveMomentPart = (0.5 * result.K_passive * result.foundationSoil.gamma * Math.pow(soil.hSolAv, 3) / 3) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
+                  const passiveMomentPart = (result.earthPressures.P_passive_nominal * result.earthPressures.y_Pp) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
                   const vertMomPart = c.Ms - passiveMomentPart;
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
