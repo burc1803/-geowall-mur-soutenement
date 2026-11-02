@@ -29,7 +29,7 @@ import { RebarManager } from './components/RebarManager';
 import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModal';
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
 
-type TabId = 'geom' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'theory' | 'report';
+type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'theory' | 'report';
 
 const INITIAL_GEO: WallGeometry = {
   wallType: 'cantilever',
@@ -230,6 +230,13 @@ export default function App() {
                   <Layers size={14} className="mx-auto mb-1" />
                   Sol & Pressions
                 </button>
+                <button
+                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${activeTab === 'criteres' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                  onClick={() => setActiveTab('criteres')}
+                >
+                  <ShieldCheck size={14} className="mx-auto mb-1" />
+                  Critères
+                </button>
                 <button 
                   className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${activeTab === 'charges' ? 'border-pink-600 text-pink-600 bg-pink-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                   onClick={() => setActiveTab('charges')}
@@ -426,6 +433,33 @@ export default function App() {
                              </label>
                         </div>
 
+                        {/* Eau à l'avant (amendement A3) : scénario A par défaut */}
+                        <div className="bg-cyan-50/50 p-3 rounded-xl border border-cyan-200 flex flex-col gap-1.5 mt-1">
+                          <label className="flex items-center gap-2 text-[11px] font-bold text-cyan-900 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!soil.frontWater?.enabled && !!soil.hasWaterTable}
+                              disabled={!soil.hasWaterTable}
+                              title={soil.hasWaterTable ? undefined : 'Exige une nappe'}
+                              onChange={e => setSoil(prev => ({ ...prev, frontWater: { enabled: e.target.checked, hwAv: prev.frontWater?.hwAv } }))}
+                            />
+                            Eau à l'avant (niveau fiable et maintenu){!soil.hasWaterTable ? ' — exige une nappe' : ''}
+                          </label>
+                          {soil.frontWater?.enabled && soil.hasWaterTable ? (
+                            <label className="flex flex-col text-[10px] text-slate-600 font-bold">
+                              Niveau hw,av depuis la sous-face (m) — défaut : profondeur de butée {result.earthPressures.h_pass.toFixed(2)} m
+                              <input
+                                type="number" step="0.05" min={0}
+                                className="p-1.5 border rounded bg-white font-mono text-xs"
+                                value={soil.frontWater.hwAv ?? result.earthPressures.h_pass}
+                                onChange={e => setSoil(prev => ({ ...prev, frontWater: { enabled: true, hwAv: parseFloat(e.target.value) || 0 } }))}
+                              />
+                            </label>
+                          ) : (
+                            <span className="text-[10px] text-slate-500" title={soil.hasWaterTable ? undefined : 'Exige une nappe'}>Scénario A : sol déjaugé sous la nappe, eau à l'avant non comptée (conservateur).</span>
+                          )}
+                        </div>
+
                         {/* Sol de fondation (portance, glissement) — distinct du remblai (poussée) */}
                         <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
                           <div className="flex items-center justify-between">
@@ -450,20 +484,6 @@ export default function App() {
                               <input type="number" step="1" className="p-1.5 border rounded bg-white font-mono text-xs" value={foundationSoil.cohesion} onChange={e => handleChangeFoundation('cohesion', parseFloat(e.target.value) || 0)} />
                             </label>
                           </div>
-                        </div>
-
-                        {/* Critère de renversement / portance (choix de l'utilisateur) */}
-                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col gap-2 mt-1">
-                          <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">Critère de renversement et de portance</span>
-                          <select
-                            className="p-2 border rounded-lg text-xs bg-white font-semibold text-slate-700"
-                            value={soil.stabilityCriterion ?? 'moments'}
-                            onChange={e => setSoil(prev => ({ ...prev, stabilityCriterion: e.target.value as StabilityCriterion }))}
-                          >
-                            <option value="moments">Moments Ms/Mr et pression linéaire q = V/B·(1 ± 6e/B)</option>
-                            <option value="eccentricity">Excentricité : B′ = B − 2e, pression uniforme V/B′</option>
-                          </select>
-                          <p className="text-[10px] text-slate-500">Limite d'excentricité du CFEM 5e éd. : À CONFIRMER. L'excentricité e et B′ sont affichées sans conclusion sur une limite non sourcée.</p>
                         </div>
 
                         {/* Béton et armature (CSA A23.3-19) */}
@@ -509,7 +529,7 @@ export default function App() {
                           </div>
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <label className="flex flex-col gap-1">
-                              <span className="text-[9px] text-slate-500 font-bold">Haut. Nappe Hw (m)</span>
+                              <span className="text-[9px] text-slate-500 font-bold">Nappe hw depuis la sous-face (m)</span>
                               <input 
                                 type="number" step="0.25" min="0" max={geo.hMur + geo.epBase}
                                 className="p-1.5 border rounded bg-white font-mono text-xs font-bold text-cyan-800 disabled:opacity-40" 
@@ -537,6 +557,29 @@ export default function App() {
                           <span className="text-[9px] text-cyan-900 leading-tight">
                             Poussée hydrostatique Pw = ½·γw·Hw² + Déjaugeage du sol sous l'eau (γ' = γ - γw).
                           </span>
+                        </div>
+
+                    </section>
+                )}
+
+                {(activeTab === 'criteres') && (
+                    <section className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <ShieldCheck size={16} className="text-indigo-600" />
+                            <h2 className="text-xs font-black uppercase tracking-wider text-slate-800">Critères de vérification</h2>
+                        </div>
+                        {/* Critère de renversement / portance (choix de l'utilisateur) */}
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col gap-2 mt-1">
+                          <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">Critère de renversement et de portance</span>
+                          <select
+                            className="p-2 border rounded-lg text-xs bg-white font-semibold text-slate-700"
+                            value={soil.stabilityCriterion ?? 'moments'}
+                            onChange={e => setSoil(prev => ({ ...prev, stabilityCriterion: e.target.value as StabilityCriterion }))}
+                          >
+                            <option value="moments">Moments Ms/Mr et pression linéaire q = V/B·(1 ± 6e/B)</option>
+                            <option value="eccentricity">Excentricité : B′ = B − 2e, pression uniforme V/B′</option>
+                          </select>
+                          <p className="text-[10px] text-slate-500">Limite d'excentricité du CFEM 5e éd. : À CONFIRMER. L'excentricité e et B′ sont affichées sans conclusion sur une limite non sourcée.</p>
                         </div>
 
                         {/* CFEM Geotechnical Resistance Factors (Table 8.1) */}
@@ -685,6 +728,11 @@ export default function App() {
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELU)' : 'Pression Max (ELU)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_ULS.toFixed(0)} unit={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.governingBearing.status_bearing === 'OK' ? 'ok' : 'error'} />
             </div>
 
+            {result.notices.length > 0 && (
+              <div className="bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold rounded-xl p-3">
+                {result.notices.map((n, i) => <div key={i}>{n}</div>)}
+              </div>
+            )}
             {result.warnings.length > 0 && (
               <div role="alert" className="bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold rounded-xl p-3 print:hidden">
                 {result.warnings.map((w, i) => <div key={i}>{w}</div>)}
@@ -792,7 +840,7 @@ export default function App() {
                     </div>
                 )}
 
-                {activeTab === 'stability' && (
+                {(activeTab === 'stability' || activeTab === 'criteres') && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <StabilityTables result={result} soil={soil} geo={geo} />
                     </div>

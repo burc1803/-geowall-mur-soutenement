@@ -331,7 +331,7 @@ export function Visualizer({
                 { id: 'surcharge', label: `Surcharge P_sur (${result.earthPressures.P_surcharge_nominal.toFixed(1)} kN/m)`, activeBg: 'bg-purple-600 text-white shadow-sm' },
                 ...(isSeismicEnabled ? [{ id: 'seismic', label: `Séisme ΔPae (${deltaPae.toFixed(1)} kN/m)`, activeBg: 'bg-rose-600 text-white shadow-sm' }] : []),
                 { id: 'water', label: `Eau Pw (${(0.5 * 9.81 * hw * hw).toFixed(1)} kN/m)`, activeBg: 'bg-cyan-600 text-white shadow-sm' },
-                { id: 'passive', label: `Butée Aval Pp (${result.earthPressures.P_passive_nominal.toFixed(1)} kN/m)`, activeBg: 'bg-amber-600 text-white shadow-sm' },
+                { id: 'passive', label: `Butée Aval Pp′ (${result.earthPressures.P_passive_nominal.toFixed(1)} kN/m)`, activeBg: 'bg-amber-600 text-white shadow-sm' },
                 { id: 'bearing', label: `Portance Sol (${(uls?.q_toe ?? result.q_toe).toFixed(0)} kPa)`, activeBg: 'bg-emerald-600 text-white shadow-sm' },
               ].map((btn) => (
                 <button
@@ -764,10 +764,10 @@ export function Visualizer({
               {/* Backfill water fill */}
               <polygon 
                 points={`
-                  ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase)}
-                  ${tx(canvasWidthMeters + 1)},${ty(geo.epBase)}
-                  ${tx(canvasWidthMeters + 1)},${ty(geo.epBase + hw)}
-                  ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase + hw)}
+                  ${tx(geo.ePiedAv + geo.epStem)},${ty(Math.min(geo.epBase, hw))}
+                  ${tx(canvasWidthMeters + 1)},${ty(Math.min(geo.epBase, hw))}
+                  ${tx(canvasWidthMeters + 1)},${ty(hw)}
+                  ${tx(geo.ePiedAv + geo.epStem)},${ty(hw)}
                 `}
                 fill="#0284c7"
                 fillOpacity="0.12"
@@ -775,16 +775,16 @@ export function Visualizer({
               {/* Cyan dashed line: NIVEAU PHRÉATIQUE AMONT */}
               <line 
                 x1={tx(geo.ePiedAv + geo.epStem)} 
-                y1={ty(geo.epBase + hw)} 
+                y1={ty(hw)} 
                 x2={tx(canvasWidthMeters + 1)} 
-                y2={ty(geo.epBase + hw)} 
+                y2={ty(hw)} 
                 stroke="#38bdf8" 
                 strokeWidth="2" 
                 strokeDasharray="8 6" 
               />
               <text 
                 x={tx(geo.ePiedAv + geo.epStem + 0.3)} 
-                y={ty(geo.epBase + hw) - 6} 
+                y={ty(hw) - 6} 
                 fill="#38bdf8" 
                 fontSize="11" 
                 fontWeight="900" 
@@ -792,6 +792,69 @@ export function Visualizer({
               >
                 NIVEAU PHRÉATIQUE AMONT
               </text>
+            </g>
+          )}
+
+          {/* --- NAPPE AVAL (eau à l'avant comptée, scénario B ; rien en scénario A) --- */}
+          {options.waterTable && result.earthPressures.frontWaterScenario === 'B' && result.earthPressures.hw_av > 0 && (
+            <g>
+              {result.earthPressures.hw_av > geo.epBase && (
+                <polygon
+                  points={`
+                    ${tx(-0.8)},${ty(geo.epBase)}
+                    ${tx(geo.ePiedAv)},${ty(geo.epBase)}
+                    ${tx(geo.ePiedAv)},${ty(result.earthPressures.hw_av)}
+                    ${tx(-0.8)},${ty(result.earthPressures.hw_av)}
+                  `}
+                  fill="#0284c7"
+                  fillOpacity="0.12"
+                />
+              )}
+              <line
+                x1={tx(-0.8)}
+                y1={ty(result.earthPressures.hw_av)}
+                x2={tx(geo.ePiedAv)}
+                y2={ty(result.earthPressures.hw_av)}
+                stroke="#38bdf8"
+                strokeWidth="2"
+                strokeDasharray="8 6"
+              />
+              <text
+                x={tx(geo.ePiedAv) - 4}
+                y={ty(result.earthPressures.hw_av) - 6}
+                fill="#38bdf8"
+                fontSize="11"
+                fontWeight="900"
+                letterSpacing="1"
+                textAnchor="end"
+              >
+                NIVEAU PHRÉATIQUE AVAL
+              </text>
+              {options.lateralPressures && (
+                <g>
+                  <polygon
+                    points={`
+                      ${tx(geo.ePiedAv)},${ty(0)}
+                      ${tx(geo.ePiedAv - Math.min(1.2, geo.ePiedAv))},${ty(0)}
+                      ${tx(geo.ePiedAv)},${ty(result.earthPressures.hw_av)}
+                    `}
+                    fill="#06b6d4"
+                    fillOpacity="0.3"
+                    stroke="#06b6d4"
+                    strokeWidth="1.5"
+                  />
+                  <text
+                    x={tx(geo.ePiedAv - 0.1)}
+                    y={ty(result.earthPressures.y_Pw_front)}
+                    fill="#38bdf8"
+                    fontSize="10"
+                    fontWeight="bold"
+                    textAnchor="end"
+                  >
+                    Pw,a ({result.earthPressures.P_water_front.toFixed(1)} kN/m)
+                  </text>
+                </g>
+              )}
             </g>
           )}
 
@@ -1711,9 +1774,9 @@ export function Visualizer({
                     <>
                       <polygon 
                         points={`
-                          ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase)}
-                          ${tx(geo.ePiedAv + geo.epStem + 1.2)},${ty(geo.epBase)}
-                          ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase + hw)}
+                          ${tx(geo.ePiedAv + geo.epStem)},${ty(0)}
+                          ${tx(geo.ePiedAv + geo.epStem + 1.2)},${ty(0)}
+                          ${tx(geo.ePiedAv + geo.epStem)},${ty(hw)}
                         `}
                         fill="#06b6d4"
                         fillOpacity="0.3"
@@ -1722,7 +1785,7 @@ export function Visualizer({
                       />
                       <text 
                         x={tx(geo.ePiedAv + geo.epStem + 0.6)} 
-                        y={ty(geo.epBase + hw / 3)} 
+                        y={ty(hw / 3)} 
                         fill="#38bdf8" 
                         fontSize="10" 
                         fontWeight="bold"
@@ -1765,7 +1828,7 @@ export function Visualizer({
                         fontWeight="bold"
                         textAnchor="end"
                       >
-                        Pp ({result.earthPressures.P_passive_nominal.toFixed(1)} kN/m)
+                        Pp′ ({result.earthPressures.P_passive_nominal.toFixed(1)} kN/m){result.earthPressures.P_water_front > 0 ? ` + Pw,a (${result.earthPressures.P_water_front.toFixed(1)} kN/m)` : ''}
                       </text>
                     </>
                   ) : (

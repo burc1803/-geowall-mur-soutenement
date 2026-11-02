@@ -121,6 +121,8 @@ export interface SoilProperties {
   cohesion?: number; // c′ du remblai (kPa) — négligée dans la poussée active (conservateur)
   foundation?: FoundationSoilProperties; // Sol de fondation ; absent = identique au remblai
   stabilityCriterion?: StabilityCriterion; // Défaut : 'moments'
+  // Amendement A3 : eau à l'avant (scénario B), désactivée par défaut (scénario A : sol déjaugé, sans eau à l'avant)
+  frontWater?: { enabled: boolean; hwAv?: number }; // hwAv mesuré depuis la sous-face ; défaut : h_pass
   mu: number; // Coefficient de frottement sol-béton (tan delta) - default 0.55 (CFEM Table 24.4)
   soilFrictionType?: string; // e.g. 'compact_sand' | 'clean_gravel' | 'silty_sand' | 'custom'
   presetType?: SoilPresetType;
@@ -285,8 +287,12 @@ export interface EarthPressureCalculations {
   y_Pae: number; // m
   P_active_nominal: number; // kN/m
   y_Pa: number; // m
-  P_passive_nominal: number; // kN/m
-  y_Pp: number; // m
+  P_passive_nominal: number; // kN/m — butée effective du SOL Pp′ (γ au-dessus de la nappe, γ′ en dessous)
+  y_Pp: number; // m — centroïde réel du diagramme de butée
+  P_water_front: number; // kN/m — Pw,a = ½·γw·hw,av² (scénario B ; 0 en scénario A)
+  y_Pw_front: number; // m — hw,av/3
+  hw_av: number; // m — niveau d'eau à l'avant retenu (0 en scénario A)
+  frontWaterScenario: 'A' | 'B'; // A : sol déjaugé sans eau à l'avant ; B : eau à l'avant comptée
   h_pass: number; // m — profondeur de butée depuis la sous-face (hSolAv + epBase ; 0 si hSolAv <= 0)
   P_surcharge_nominal: number; // kN/m
   y_Psur: number; // m
@@ -333,6 +339,7 @@ export interface AnalysisResult {
   lateral_nominal: { name: string; type: LoadCaseType; Fx: number; y: number; applied: boolean }[];
   weights_nominal: { stem: number; base: number; heelSoil: number; toeSoil: number; waterHeel: number; waterToe: number };
   warnings: string[]; // alertes de validation des données (ex. γ ≤ γw avec nappe)
+  notices: string[]; // avis non bloquants (n'affectent pas `verifiable`)
   verifiable: boolean; // false si une alerte rend les statuts globaux NON VÉRIFIABLES
   foundationSoil: FoundationSoilProperties;
   hydro: { hasWater: boolean; hw: number; gamma_w: number; gamma_prime: number; uplift_nominal: number };

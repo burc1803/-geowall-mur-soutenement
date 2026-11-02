@@ -234,6 +234,8 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
   if (result.hydro.hasWater) {
     loadRows.push({ desc: 'Sous-pression sous la semelle (uniforme sur B)', type: 'H', value: fmt(result.hydro.uplift_nominal, 2), unit: 'kN/m', pos: `Vers le haut, x = ${fmt(B / 2, 2)} m` });
   }
+  if (ep.P_passive_nominal > 0) loadRows.push({ desc: 'Butée du sol Pp′ (résistance ; γ au-dessus de la nappe, γ′ en dessous)', type: '—', value: fmt(ep.P_passive_nominal, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(ep.y_Pp, 2)} m (profondeur de butée hp = ${fmt(ep.h_pass, 2)} m)` });
+  if (ep.frontWaterScenario === 'B') loadRows.push({ desc: 'Eau à l\'avant Pw,a = ½·γw·hw,av² (résistance, composante séparée)', type: 'H', value: fmt(ep.P_water_front, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(ep.y_Pw_front, 2)} m (hw,av = ${fmt(ep.hw_av, 2)} m)` });
   loadRows.push({ desc: 'Poids propre du voile', type: 'D', value: fmt(wn.stem, 2), unit: 'kN/m', pos: `x = ${fmt(xStem, 2)} m` });
   loadRows.push({ desc: 'Poids propre de la semelle', type: 'D', value: fmt(wn.base, 2), unit: 'kN/m', pos: `x = ${fmt(B / 2, 2)} m` });
   loadRows.push({ desc: 'Poids du sol sur le talon (γ′ sous la nappe)', type: 'D', value: fmt(wn.heelSoil, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
@@ -296,8 +298,9 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
         <div className="space-y-2">
           <SubTitle n="1.1" title="Géométrie et dimensions" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-            <div className="lg:col-span-2">
+          {/* Tableau et croquis côte à côte, aussi à l'impression */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 print:grid-cols-[3fr_2fr] gap-4 items-start">
+            <div className="lg:col-span-2 print:col-span-1">
               <DataTable
                 head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
                 rows={[
@@ -421,6 +424,9 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               : "excentricité, largeur réduite B′ = B − 2e, pression uniforme V/B′ (limite d'excentricité du CFEM 5e éd. : À CONFIRMER, aucune conclusion tirée de e)"}
             {' '}— combinaison de portance gouvernante : e = {result.governingBearing.ecc.toFixed(3)} m, B′ = B − 2e = {result.governingBearing.B_eff.toFixed(3)} m.
           </div>
+          {result.notices.map((n, i) => (
+            <div key={i} className="text-amber-800 font-bold">{n}</div>
+          ))}
           {result.warnings.map((w, i) => (
             <div key={i} className="text-rose-700 font-bold">{w}</div>
           ))}
@@ -698,6 +704,13 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             <li>Limite d'excentricité du CFEM 5e éd. : À CONFIRMER, aucune conclusion tirée de e. Numérotation des tableaux et figures du CFEM (4e éd.) à reconfirmer pour la 5e éd.</li>
             <li>Facteurs φ géotechniques, kh et méthode Mononobe-Okabe : en révision (fiche suivante). Commentaire 2025 sur le facteur de H au cas 5 : À CONFIRMER.</li>
             <li>Cisaillement-friction : c = 0,25 MPa et μ = 0,60 (état de surface du joint non précisé) ; article de l'armature minimale du voile : À CONFIRMER.</li>
+            <li>
+              Eau à l'avant (scénario {result.earthPressures.frontWaterScenario}) :{' '}
+              {result.earthPressures.frontWaterScenario === 'A'
+                ? 'eau à l\'avant non comptée (scénario conservateur) ; butée du sol calculée avec γ′ sous la nappe.'
+                : `eau à l'avant comptée : niveau hw,av = ${result.earthPressures.hw_av.toFixed(2)} m déclaré fiable par l'utilisateur ; Pw,a reçoit les mêmes facteurs que la butée (φp au glissement, φ de renversement : À CONFIRMER).`}
+              {' '}La sous-pression est prise uniforme (γw·hw·B) ; une sous-pression trapézoïdale est à traiter avec MUR-02.
+            </li>
             <li>Géométrie : remblai horizontal, voile sans fruit, sans clé de cisaillement.</li>
           </ul>
         </div>

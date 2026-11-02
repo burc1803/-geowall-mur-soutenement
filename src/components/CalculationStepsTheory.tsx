@@ -391,7 +391,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 </div>
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Butée Passive Mobilisée :</span>
-                  <strong className="font-mono">P_p · Φ_p = {(ep.P_passive_nominal * soil.geotechFactors.phi_p).toFixed(1)} kN/m</strong>
+                  <strong className="font-mono">(Pp′ + Pw,a) · Φ_p = ({ep.P_passive_nominal.toFixed(1)} + {ep.P_water_front.toFixed(1)}) · {soil.geotechFactors.phi_p} = {((ep.P_passive_nominal + ep.P_water_front) * soil.geotechFactors.phi_p).toFixed(1)} kN/m</strong>
                 </div>
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Combinaison critique ÉLU :</span>

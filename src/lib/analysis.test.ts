@@ -252,6 +252,58 @@ describe('Amendement A2 - hauteur de butée depuis la sous-face', () => {
   });
 });
 
+describe('Amendement A3 - butée sous la nappe et eau à l\'avant', () => {
+  const geoA3: WallGeometry = { ...GEO_R, epBase: 0.35 };
+  const wet = (hw: number, extra: Partial<SoilProperties> = {}) =>
+    analyzeRetainingWall(geoA3, soilR({ phi: 29, hSolAv: 1.5, hasWaterTable: true, waterTableHeight: hw, ...extra }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+  it('exemple par défaut (hw = 2,5, zone de butée entièrement sous la nappe) : Pp′ = 45,32 kN/m à 0,617 m', () => {
+    const r = wet(2.5);
+    close(r.earthPressures.P_passive_nominal, 0.5 * 2.8821 * 9.19 * 1.85 * 1.85, 0.001);
+    close(r.earthPressures.P_passive_nominal, 45.32, 0.002);
+    close(r.earthPressures.y_Pp, 0.617, 0.001);
+    expect(r.earthPressures.frontWaterScenario).toBe('A');
+    expect(r.earthPressures.P_water_front).toBe(0);
+  });
+  it('option B, hw,av = 1,85 : Pw,a = 16,79 kN/m à 0,617 m', () => {
+    const r = wet(2.5, { frontWater: { enabled: true, hwAv: 1.85 } });
+    close(r.earthPressures.P_water_front, 16.79, 0.002);
+    close(r.earthPressures.y_Pw_front, 0.617, 0.001);
+    expect(r.earthPressures.frontWaterScenario).toBe('B');
+    // Pw,a est ajoutée à la résistance au glissement (mêmes facteurs que la butée)
+    const a = wet(2.5);
+    expect(r.critical_sliding_ULS).toBeGreaterThan(a.critical_sliding_ULS);
+  });
+  it('sans nappe : Pw,a = 0 même si l\'option est cochée (avis non bloquant)', () => {
+    const r = analyzeRetainingWall(geoA3, soilR({ phi: 29, hSolAv: 1.5, frontWater: { enabled: true, hwAv: 1.85 } }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    expect(r.earthPressures.P_water_front).toBe(0);
+    expect(r.earthPressures.frontWaterScenario).toBe('A');
+    expect(r.notices.length).toBeGreaterThan(0);
+    expect(r.verifiable).toBe(true);
+  });
+  it('hw,av > hw : Pw,a calculée avec hw (avis)', () => {
+    const r = wet(1.0, { frontWater: { enabled: true, hwAv: 1.85 } });
+    close(r.earthPressures.P_water_front, 0.5 * 9.81 * 1.0 * 1.0, 1e-9);
+    close(r.earthPressures.hw_av, 1.0, 1e-9);
+    expect(r.notices.some(n => n.includes('limité'))).toBe(true);
+    expect(r.verifiable).toBe(true);
+  });
+  it('butée partiellement sous la nappe (hw = 1,0 : sec sur 0,85 m, déjaugé sur 1,0 m) : intégration par couches', () => {
+    const r = wet(1.0);
+    const Kp = r.K_passive; const g = 19; const gp = 19 - 9.81; const zd = 0.85; const h = 1.85;
+    const P = Kp * (0.5 * g * zd * zd + g * zd * (h - zd) + 0.5 * gp * (h - zd) * (h - zd));
+    // moment par rapport à la sous-face : ∫ p(z)·(h − z) dz, intégré numériquement
+    let M = 0; const n = 20000; const dz = h / n;
+    for (let i = 0; i < n; i++) { const z = (i + 0.5) * dz; const sv = z <= zd ? g * z : g * zd + gp * (z - zd); M += Kp * sv * (h - z) * dz; }
+    close(r.earthPressures.P_passive_nominal, P, 1e-6);
+    close(r.earthPressures.y_Pp, M / P, 1e-4);
+  });
+  it('sans nappe : Pp = 93,70 kN/m (A2 inchangé)', () => {
+    const r = analyzeRetainingWall(geoA3, soilR({ phi: 29, hSolAv: 1.5 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    close(r.earthPressures.P_passive_nominal, 93.70, 0.001);
+    close(r.earthPressures.y_Pp, 0.617, 0.001);
+  });
+});
+
 describe('Note de calcul - composantes horizontales exposées', () => {
   it('somme des composantes = ΣH non pondéré du moteur, avec et sans nappe', () => {
     for (const water of [false, true]) {

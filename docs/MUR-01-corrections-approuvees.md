@@ -112,3 +112,40 @@ Décision de l'utilisateur : « finalement c'est correct butée. corriger [l'inc
   - test : hSolAv = 1,50, epBase = 0,35, Kp = 2,8821, γ = 19 donnent Pp = ½·2,8821·19·1,85² = 93,70 kN/m et y = 0,617 m ;
   - test : hSolAv = 0 donne Pp = 0 ;
   - tsc, tests et build OK.
+
+## 7. Amendement A3 — butée sous la nappe et eau à l'avant (APPROUVÉ le 2026-11-01)
+
+Décision de l'utilisateur, reçue par un texte collé le 2026-11-01 :
+- **scénario A** par défaut : sol déjaugé, sans contribution de l'eau à l'avant ;
+- **scénario B** en option : eau à l'avant, seulement si son niveau est fiable ;
+- le sol et l'eau sont programmés comme des composantes indépendantes.
+
+### 7.1 Butée effective du sol (toujours)
+- La profondeur de butée vaut h_pass = hSolAv + epBase depuis la sous-face (A2). La nappe est à hw depuis la sous-face.
+- La pression verticale effective à la profondeur z sous la surface du sol avant suit une intégration par couches :
+  - σ′v(z) = γ·z au-dessus de la nappe ;
+  - σ′v(z) = γ·z_sec + γ′·(z − z_sec) sous la nappe, avec γ′ = γ − γw (hypothèse déjà retenue : γ saisi = γ saturé).
+- La butée est Pp′ = ∫ Kp·σ′v dz sur h_pass. Son point d'application y_Pp est le centroïde réel du diagramme, mesuré depuis la sous-face.
+- Sans nappe dans la zone de butée, on retrouve ½·Kp·γ·h_pass² (A2 inchangé).
+- **L'eau n'est jamais multipliée par Kp.**
+
+### 7.2 Eau à l'avant (option, désactivée par défaut)
+- Nouvelle saisie « Eau à l'avant (niveau fiable et maintenu) », case non cochée par défaut, avec le niveau hw,av mesuré depuis la sous-face. La valeur proposée est la profondeur de butée h_pass.
+- Si la case est cochée : Pw,a = ½·γw·hw,av², appliquée à hw,av/3. C'est une composante **séparée**, résistante, de type H, comptée dans le bilan horizontal. On a donc R = Pp′ + Pw,a ; la poussée d'eau à l'arrière Pw,r est déjà comptée comme action.
+- Le facteur appliqué à Pw,a est le même que celui de la butée (φp au glissement, φ de renversement), proposition À CONFIRMER dans MUR-02. Il est indiqué dans la note.
+- Si la case n'est pas cochée (**scénario A**), Pw,a = 0.
+
+### 7.3 Note de calcul
+- La note affiche Pp′ (sol déjaugé) et Pw,a sur des lignes séparées, avec le scénario retenu (A ou B).
+- Elle donne la mention « eau à l'avant non comptée (scénario conservateur) » ou « eau à l'avant comptée : niveau hw,av déclaré fiable par l'utilisateur ».
+
+### 7.4 Hors périmètre (signalé)
+La sous-pression est actuellement prise uniforme, γw·hw·B. Elle suppose donc le même niveau d'eau devant et derrière. Une sous-pression trapézoïdale, avec des niveaux différents à l'avant et à l'arrière, est à traiter avec MUR-02 (À CONFIRMER).
+
+### 7.5 Critères d'acceptation
+- Test, exemple par défaut (Kp = 2,8821, γ = 19, h_pass = 1,85, nappe hw = 2,5 donc zone entièrement sous la nappe) :
+  - Pp′ = ½·2,8821·9,19·1,85² = 45,32 kN/m, y = 0,617 m ;
+  - option B avec hw,av = 1,85 : Pw,a = 16,79 kN/m, y = 0,617 m.
+- Test, butée partiellement sous la nappe : vérification par intégration des couches.
+- Test, sans nappe : la valeur de A2 est inchangée (93,70 kN/m).
+- tsc, tests et build OK.

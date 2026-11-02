@@ -19,7 +19,7 @@ import {
   CnbEdition
 } from './types';
 import { solveBeamFEM, SupportBoundary } from './fem';
-import { coulombKp, StemItem, stemItemFactor, stemSectionEffort, proppedTopReaction } from './wallMechanics';
+import { coulombKp, linearSegmentEffect, StemItem, stemItemFactor, stemSectionEffort, proppedTopReaction } from './wallMechanics';
 
 export const DEFAULT_SOIL_METHOD_CONFIG: SoilMethodConfig = {
   activeMethod: 'rankine',
@@ -395,8 +395,33 @@ export function analyzeRetainingWall(
   // Amendement A2 de MUR-01 : hSolAv est mesurée depuis le dessus de la semelle ; la butée s'exerce depuis la sous-face
   // (h_pass = hSolAv + epBase). Sans sol à l'avant (hSolAv <= 0), la butée est nulle.
   const h_pass = soil.hSolAv > 0 ? soil.hSolAv + geo.epBase : 0;
-  const P_passive_nominal = 0.5 * Kp * foundation.gamma * h_pass * h_pass;
-  const y_Pp = h_pass / 3;
+  // Amendement A3 : butée effective par couches. σ′v = γ·z au-dessus de la nappe, γ·z_sec + γ′·(z − z_sec) en dessous
+  // (γ′ = γ − γw). Pp′ = ∫ Kp·σ′v dz ; y_Pp = centroïde du diagramme depuis la sous-face. L'eau n'est jamais multipliée par Kp.
+  const hwP = (!!soil.hasWaterTable && (soil.waterTableHeight ?? 0) > 0) ? Math.min(Math.max(soil.waterTableHeight || 0, 0), totalHeight) : 0;
+  const gammaW_P = soil.gamma_w ?? 9.81;
+  const zDryP = hwP > 0 ? Math.min(Math.max(h_pass - hwP, 0), h_pass) : h_pass; // profondeur de la nappe sous la surface avant
+  const gammaPrimeP = foundation.gamma - gammaW_P;
+  let P_passive_nominal = 0;
+  let M_passive_soil = 0;
+  if (h_pass > 0 && Kp > 0) {
+    const s1 = linearSegmentEffect(0, Kp * foundation.gamma, 0, zDryP, h_pass);
+    const s2 = linearSegmentEffect(Kp * (foundation.gamma - gammaPrimeP) * zDryP, Kp * gammaPrimeP, zDryP, h_pass, h_pass);
+    P_passive_nominal = s1.V + s2.V;
+    M_passive_soil = s1.M + s2.M;
+  }
+  const y_Pp = P_passive_nominal > 0 ? M_passive_soil / P_passive_nominal : h_pass / 3;
+  // Eau à l'avant : composante séparée, résistante, de type H (scénario B seulement)
+  // Tant que la sous-pression trapézoïdale n'est pas traitée (A3 §7.4), l'eau à l'avant exige une nappe à l'arrière
+  // et hw,av_eff = min(hw,av ; hw ; h_pass) (sous-pression uniforme). Avis non bloquants dans `notices`.
+  const notices: string[] = [];
+  const frontWaterReq = !!soil.frontWater?.enabled;
+  const frontWaterOn = frontWaterReq && hwP > 0;
+  if (frontWaterReq && !frontWaterOn) notices.push("Eau à l'avant ignorée : elle exige une nappe à l'arrière (scénario A retenu).");
+  const hwAvReq = Math.max(soil.frontWater?.hwAv ?? h_pass, 0);
+  const hw_av = frontWaterOn ? Math.min(hwAvReq, hwP, h_pass) : 0;
+  if (frontWaterOn && hwAvReq > hw_av + 1e-9) notices.push(`hw,av limité à ${hw_av.toFixed(2)} m (sous-pression uniforme, §7.4).`);
+  const P_water_front = 0.5 * gammaW_P * hw_av * hw_av;
+  const y_Pw_front = hw_av / 3;
   const P_surcharge_nominal = K_active * loads.surcharge * totalHeight;
   const y_Psur = totalHeight / 2;
   const E_stem_nominal = geo.hMur * geo.epStem * conc.gamma_c * kh_val;
@@ -418,6 +443,10 @@ export function analyzeRetainingWall(
     y_Pa,
     P_passive_nominal,
     y_Pp,
+    P_water_front,
+    y_Pw_front,
+    hw_av,
+    frontWaterScenario: frontWaterOn ? 'B' : 'A',
     h_pass,
     P_surcharge_nominal,
     y_Psur,
@@ -795,7 +824,8 @@ export function analyzeRetainingWall(
   }
 
   // Poussée passive avant
-  const M_passive_nominal = P_passive_nominal * y_Pp; // moment par rapport à la sous-face (bras = y_Pp = h_pass/3)
+  // moment par rapport à la sous-face : butée du sol (bras y_Pp) + eau à l'avant (bras hw,av/3) ; mêmes facteurs (A3, À CONFIRMER)
+  const M_passive_nominal = P_passive_nominal * y_Pp + P_water_front * y_Pw_front;
 
   // ---------------------------------------------------------------------------
   // Charges latérales sur le voile, avec TOUTES les charges latérales (E01) :
@@ -984,7 +1014,7 @@ export function analyzeRetainingWall(
     const phi_cohesion = comb.type === 'ULS' ? phi_coh : 1.0;
 
     const Fs = (c2 * baseWidth * phi_cohesion) +
-               (P_passive_nominal * phi_passive) +
+               ((P_passive_nominal + P_water_front) * phi_passive) +
                (Math.max(sumV_min, 0) * soil.mu * phi_sliding_friction);
     const Fh_destab = Math.max(sumH, 0.01);
     const FOS_sl = sumH > 0 ? (Fs / Fh_destab) : Infinity;
@@ -1426,6 +1456,7 @@ export function analyzeRetainingWall(
       waterToe: components.filter(c => c.name === 'Weau_patin').reduce((s, c) => s + c.Fy, 0)
     },
     warnings,
+    notices,
     verifiable: warnings.length === 0,
     foundationSoil: foundation,
     hydro: { hasWater, hw, gamma_w, gamma_prime, uplift_nominal },

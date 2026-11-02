@@ -168,7 +168,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             <tbody className="divide-y divide-slate-100">
               {result.combinations.map((c, i) => {
                 const frictionPart = (Math.max(c.sumV_min, 0) * soil.mu * (c.type === 'ULS' ? soil.geotechFactors.phi_gs : 1.0));
-                const passivePart = (result.earthPressures.P_passive_nominal * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
+                const passivePart = ((result.earthPressures.P_passive_nominal + result.earthPressures.P_water_front) * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
                 return (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
                     <td className="p-2 font-bold text-slate-900">{c.combName}</td>
@@ -227,7 +227,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             </thead>
             <tbody className="divide-y divide-slate-100">
               {result.combinations.map((c, i) => {
-                const passiveMomentPart = (result.earthPressures.P_passive_nominal * result.earthPressures.y_Pp) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
+                const passiveMomentPart = (result.earthPressures.P_passive_nominal * result.earthPressures.y_Pp + result.earthPressures.P_water_front * result.earthPressures.y_Pw_front) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
                 const vertMomPart = c.Ms - passiveMomentPart;
                 return (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
