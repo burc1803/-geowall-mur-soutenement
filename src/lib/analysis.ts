@@ -316,6 +316,7 @@ export function computeElementConcreteDesign(params: {
   // Développement d'une barre droite (12.2) : ld = max(300 ; coef·k1·k2·k3·k4·(fy/√f′c)·db)
   const clearSpacing = s - db;
   // tableau 12.1 (fiche p. 92-93) : conditions enrobage ≥ db et espacement ≥ 1,4db ; sinon éq. 12.1 requise (À CONFIRMER), 0,6 retenu par prudence
+  // espacement d'axe en axe ou libre : À CONFIRMER (A23.3 12.2.3) ; ici comparé en axe en axe (calcul inchangé)
   const ld_cond = params.cover >= db && s >= 1.4 * db;
   const ld_coeff = ld_cond && clearSpacing >= 2 * db ? 0.45 : 0.6;
   const ld_eq12_1_required = !ld_cond;
@@ -387,6 +388,7 @@ export function computeElementConcreteDesign(params: {
     ld,
     ld_coeff,
     ld_eq12_1_required,
+    ld_status: ld_eq12_1_required ? 'À CONFIRMER' : 'VÉRIFIÉ',
     ld_k1: k1,
     ld_k4: k4,
     lhb,

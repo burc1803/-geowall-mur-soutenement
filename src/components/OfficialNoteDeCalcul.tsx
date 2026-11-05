@@ -499,7 +499,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             />
             <p className="text-[11px] text-slate-500">
               Inertie (kN/m) : voile {fmt(ep.E_stem_nominal, 2)}, semelle {fmt(ep.E_base_nominal, 2)}, sol du talon {fmt(ep.E_heelSoil_nominal, 2)} (poids {fmt(ep.W_heelSoil_inertia, 2)} kN/m à y = {fmt(ep.y_heelSoil, 2)} m).
-              Matsuzawa (CFEM 18.7.2.2) : NON APPLIQUÉ, À CONFIRMER ; liquéfaction et déplacements permanents : NON VÉRIFIÉS. Westergaard : action E ajoutée à ΣHf. Hypothèse conservatrice : la force kv·W dirigée vers le bas est prise égale à zéro au glissement et au renversement (charge favorable, 4.1.3.2.(3)) ; elle est comptée à la portance. {result.seismic.method === 'seed_whitman' ? 'Seed & Whitman : hors fiche MUR-02 (méthode simplifiée, sans (1 − kv) ni contrôle d\'indétermination).' : ''}
+              Matsuzawa (CFEM 18.7.2.2) : NON APPLIQUÉ, À CONFIRMER ; liquéfaction et déplacements permanents : NON VÉRIFIÉS. Westergaard : action E ajoutée à ΣHf. Hypothèse conservatrice : la force kv·W dirigée vers le bas est prise égale à zéro au glissement et au renversement (hypothèse conservatrice, À CONFIRMER) ; elle est comptée à la portance. {result.seismic.method === 'seed_whitman' ? 'Seed & Whitman : hors fiche MUR-02 (méthode simplifiée, sans (1 − kv) ni contrôle d\'indétermination).' : ''}
             </p>
           </div>
         )}
@@ -670,7 +670,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.Vf > 0 ? `${d.Vf.toFixed(1)} / ${Math.min(d.Vc, d.Vr_max).toFixed(1)}` : '—'}</td>
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.Z_factor !== undefined && d.Z_limit !== undefined ? `${d.Z_factor.toFixed(0)} / ${d.Z_limit.toFixed(0)}` : '—'}</td>
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.ld.toFixed(0)} / {d.ldh_required !== undefined ? d.ldh_required.toFixed(0) : '—'}</td>
-                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : d.checks_ok ? 'CONFORME' : 'NON CONFORME'}</td>
+                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : !d.checks_ok ? 'NON CONFORME' : d.ld_status === 'À CONFIRMER' ? 'CONFORME sauf ld : À CONFIRMER' : 'CONFORME'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -678,7 +678,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </div>
           <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-600">
             <li>Voile (face intérieure) : β = {result.concreteDesign.mur_interieur.beta.toFixed(4)} [{result.concreteDesign.mur_interieur.beta_rule}] ; Vr,max = 0,25·φc·f′c·bw·dv (11.3.3) ; Vf à dv = {result.concreteDesign.cisaillement_friction.Vf_dv.toFixed(1)} kN/m (information).</li>
-            <li>ld : {[result.concreteDesign.mur_interieur, result.concreteDesign.semelle_talon, result.concreteDesign.semelle_orteil].some(d => d.ld_eq12_1_required) ? 'tableau 12.1 : enrobage ≥ db et espacement ≥ 1,4db non remplis pour au moins un élément : éq. 12.1 requise, À CONFIRMER (coefficient 0,6 retenu par prudence).' : 'conditions du tableau 12.1 remplies (enrobage ≥ db, espacement ≥ 1,4db).'}</li>
+            <li>ld : {[result.concreteDesign.mur_interieur, result.concreteDesign.semelle_talon, result.concreteDesign.semelle_orteil].some(d => d.ld_eq12_1_required) ? 'tableau 12.1 : enrobage ≥ db et espacement ≥ 1,4db non remplis pour au moins un élément : éq. 12.1 requise : statut de ld À CONFIRMER (non vérifié ; valeur à 0,6 indicative). Condition « espacement ≥ 1,4db » comparée en axe en axe ; espacement d’axe en axe ou libre : À CONFIRMER (A23.3 12.2.3).' : 'conditions du tableau 12.1 remplies (enrobage ≥ db, espacement ≥ 1,4db).'}</li>
             <li>Talon : β = {result.concreteDesign.semelle_talon.beta.toFixed(4)} [{result.concreteDesign.semelle_talon.beta_rule}] ; patin : β = {result.concreteDesign.semelle_orteil.beta.toFixed(4)} [{result.concreteDesign.semelle_orteil.beta_rule}].</li>
             <li>Ductilité : {result.concreteDesign.mur_interieur.ductility_rule} (ancienne limite 700/(700 + fy) non sécuritaire, retirée).</li>
             <li>ld : coefficient {result.concreteDesign.mur_interieur.ld_coeff?.toFixed(2)} · k1 · k4 · fy/√f′c · db ≥ 300 mm (12.2). Talon : k1 = {result.concreteDesign.semelle_talon.ld_k1?.toFixed(1)}. ldh (12.5) : {result.concreteDesign.mur_interieur.ldh_factors}.</li>

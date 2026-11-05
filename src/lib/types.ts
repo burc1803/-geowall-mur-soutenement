@@ -338,6 +338,7 @@ export interface ConcreteElementDesign {
   ld_k1?: number; // facteur de position des barres (1,3 barres supérieures)
   ld_k4?: number; // facteur de dimension des barres (0,8 si <= 20M ; 1,0 si >= 25M)
   lhb?: number; // mm
+  ld_status?: 'VÉRIFIÉ' | 'À CONFIRMER'; // À CONFIRMER si l'éq. 12.1 est requise (ld à 0,6 indicatif)
   ld_eq12_1_required?: boolean; // conditions du tableau 12.1 non remplies : éq. 12.1 requise, À CONFIRMER (0,6 retenu par prudence)
   ldh_factors?: string; // facteurs de 12.5.2 / 12.5.3 appliqués
   ldh_required?: number; // mm

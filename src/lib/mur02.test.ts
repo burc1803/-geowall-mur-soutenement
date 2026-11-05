@@ -178,6 +178,13 @@ describe('MUR-02 §7.2 - Cas G2 (séisme kh = 0,15 ; kv = 0 ; δ = 0 ; 1,0D ; 1,
     const Hf = k.sumH - r.earthPressures.E_heelSoil_nominal;
     close(Hf, 50.90, 0.005); close(k.Fs / Hf, 1.125, 0.005);
   });
+  it('G2 avec kv = ±2/3·kh = ±0,10 : glissement 0,855 / 0,8515 et renversement 0,949 / 0,900 (vers le bas / vers le haut)', () => {
+    const rv = run(sMO(), loadsG({ kv: 0.1 }));
+    const dn = rv.combinations.find(x => x.caseNo === 5 && x.factors.L === 0 && x.kvSign === -1)!;
+    const up = rv.combinations.find(x => x.caseNo === 5 && x.factors.L === 0 && x.kvSign === 1)!;
+    close(dn.FOS_sliding, 0.855, 0.005, 'glissement kv bas'); close(dn.FOS_overturning, 0.949, 0.005, 'renversement kv bas');
+    close(up.FOS_sliding, 0.8515, 0.005, 'glissement kv haut'); close(up.FOS_overturning, 0.900, 0.005, 'renversement kv haut');
+  });
   it('kv par défaut = 2/3·kh (deux signes étudiés) ; kv = 0 saisi explicitement ; option CSA S6 : kv = 0', () => {
     const d = run(sMO(), { surcharge: 0, surchargeType: 'L', additionalLoads: [], gammaM: 1, gammaF: 1 });
     close(d.seismic.kvInput, (2 / 3) * 0.15, 1e-12); expect(d.seismic.kvIsDefault).toBe(true); expect(d.seismic.scenarios.length).toBe(2);
