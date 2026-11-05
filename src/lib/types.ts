@@ -4,7 +4,8 @@ export type CnbEdition = '2020' | '2025';
 export type LoadCaseType = 'D' | 'L' | 'S' | 'W' | 'E' | 'H';
 
 export type ActivePressureMethod = 'rankine' | 'coulomb' | 'at_rest';
-export type PassivePressureMethod = 'rankine' | 'coulomb' | 'reduced_cfem' | 'neglected';
+// MUR-02 §1 (E20) : l'option `reduced_cfem` (Kp x 0,50) est supprimée ; seul φ_p du tableau 6.2 réduit la butée.
+export type PassivePressureMethod = 'rankine' | 'coulomb' | 'neglected';
 export type SeismicMethod = 'seed_whitman' | 'mononobe_okabe' | 'none';
 
 /**
@@ -26,8 +27,14 @@ export interface SoilMethodConfig {
   activeMethod: ActivePressureMethod;
   passiveMethod: PassivePressureMethod;
   seismicMethod: SeismicMethod;
-  pga: number; // Accélération maximale du sol (g)
-  seismicDisplacementTolerance: 'free_cantilever' | 'rigid_wall'; // 0.50 PGA vs 1.00 PGA
+  pga: number; // ah : accélération horizontale du site, en g (CFEM 5e, éq. 18.22 : kh = ah/g par défaut — MUR-02 D6)
+  ahSource?: string; // source de ah saisie par l'utilisateur (RNCan, F(PGA)·PGA, etc.)
+  /** Option avancée, DÉSACTIVÉE par défaut : kh = 0,5·ah et kv = 0 (CSA S6 citée par le CFEM p. 631), murs de remblais routiers ou autoroutiers. */
+  csaS6Reduction?: boolean;
+  /** Butée au séisme (MUR-02 D9) : 'none' (défaut) ou 'kpe' (réduite, CFEM éq. 18.27-18.31). */
+  seismicPassive?: 'none' | 'kpe';
+  /** @deprecated MUR-02 D6 : remplacé par `csaS6Reduction`. Ignoré par le moteur. */
+  seismicDisplacementTolerance?: 'free_cantilever' | 'rigid_wall';
   deltaFrictionRatio: number; // Ratio delta / phi (ex: 0.667 pour 2/3 phi)
 }
 
@@ -85,12 +92,35 @@ export interface WallGeometry {
   supports?: { y: number; type: 'pinned' | 'fixed' }[]; // Heights above top of footing
 }
 
+/** Degré de compréhension du site (CFEM 5e, tableau 6.2) — MUR-02 §1. */
+export type GeotechLevel = 'low' | 'typical' | 'high';
+
+/** @deprecated MUR-02 §1 : les φ géotechniques viennent du tableau 6.2 selon le degré de compréhension ; ces valeurs sont ignorées par le moteur. */
 export interface GeotechnicalFactors {
-  phi_gu: number; // Portance (Bearing resistance factor) - default 0.50 (CFEM Table 8.1 / Tableau 6.2)
-  phi_gs: number; // Glissement de base (Base sliding friction) - default 0.80
-  phi_renv: number; // Renversement (Overturning passive factor) - default 0.50
-  phi_p: number; // Résistance passive - default 0.50
-  phi_coh: number; // Glissement base cohésion - default 0.60
+  phi_gu: number;
+  phi_gs: number;
+  phi_renv: number;
+  phi_p: number;
+  phi_coh: number;
+}
+
+/** Facteurs géotechniques retenus par le moteur (tableau 6.2 du CFEM 5e, p. 199, et tableau 6.4, p. 200). */
+export interface GeotechResolved {
+  level: GeotechLevel;
+  psi: number; // Ψ, facteur de conséquence (tableau 6.4)
+  phi_gu: number; // portance (1,0 si qu est déjà pondérée)
+  phi_ov: number; // renversement
+  phi_gs: number; // glissement à la base (frottement)
+  phi_coh: number; // glissement, sol cohésif
+  phi_p: number; // butée
+  phi_settle: number; // tassement (information : non appliqué, q_adm,ELS vient du rapport géotechnique)
+  quFactored: boolean; // qu saisie déjà pondérée
+}
+
+/** Zone gelée à l'avant (MUR-02 D9) : la butée statique va de df à h_pass si `deduct` est vrai. */
+export interface FrostConfig {
+  deduct: boolean; // défaut : true
+  df: number; // profondeur de gel (m), mesurée depuis la surface du sol avant
 }
 
 export interface ConcreteProperties {
@@ -130,7 +160,11 @@ export interface SoilProperties {
   hSolAv: number; // Hauteur de sol à l'avant (m)
   qAllowable_SLS: number; // Portance admissible SLS (kPa) pour tassement <= 25mm
   qUltimate_ULS: number; // Portance ultime ULS (kPa)
-  geotechFactors: GeotechnicalFactors;
+  geotechFactors?: GeotechnicalFactors; // @deprecated (ignoré)
+  geotechLevel?: GeotechLevel; // défaut : 'typical' (MUR-02 D2)
+  psi?: number; // Ψ (0,9 / 1,0 / 1,15), défaut 1,0
+  quFactored?: boolean; // qu déjà pondérée par le géotechnicien (φ_gu = 1) ; défaut : non pondérée
+  frost?: FrostConfig; // défaut : déduction cochée (df non saisie = 0 -> avis)
   // Nappe phréatique amont (Niveau d'eau)
   hasWaterTable?: boolean; // Option à cocher pour ajouter la nappe
   waterTableHeight?: number; // Hauteur de la nappe au-dessus de la semelle (m)
@@ -163,8 +197,10 @@ export interface LoadsConfig {
   additionalLoads: AppliedLoad[];
   reactionsTop?: Record<LoadCaseType, WallReactionLoad>; // Reactions on top of stem
   cnbEdition?: CnbEdition; // Défaut : '2020' (amendement A1)
-  kh: number; // Horizontal seismic coefficient
-  kv: number; // Vertical seismic coefficient
+  /** @deprecated MUR-02 D6 : kh est calculé par le moteur à partir de ah (`methodConfig.pga`) ; voir `AnalysisResult.seismic.kh`. */
+  kh?: number;
+  /** Coefficient vertical saisi (valeur absolue ; les deux signes sont étudiés). Absent : kv = 2/3·kh (CFEM p. 629, MUR-02 D6), suit kh. Option CSA S6 : forcé à 0. */
+  kv?: number;
 }
 
 export interface VisualizerDisplayOptions {
@@ -187,14 +223,32 @@ export interface CombinationResult {
   sumV_max: number;
   sumH: number;
   
+  kvSign: 0 | 1 | -1; // signe de kv étudié (MUR-02 §4.1) : 0 si pas de séisme vertical ; +1 : vers le haut, -1 : vers le bas
+  // Facteurs géotechniques appliqués à cette combinaison (1,0 à l'ELS) — MUR-02 §1
+  psi: number;
+  phi_gs: number;
+  phi_coh: number;
+  phi_p: number;
+  phi_ov: number;
+  phi_gu: number;
+  // Composantes nominales de résistance utilisées dans cette combinaison (butée statique ou sismique)
+  Pp_used: number; // kN/m — butée du sol
+  Pw_front_used: number; // kN/m — eau à l'avant (moins l'effet de Westergaard au séisme)
+  // Glissement : Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·(Pp + Pw,a)] ≥ ΣHf (MUR-02 §2.1)
+  Rf_friction: number;
+  Rf_cohesion: number;
+  Rf_passive: number;
+  B_slide: number; // largeur comprimée B′ pour le terme cohésif (m)
   // Stabilité au Glissement (CFEM Table 8.1 & Fig 24.12)
-  Fs: number; // Force stabilisante totale
+  Fs: number; // Force stabilisante totale (pondérée : Rf_friction + Rf_cohesion + Rf_passive)
   Fh_destab: number; // Sollicitation horizontale déstabilisante
   FOS_sliding: number; // Fs / Fh
   status_sliding: 'OK' | 'NON';
   
   // Stabilité au Renversement (CFEM Fig 24.12)
-  Ms: number; // Moment stabilisant total
+  Ms: number; // Moment stabilisant pondéré : Ψ·φ_ov·ΣM_stab (MUR-02 §2.3, E08)
+  Ms_nominal: number; // ΣM_stab (butée comprise), avant Ψ·φ_ov
+  Ms_passive: number; // part de la butée (sol + eau à l'avant) dans ΣM_stab, avant Ψ·φ_ov
   Mr: number; // Moment de renversement déstabilisant
   FOS_overturning: number; // Ms / Mr
   status_overturning: 'OK' | 'NON';
@@ -209,6 +263,8 @@ export interface CombinationResult {
   q_capacity: number; // q_ult (ULS) ou q_adm (SLS)
   FOS_bearing: number; // q_capacity / q_toe
   status_bearing: 'OK' | 'NON';
+  ecc_max: number; // e maximal sur les états étudiés (stabilité, portance, basculement vers le talon)
+  status_ecc: 'OK' | 'NON'; // e ≤ B/6, ELU et ELS (MUR-02 §2.2, D3)
   B_eff: number; // B′ = B − 2e (m) — critère « eccentricity »
   q_design: number; // pression comparée à la capacité : q_toe (moments) ou V/B′ (eccentricity)
   outside_base: 'toe' | 'heel' | null; // résultante hors de la base (côté orteil ou talon) : renversement / portance NON
@@ -219,6 +275,7 @@ export interface CombinationResult {
   // Section des efforts au pied du mur et sur semelle
   mur_Mf: number;
   mur_Vf: number;
+  mur_Vf_dv: number; // effort tranchant du voile à dv de la face de la semelle (information ; 11.3.2 À CONFIRMER)
   toe_Mf: number;
   toe_Vf: number;
   heel_Mf: number;
@@ -235,8 +292,19 @@ export interface ConcreteElementDesign {
   Vc: number; // kN
   Vf: number; // kN
   shear_ok: boolean;
-  
+  Vr_max: number; // kN — 0,25·φc·f′c·bw·dv (11.3.3)
+  beta_rule: string; // règle de β retenue (11.3.6.2 ou 11.3.6.3)
+
   As_min: number; // mm2/m
+  As_min_basis: string; // article(s) qui fixent As,min
+  As_min_flexure: number; // 10.5.1.2 b) — 0,2√f′c/fy·b·h (mm2/m), avant dispense
+  flexure_min_waived: boolean; // dispense 10.5.1.3 : Mr ≥ 4/3·Mf
+  spacing: number; // mm
+  spacing_max: number; // mm
+  spacing_ok: boolean;
+  db: number; // mm
+  db_max?: number; // mm — 14.1.8.2 (voile) : t/10
+  db_ok?: boolean;
   As_provided: number; // mm2/m
   As_ok: boolean; // As fourni >= As,min (comparaison calculée)
   checks_ok: boolean; // statut global : flexion, cisaillement, As,min, ductilité, fissuration, ancrage
@@ -255,6 +323,7 @@ export interface ConcreteElementDesign {
   ductility_c_over_d: number;
   ductility_limit: number;
   ductility_ok: boolean;
+  ductility_rule: string;
 
   // Crack control (Facteur Z - Omar Chaallal Éq. 3.15)
   crack_dc?: number; // mm
@@ -265,9 +334,12 @@ export interface ConcreteElementDesign {
 
   // Anchorage & Development (Omar Chaallal Chapitre 7)
   ld: number; // mm
+  ld_coeff?: number; // 0,45 ou 0,6 (tableau 12.1)
   ld_k1?: number; // facteur de position des barres (1,3 barres supérieures)
   ld_k4?: number; // facteur de dimension des barres (0,8 si <= 20M ; 1,0 si >= 25M)
   lhb?: number; // mm
+  ld_eq12_1_required?: boolean; // conditions du tableau 12.1 non remplies : éq. 12.1 requise, À CONFIRMER (0,6 retenu par prudence)
+  ldh_factors?: string; // facteurs de 12.5.2 / 12.5.3 appliqués
   ldh_required?: number; // mm
   ldh_available?: number; // mm
   anchorage_ok?: boolean;
@@ -300,6 +372,44 @@ export interface EarthPressureCalculations {
   E_base_nominal: number; // kN/m
   K_active_used: number;
   K_passive_used: number;
+  // Séisme (MUR-02 §4) — valeurs du scénario de référence (premier signe de kv)
+  W_heelSoil_inertia: number; // kN/m — poids du sol au-dessus du talon (masse d'inertie)
+  E_heelSoil_nominal: number; // kN/m — kh·W du sol du talon
+  y_heelSoil: number; // m — centre de gravité de cette masse au-dessus de la sous-face
+  h_frost_df: number; // m — df effectivement déduite (0 si case décochée)
+  z_passive_top: number; // m — profondeur (sous la surface avant) où commence la butée
+  Pp_seismic_factor: number; // rapport PPE/PP (1 si butée sismique non réduite ou non offerte)
+}
+
+/** Résultat de Mononobe-Okabe / Wood pour un signe de kv — MUR-02 §4. */
+export interface SeismicScenario {
+  sign: 0 | 1 | -1;
+  kv: number; // kv signé
+  psi_rad: number;
+  psi_deg: number;
+  Kae: number; // 0 si indéterminé ou sans objet
+  indeterminate: boolean; // φ − β < ψ : KAE indéterminé
+  dPae: number; // kN/m — ΔPAE (ou ΔP0E de Wood) sur H
+  dPae_stem: number; // kN/m — idem sur la hauteur du voile
+  y_dPae: number; // m depuis la sous-face
+  Kpe: number; // 0 si non offert / indéterminé
+  Pp_factor: number; // PPE/PP
+  Pw_dyn: number; // kN/m — Westergaard (eau à l'avant)
+}
+
+export interface SeismicSummary {
+  active: boolean;
+  method: 'mononobe_okabe' | 'seed_whitman' | 'wood' | 'none';
+  rigid: boolean;
+  ah: number;
+  ahSource: string;
+  kh: number;
+  csaS6: boolean;
+  kvInput: number;
+  kvIsDefault: boolean; // kv = 2/3·kh (non saisi)
+  scenarios: SeismicScenario[];
+  passiveMode: 'none' | 'kpe';
+  westergaard: boolean;
 }
 
 export interface ConcreteDesignSummary {
@@ -314,9 +424,15 @@ export interface ConcreteDesignSummary {
     Vf: number; // kN/m
     sigma: number; // MPa
     status_ok: boolean;
-    N: number; // kN/m — poids du voile seul à 0,9D
+    N: number; // kN/m — charge permanente NON pondérée au joint (11.5.4)
     As_crossing: number; // mm2/m — armature des deux faces qui traverse le joint
     rho_v: number;
+    c: number; // MPa (11.5.2)
+    mu: number; // (11.5.2)
+    vr_cap: number; // MPa — limite 0,25·φc·f′c
+    capped: boolean; // limite atteinte
+    surface: string; // état de surface retenu (D14)
+    Vf_dv: number; // kN/m — effort tranchant du voile à dv (information)
   };
 }
 
@@ -334,6 +450,11 @@ export interface AnalysisResult {
   // Critère de stabilité retenu et sols
   stabilityCriterion: StabilityCriterion;
   cnbEdition: CnbEdition;
+  geotech: GeotechResolved;
+  seismic: SeismicSummary;
+  frost: { deduct: boolean; df: number; df_entered: boolean; z_top: number };
+  eccentricity_ok_ULS: boolean; // e ≤ B/6 pour toutes les combinaisons ELU applicables
+  eccentricity_ok_SLS: boolean; // e ≤ B/6 pour toutes les combinaisons ELS
   // Poids propres NON pondérés (kN/m), lecture seule : exposés pour la note de calcul
   // Composantes horizontales NON pondérées réellement utilisées (celles qui entrent dans ΣH), lecture seule
   lateral_nominal: { name: string; type: LoadCaseType; Fx: number; y: number; applied: boolean }[];

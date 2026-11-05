@@ -16,19 +16,37 @@ import {
   RebarCustomConfig,
   FoundationSoilProperties,
   StabilityCriterion,
-  CnbEdition
+  CnbEdition,
+  GeotechLevel,
+  GeotechResolved,
+  SeismicScenario,
+  SeismicSummary
 } from './types';
 import { solveBeamFEM, SupportBoundary } from './fem';
-import { coulombKp, linearSegmentEffect, StemItem, stemItemFactor, stemSectionEffort, proppedTopReaction } from './wallMechanics';
+import { coulombKp, linearSegmentEffect, StemItem, stemItemFactor, stemSectionEffort, proppedTopReaction, mononobeOkabeKae, mononobeOkabeKpe, lineLoadThrust } from './wallMechanics';
 
 export const DEFAULT_SOIL_METHOD_CONFIG: SoilMethodConfig = {
   activeMethod: 'rankine',
   passiveMethod: 'rankine',
-  seismicMethod: 'seed_whitman',
-  pga: 0.15,
-  seismicDisplacementTolerance: 'free_cantilever',
+  seismicMethod: 'mononobe_okabe', // MUR-02 §4.2 : Mononobe-Okabe pour le mur libre (Wood pour le mur retenu)
+  pga: 0.15, // ah (g) — à remplacer par la valeur du site (MUR-02 D6)
+  ahSource: '',
+  csaS6Reduction: false,
+  seismicPassive: 'none',
   deltaFrictionRatio: 0.667
 };
+
+/**
+ * Facteurs de résistance géotechnique — CFEM 5e éd. (2023), tableau 6.2, p. 199 (PDF 231) ; Ψ : tableau 6.4, p. 200 (PDF 232).
+ * MUR-02 §1. Forme de vérification (éq. 6.1, p. 191) : Ψ·φgu·R̂u ≥ Σ αi·F̂i.
+ */
+export const GEOTECH_TABLE_6_2: Record<GeotechLevel, { bearing: number; overturning: number; sliding: number; slidingCohesive: number; passive: number; settlement: number }> = {
+  low:     { bearing: 0.45, overturning: 0.45, sliding: 0.70, slidingCohesive: 0.55, passive: 0.40, settlement: 0.7 },
+  typical: { bearing: 0.50, overturning: 0.50, sliding: 0.80, slidingCohesive: 0.60, passive: 0.50, settlement: 0.8 },
+  high:    { bearing: 0.60, overturning: 0.55, sliding: 0.90, slidingCohesive: 0.65, passive: 0.55, settlement: 0.9 }
+};
+export const PSI_CHOICES = [0.9, 1.0, 1.15] as const; // tableau 6.4 : conséquence élevée, typique, faible
+export const GEOTECH_LEVEL_LABEL: Record<GeotechLevel, string> = { low: 'faible', typical: 'typique', high: 'élevé' };
 
 export const DEFAULT_REBAR_CONFIG: RebarCustomConfig = {
   mode: 'manual',
@@ -185,8 +203,17 @@ export function soilWeightFactor(comb: LoadCombination, saturated: boolean, hs: 
   return comb.factors.D;
 }
 
+/**
+ * Vérification d'un élément en béton armé, bande de 1 m — CSA A23.3-19 (MUR-02 §6).
+ *  8.4.2/8.4.3 φc, φs ; 10.1.7 α1, β1 ; 10.5.2 ductilité c/d ≤ 0,8·700/(700 + fy) ;
+ *  7.8.1/7.8.3 semelles (0,002Ag, espacement ≤ min(5h ; 500)) ; 14.1.8.2 à 14.1.8.6 voile (0,0015Ag vertical, 0,002Ag horizontal,
+ *  espacement ≤ min(3t ; 500), db ≤ t/10) ; 10.5.1.2 b) et 10.5.1.3 (As,min = 0,2√f′c/fy·b·h, dispense si Mr ≥ 4/3·Mf) ;
+ *  10.6.1 fissuration z = fs·(dc·A)^(1/3) (enrobage pris ≤ 50 mm) ; 11.3.3, 11.3.4, 11.3.6 cisaillement ;
+ *  12.2 (ld) et 12.5 (ldh). Lecture des articles : A23.3-19 (MUR-02 §6) ; ceux non relus sont À CONFIRMER dans la note.
+ */
 export function computeElementConcreteDesign(params: {
   elementName: string;
+  kind: 'footing' | 'wall_vertical' | 'wall_vertical_compression' | 'wall_horizontal';
   bw: number; // 1000 mm
   h_mm: number;
   cover: number;
@@ -201,53 +228,117 @@ export function computeElementConcreteDesign(params: {
   alpha1: number;
   beta1: number;
   Z_limit: number;
+  aggregate_size: number; // mm (11.3.6.3)
+  distZeroShear_mm?: number; // semelle : distance du point de cisaillement nul à la face du voile (11.3.6.2)
+  otherVerticalAs?: number; // voile, face en compression : armature verticale de l'autre face (mm2/m)
   available_hook_depth?: number;
-  topBars?: boolean; // barres supérieures (talon) : k1 = 1,3 (E12)
+  lateralCover?: number; // enrobage latéral du crochet (12.5.3)
+  extCover?: number; // enrobage du prolongement du crochet (12.5.3)
+  topBars?: boolean; // barres supérieures (talon) : k1 = 1,3 si plus de 300 mm de béton frais dessous (12.2.4)
 }): ConcreteElementDesign {
   const barInfo = CANADIAN_REBAR_CATALOG[params.barSize] || CANADIAN_REBAR_CATALOG['15M'];
   const db = barInfo.diameter;
   const Ab = barInfo.area;
   const s = Math.max(params.spacing, 50);
-  
+  const Ag = params.bw * params.h_mm;
+
   const d = Math.max(params.h_mm - params.cover - db / 2, 50);
-  const dv = Math.max(0.72 * params.h_mm, 0.9 * d);
-  const beta = 230 / (1000 + dv);
-  const Vc = params.phi_c * 1.0 * beta * Math.sqrt(params.fc) * params.bw * dv * 1e-3;
-  const As_min = 0.002 * params.bw * params.h_mm;
+  const dv = Math.max(0.72 * params.h_mm, 0.9 * d); // définition de dv : À CONFIRMER (article 2 non relu)
+
+  // Cisaillement sans armature d'effort tranchant (11.3.4 ; β : 11.3.6)
+  let beta: number;
+  let beta_rule: string;
+  if (params.kind === 'footing' && (params.h_mm <= 350 || (params.distZeroShear_mm !== undefined && params.distZeroShear_mm < 2 * dv))) {
+    beta = 0.21;
+    beta_rule = '11.3.6.2 : β = 0,21 (semelle, h ≤ 350 mm ou distance au point de V nul < 2dv)';
+  } else if (params.aggregate_size >= 20) {
+    beta = 230 / (1000 + dv);
+    beta_rule = '11.3.6.3 b) : β = 230/(1000 + dv), granulat ≥ 20 mm';
+  } else {
+    const sze = (35 * dv) / (15 + params.aggregate_size);
+    beta = 230 / (1000 + sze);
+    beta_rule = `11.3.6.3 c) : β = 230/(1000 + sze), sze = 35·dv/(15 + ag) = ${sze.toFixed(0)} mm`;
+  }
+  beta = Math.max(beta, 0.05); // 11.3.4 : β ≥ 0,05
+  const sqrtFc = Math.min(Math.sqrt(params.fc), 8); // 11.3.4 : √f′c ≤ 8 MPa
+  const Vc = params.phi_c * 1.0 * beta * sqrtFc * params.bw * dv * 1e-3;
+  const Vr_max = 0.25 * params.phi_c * params.fc * params.bw * dv * 1e-3; // 11.3.3
   const As_provided = Ab * (1000 / s);
-  
+
   const a = (params.phi_s * As_provided * params.fy) / (params.alpha1 * params.phi_c * params.fc * params.bw);
   const c = a / params.beta1;
   const Mr = (params.phi_s * As_provided * params.fy * (d - a / 2)) * 1e-6;
-  
-  const kr = (params.Mf * 1e6) / (params.bw * Math.pow(d, 2));
+
+  // Armature minimale (MUR-02 §6, D20 : la plus exigeante des exigences applicables)
+  const As_min_flexure = (0.2 * Math.sqrt(params.fc) / params.fy) * params.bw * params.h_mm; // 10.5.1.2 b)
+  const flexure_min_waived = params.Mf > 0 && Mr >= (4 / 3) * params.Mf; // 10.5.1.3
+  let As_min: number;
+  let As_min_basis: string;
+  let spacing_max: number;
+  let db_max: number | undefined;
+  if (params.kind === 'footing') {
+    As_min = 0.002 * Ag; // 7.8.1, dans chaque direction
+    As_min_basis = '7.8.1 : 0,002·Ag';
+    spacing_max = Math.min(5 * params.h_mm, 500); // 7.8.3
+  } else if (params.kind === 'wall_horizontal') {
+    As_min = 0.002 * Ag; // 14.1.8.6
+    As_min_basis = '14.1.8.6 : 0,002·Ag (horizontal)';
+    spacing_max = Math.min(3 * params.h_mm, 500); // 14.1.8.4
+    db_max = params.h_mm / 10; // 14.1.8.2
+  } else if (params.kind === 'wall_vertical_compression') {
+    As_min = Math.max(0.0015 * Ag - (params.otherVerticalAs ?? 0), 0); // 14.1.8.5 sur l'armature verticale totale des deux faces
+    As_min_basis = '14.1.8.5 : 0,0015·Ag sur la somme des deux faces (14.1.8.3 : un lit permis)';
+    spacing_max = Math.min(3 * params.h_mm, 500);
+    db_max = params.h_mm / 10;
+  } else {
+    const a1 = 0.0015 * Ag; // 14.1.8.5
+    As_min = flexure_min_waived ? a1 : Math.max(a1, As_min_flexure);
+    As_min_basis = flexure_min_waived
+      ? '14.1.8.5 : 0,0015·Ag ; 10.5.1.2 b) dispensée (10.5.1.3 : Mr ≥ 4/3·Mf)'
+      : '14.1.8.5 : 0,0015·Ag et 10.5.1.2 b) : 0,2√f′c/fy·b·h (la plus grande)';
+    spacing_max = Math.min(3 * params.h_mm, 500);
+    db_max = params.h_mm / 10;
+  }
+
   const rho = As_provided / (params.bw * d);
+  const kr = (params.Mf * 1e6) / (params.bw * Math.pow(d, 2));
   const rho_b = ((params.alpha1 * params.beta1 * params.phi_c * params.fc) / (params.phi_s * params.fy)) * (700 / (700 + params.fy));
-  const duct_limit = 700 / (700 + params.fy);
+  // 10.5.2 : c/d ≤ 0,8·700/(700 + fy) (E28 : l'ancienne limite 700/(700 + fy) n'était pas sécuritaire)
+  const duct_limit = 0.8 * (700 / (700 + params.fy));
   const c_over_d = c / d;
-  
-  // Crack factor Z (Omar Chaallal Eq. 3.15, p. 31)
-  const dc = params.cover + db / 2;
+
+  // Fissuration (10.6.1) : z = fs·(dc·A)^(1/3) ; enrobage pris ≤ 50 mm pour dc et A ; fs = 0,6·fy permis
+  const dc = Math.min(params.cover, 50) + db / 2;
   const A_crack = 2 * dc * s;
-  const fs = 0.6 * params.fy; // 240 MPa
+  const fs = 0.6 * params.fy;
   const Z_factor = fs * Math.cbrt(dc * A_crack);
-  
-  // Anchorage & Hook (Omar Chaallal Chapitre 7)
-  // E12 (MUR-01 §2) : k1 = 1,3 barres supérieures ; k4 = 0,8 si <= 20M, 1,0 si >= 25M. A23.3 12.2.4 (page À CITER).
-  const k1 = params.topBars ? 1.3 : 1.0;
+
+  // Développement d'une barre droite (12.2) : ld = max(300 ; coef·k1·k2·k3·k4·(fy/√f′c)·db)
+  const clearSpacing = s - db;
+  // tableau 12.1 (fiche p. 92-93) : conditions enrobage ≥ db et espacement ≥ 1,4db ; sinon éq. 12.1 requise (À CONFIRMER), 0,6 retenu par prudence
+  const ld_cond = params.cover >= db && s >= 1.4 * db;
+  const ld_coeff = ld_cond && clearSpacing >= 2 * db ? 0.45 : 0.6;
+  const ld_eq12_1_required = !ld_cond;
+  const k1 = params.topBars && (params.h_mm - params.cover) > 300 ? 1.3 : 1.0;
   const k4 = params.barSize === '10M' || params.barSize === '15M' || params.barSize === '20M' ? 0.8 : 1.0;
-  const ld = Math.max(0.45 * k1 * 1.0 * 1.0 * k4 * (params.fy / Math.sqrt(params.fc)) * db, 300);
+  const ld = Math.max(ld_coeff * k1 * 1.0 * 1.0 * k4 * (params.fy / Math.sqrt(params.fc)) * db, 300);
+  // Crochet standard (12.5) : lhb = 100·db/√f′c ; × fy/400 ; × 0,7 si enrobage latéral ≥ 60 mm et du prolongement ≥ 50 mm ; ≥ max(8db ; 150)
   const lhb = (100 * db) / Math.sqrt(params.fc);
-  const ldh_required = 0.70 * lhb;
+  const hookReduction = (params.lateralCover ?? 0) >= 60 && (params.extCover ?? 0) >= 50;
+  const ldh_required = Math.max(lhb * (params.fy / 400) * (hookReduction ? 0.7 : 1.0), 8 * db, 150);
+  const ldh_factors = `lhb · fy/400${hookReduction ? ' · 0,7 (12.5.3)' : ' (12.5.3 non satisfait : pas de réduction)'} ≥ max(8db ; 150 mm)`;
   const ldh_available = params.available_hook_depth;
+
   // E05 : chaque statut vient d'une comparaison calculée
   const As_ok = As_provided >= As_min;
-  const shear_ok = Vc >= params.Vf;
+  const shear_ok = params.Vf <= Math.min(Vc, Vr_max);
   const flexure_ok = Mr >= params.Mf;
   const ductility_ok = c_over_d <= duct_limit;
   const Z_ok = Z_factor <= params.Z_limit;
+  const spacing_ok = s <= spacing_max;
+  const db_ok = db_max === undefined ? undefined : db <= db_max;
   const anchorage_ok = ldh_available !== undefined ? ldh_required <= ldh_available : true;
-  
+
   return {
     elementName: params.elementName,
     section_b: params.bw,
@@ -258,10 +349,21 @@ export function computeElementConcreteDesign(params: {
     Vc,
     Vf: params.Vf,
     shear_ok,
+    Vr_max,
+    beta_rule,
     As_min,
+    As_min_basis,
+    As_min_flexure,
+    flexure_min_waived,
+    spacing: s,
+    spacing_max,
+    spacing_ok,
+    db,
+    db_max,
+    db_ok,
     As_provided,
     As_ok,
-    checks_ok: As_ok && shear_ok && flexure_ok && ductility_ok && Z_ok && anchorage_ok,
+    checks_ok: As_ok && shear_ok && flexure_ok && ductility_ok && Z_ok && anchorage_ok && spacing_ok && (db_ok ?? true),
     bar_designation: `${params.barSize} @ ${s} mm`,
     a_stress_block: a,
     alpha1: params.alpha1,
@@ -276,15 +378,19 @@ export function computeElementConcreteDesign(params: {
     ductility_c_over_d: c_over_d,
     ductility_limit: duct_limit,
     ductility_ok,
+    ductility_rule: '10.5.2 : c/d ≤ 0,8·700/(700 + fy)',
     crack_dc: dc,
     crack_A: A_crack,
     Z_factor,
     Z_limit: params.Z_limit,
     Z_ok,
     ld,
+    ld_coeff,
+    ld_eq12_1_required,
     ld_k1: k1,
     ld_k4: k4,
     lhb,
+    ldh_factors,
     ldh_required,
     ldh_available,
     anchorage_ok
@@ -349,8 +455,6 @@ export function analyzeRetainingWall(
     Kp = 0;
   } else if (soilMethod.passiveMethod === 'coulomb') {
     Kp = Kp_coulomb;
-  } else if (soilMethod.passiveMethod === 'reduced_cfem') {
-    Kp = Kp_rankine * 0.50; // CFEM Table 8.1 recommended mobilisation
   } else {
     Kp = Kp_rankine;
   }
@@ -358,36 +462,17 @@ export function analyzeRetainingWall(
   const baseWidth = geo.ePiedAv + geo.epStem + geo.ePiedAr;
   const totalHeight = geo.hMur + geo.epBase;
 
-  // Seismic angle and Mononobe-Okabe / Seed & Whitman (CFEM 6.7 & 24.9)
-  let kh_val = loads.kh || 0;
-  let kv_val = loads.kv || 0;
-  if (soilMethod.seismicMethod === 'none') {
-    kh_val = 0;
-    kv_val = 0;
-  }
-
-  const theta_eq_rad = kh_val > 0 ? Math.atan(kh_val / Math.max(1 - kv_val, 0.1)) : 0;
-  const theta_eq_deg = (theta_eq_rad * 180) / Math_PI;
-
-  let Kae_mo = Ka_rankine;
-  if (kh_val > 0 && phiRad > theta_eq_rad) {
-    const cosTheta = Math.cos(theta_eq_rad);
-    const numMO = Math.pow(Math.cos(phiRad - theta_eq_rad), 2);
-    const denomMO_inner = 1 + Math.sqrt((Math.sin(phiRad + delta_rad) * Math.sin(phiRad - theta_eq_rad)) / (Math.cos(delta_rad + theta_eq_rad)));
-    Kae_mo = numMO / (cosTheta * Math.cos(delta_rad + theta_eq_rad) * Math.pow(denomMO_inner, 2));
-  }
-  const delta_Kae_seed = 0.75 * kh_val; // Seed & Whitman (1970) / CFEM 24.9
-  
-  let delta_Pae_seed = 0;
-  if (soilMethod.seismicMethod === 'seed_whitman') {
-    delta_Pae_seed = 0.375 * kh_val * soil.gamma * totalHeight * totalHeight; // kN/m
-  } else if (soilMethod.seismicMethod === 'mononobe_okabe') {
-    delta_Pae_seed = Math.max(Kae_mo - K_active, 0) * 0.5 * soil.gamma * totalHeight * totalHeight;
-  } else {
-    delta_Pae_seed = 0;
-  }
-
-  const y_Pae = 0.60 * totalHeight; // m from base
+  // Séisme (MUR-02 §4.1, D6) : kh = ah par défaut (CFEM 5e, éq. 18.22) ; option avancée désactivée par défaut :
+  // kh = 0,5·ah et kv = 0 (CSA S6 citée par le CFEM p. 631), réservée aux murs libres de remblais routiers ou autoroutiers.
+  const seismicOn = soilMethod.seismicMethod !== 'none';
+  const rigidWall = geo.wallType === 'basement' || soilMethod.activeMethod === 'at_rest'; // mur retenu : Wood (§4.3)
+  const ah = seismicOn ? Math.max(Number.isFinite(soilMethod.pga) ? soilMethod.pga : 0, 0) : 0;
+  const csaS6 = !!soilMethod.csaS6Reduction && seismicOn && !rigidWall;
+  const kh_val = csaS6 ? 0.5 * ah : ah;
+  // MUR-02 §4.1, D6 : kv = 2/3·kh à défaut d'étude du site (CFEM p. 629), deux signes étudiés ; option CSA S6 : kv = 0
+  const kvIsDefault = !(loads.kv !== undefined && Number.isFinite(loads.kv));
+  const kvInput = !seismicOn || csaS6 ? 0 : kvIsDefault ? (2 / 3) * kh_val : Math.abs(loads.kv as number);
+  const kv_val = 0; // kv signé : voir `scenarios` (les deux signes de kvInput sont étudiés)
 
   // Static nominal forces
   const P_active_nominal = 0.5 * K_active * soil.gamma * totalHeight * totalHeight;
@@ -401,11 +486,17 @@ export function analyzeRetainingWall(
   const gammaW_P = soil.gamma_w ?? 9.81;
   const zDryP = hwP > 0 ? Math.min(Math.max(h_pass - hwP, 0), h_pass) : h_pass; // profondeur de la nappe sous la surface avant
   const gammaPrimeP = foundation.gamma - gammaW_P;
+  // MUR-02 D9 (choix de l'utilisateur) : butée statique de df à h_pass si la case « déduire la profondeur de gel » est cochée (défaut) ;
+  // sinon sur toute la hauteur. La pression verticale σ′v garde le poids du sol de la zone gelée (surcharge sur la zone de butée).
+  const frostDeduct = soil.frost?.deduct ?? true;
+  const dfInput = Number.isFinite(soil.frost?.df) ? Math.max(soil.frost!.df, 0) : 0;
+  const zPassiveTop = frostDeduct ? Math.min(dfInput, h_pass) : 0;
   let P_passive_nominal = 0;
   let M_passive_soil = 0;
-  if (h_pass > 0 && Kp > 0) {
-    const s1 = linearSegmentEffect(0, Kp * foundation.gamma, 0, zDryP, h_pass);
-    const s2 = linearSegmentEffect(Kp * (foundation.gamma - gammaPrimeP) * zDryP, Kp * gammaPrimeP, zDryP, h_pass, h_pass);
+  if (h_pass > 0 && Kp > 0 && zPassiveTop < h_pass) {
+    const s1 = linearSegmentEffect(0, Kp * foundation.gamma, zPassiveTop, zDryP, h_pass);
+    const zSub = Math.max(zPassiveTop, zDryP);
+    const s2 = linearSegmentEffect(Kp * (foundation.gamma - gammaPrimeP) * zDryP, Kp * gammaPrimeP, zSub, h_pass, h_pass);
     P_passive_nominal = s1.V + s2.V;
     M_passive_soil = s1.M + s2.M;
   }
@@ -414,6 +505,11 @@ export function analyzeRetainingWall(
   // Tant que la sous-pression trapézoïdale n'est pas traitée (A3 §7.4), l'eau à l'avant exige une nappe à l'arrière
   // et hw,av_eff = min(hw,av ; hw ; h_pass) (sous-pression uniforme). Avis non bloquants dans `notices`.
   const notices: string[] = [];
+  if (h_pass > 0 && soilMethod.passiveMethod !== 'neglected') {
+    if (!frostDeduct) notices.push("Butée sur toute la hauteur : sol avant déclaré permanent et non gélif par l'utilisateur.");
+    else if (!(dfInput > 0)) notices.push("Profondeur de gel df non saisie (0 m) : aucune déduction appliquée. Saisir df dans l'onglet Critères, ou décocher la case si le sol avant est permanent et non gélif.");
+    else if (dfInput >= h_pass) notices.push(`Profondeur de gel df = ${dfInput.toFixed(2)} m ≥ profondeur de butée ${h_pass.toFixed(2)} m : butée statique nulle.`);
+  }
   const frontWaterReq = !!soil.frontWater?.enabled;
   const frontWaterOn = frontWaterReq && hwP > 0;
   if (frontWaterReq && !frontWaterOn) notices.push("Eau à l'avant ignorée : elle exige une nappe à l'arrière (scénario A retenu).");
@@ -427,18 +523,90 @@ export function analyzeRetainingWall(
   const E_stem_nominal = geo.hMur * geo.epStem * conc.gamma_c * kh_val;
   const E_base_nominal = baseWidth * geo.epBase * conc.gamma_c * kh_val;
 
+  // ---------------------------------------------------------------------------
+  // Scénarios sismiques (MUR-02 §4) : un par signe de kv (kv signé ; sign = +1 : vers le haut, poids W(1 − kv))
+  // ---------------------------------------------------------------------------
+  const warnings: string[] = [];
+  const seisMethod: SeismicSummary['method'] = !seismicOn ? 'none' : rigidWall ? 'wood' : soilMethod.seismicMethod === 'seed_whitman' ? 'seed_whitman' : 'mononobe_okabe';
+  const westergaard = seismicOn && hw_av > 0;
+  if (!!soilMethod.csaS6Reduction && seismicOn && rigidWall) notices.push("Option CSA S6 (kh = 0,5·ah) non appliquée : elle ne vise pas les murs rigides ou retenus (MUR-02 §4.1). kh = ah.");
+  if (seismicOn && hwP > 0) notices.push("Séisme avec nappe dans le remblai : ΔPAE calculé avec γ sur toute la hauteur (conservateur). Effet de Matsuzawa (CFEM éq. 18.34-18.35) NON APPLIQUÉ : exige Gs et e, absents du modèle — À CONFIRMER.");
+  const deltaSeis = soilMethod.activeMethod === 'coulomb' ? delta_rad : 0; // D11 : δ = 0 sur le plan fictif (remblai horizontal) ; même δ pour Ka et KAE (E13b)
+  const deltaPassSeis = soilMethod.passiveMethod === 'coulomb' ? delta_p_rad : 0;
+  const signs: (0 | 1 | -1)[] = seismicOn ? (kvInput > 0 ? [1, -1] : [0]) : [];
+  const gH2 = (h: number) => 0.5 * soil.gamma * h * h;
+  const scenarios: SeismicScenario[] = signs.map(sign => {
+    const kv = sign * kvInput;
+    const psi = Math.atan(kh_val / Math.max(1 - kv, 0.1)); // éq. 18.21 : ψ = atan[kh/(1 − kv)]
+    let Kae = 0;
+    let indeterminate = false;
+    let dPae = 0;
+    let dPaeStem = 0;
+    let yRel = 0.6; // fraction de H : 0,6 (Seed-Whitman, éq. 18.26) ; 0,58 (Wood, éq. 18.39)
+    if (seisMethod === 'wood') {
+      // Wood : ΔP0E = kh·γ·H² à 0,58H (CFEM 18.7.3, éq. 18.39)
+      dPae = kh_val * soil.gamma * totalHeight * totalHeight;
+      dPaeStem = kh_val * soil.gamma * geo.hMur * geo.hMur;
+      yRel = 0.58;
+    } else if (seisMethod === 'seed_whitman') {
+      dPae = 0.375 * kh_val * soil.gamma * totalHeight * totalHeight;
+      dPaeStem = 0.375 * kh_val * soil.gamma * geo.hMur * geo.hMur;
+    } else if (seisMethod === 'mononobe_okabe') {
+      const K = mononobeOkabeKae(phiRad, deltaSeis, psi);
+      if (K === null) {
+        indeterminate = true; // φ − β < ψ : jamais de NaN ; calcul sismique arrêté avec message (CFEM p. 632, 18.7.4)
+      } else {
+        Kae = K;
+        dPae = Math.max(gH2(totalHeight) * ((1 - kv) * Kae - K_active), 0); // PAE = PA + ΔPAE (éq. 18.20, 18.23)
+        dPaeStem = Math.max(gH2(geo.hMur) * ((1 - kv) * Kae - K_active), 0);
+      }
+    }
+    let Kpe = 0;
+    let ppFactor = 0;
+    if (soilMethod.seismicPassive === 'kpe' && Kp > 0) {
+      const kpe = mononobeOkabeKpe(phiF, deltaPassSeis, psi);
+      if (kpe !== null) {
+        Kpe = kpe;
+        ppFactor = Math.min(Math.max((Kpe * (1 - kv)) / Kp, 0), 1); // PPE/PP ; ΔPPE s'oppose à PP (éq. 18.27-18.31)
+      }
+    }
+    const Pw_dyn = westergaard ? (7 / 12) * kh_val * gammaW_P * hw_av * hw_av : 0; // Westergaard, éq. 18.33
+    return { sign, kv, psi_rad: psi, psi_deg: (psi * 180) / Math_PI, Kae, indeterminate, dPae, dPae_stem: dPaeStem, y_dPae: yRel * totalHeight, Kpe, Pp_factor: ppFactor, Pw_dyn };
+  });
+  const sc0: SeismicScenario | undefined = scenarios[0];
+  if (scenarios.some(sc => sc.indeterminate)) {
+    warnings.push(`Mononobe-Okabe : KAE indéterminé (φ′ − β < ψ, ψ = ${Math.max(...scenarios.map(sc => sc.psi_deg)).toFixed(2)}° > φ′ = ${soil.phi}°). Calcul sismique ARRÊTÉ : NON VÉRIFIABLE. Utiliser l'équilibre limite (CFEM 18.7.4).`);
+  }
+  if (soilMethod.seismicPassive === 'kpe' && seismicOn && scenarios.some(sc => Kp > 0 && sc.Kpe === 0)) {
+    notices.push("KPE indéterminé (φ′ + β < ψ) : butée sismique prise nulle.");
+  }
+  const seismic: SeismicSummary = {
+    active: seismicOn && (kh_val > 0 || kvInput > 0),
+    method: seisMethod,
+    rigid: rigidWall,
+    ah,
+    ahSource: soilMethod.ahSource ?? '',
+    kh: kh_val,
+    csaS6,
+    kvInput,
+    kvIsDefault: kvIsDefault && !csaS6,
+    scenarios,
+    passiveMode: soilMethod.seismicPassive === 'kpe' ? 'kpe' : 'none',
+    westergaard
+  };
+
   const earthPressures: EarthPressureCalculations = {
     Ka_rankine,
     Ka_coulomb,
     Kp_rankine,
     Kp_coulomb,
     K0_jaky: K0,
-    theta_eq_rad,
-    theta_eq_deg,
-    Kae_mo,
-    delta_Kae_seed,
-    delta_Pae_seed,
-    y_Pae,
+    theta_eq_rad: sc0?.psi_rad ?? 0,
+    theta_eq_deg: sc0?.psi_deg ?? 0,
+    Kae_mo: sc0 && !sc0.indeterminate && seisMethod === 'mononobe_okabe' ? sc0.Kae : K_active,
+    delta_Kae_seed: 0.75 * kh_val,
+    delta_Pae_seed: sc0?.dPae ?? 0,
+    y_Pae: sc0?.y_dPae ?? 0.6 * totalHeight,
     P_active_nominal,
     y_Pa,
     P_passive_nominal,
@@ -453,15 +621,36 @@ export function analyzeRetainingWall(
     E_stem_nominal,
     E_base_nominal,
     K_active_used: K_active,
-    K_passive_used: Kp
+    K_passive_used: Kp,
+    W_heelSoil_inertia: 0,
+    E_heelSoil_nominal: 0,
+    y_heelSoil: 0,
+    h_frost_df: frostDeduct ? zPassiveTop : 0,
+    z_passive_top: zPassiveTop,
+    Pp_seismic_factor: sc0 ? sc0.Pp_factor : 1
   };
 
-  // Ensure CFEM factors default
-  const phi_gu = soil.geotechFactors?.phi_gu ?? 0.50;
-  const phi_gs = soil.geotechFactors?.phi_gs ?? 0.80;
-  const phi_renv = soil.geotechFactors?.phi_renv ?? 0.50;
-  const phi_p = soil.geotechFactors?.phi_p ?? 0.50;
-  const phi_coh = soil.geotechFactors?.phi_coh ?? 0.60;
+  // Facteurs géotechniques (MUR-02 §1) : tableau 6.2 du CFEM 5e selon le degré de compréhension ; Ψ du tableau 6.4
+  const level: GeotechLevel = soil.geotechLevel ?? 'typical';
+  const tbl = GEOTECH_TABLE_6_2[level] ?? GEOTECH_TABLE_6_2.typical;
+  const psiG = Number.isFinite(soil.psi) && (soil.psi as number) > 0 ? (soil.psi as number) : 1.0;
+  const quFactored = !!soil.quFactored;
+  const geotech: GeotechResolved = {
+    level,
+    psi: psiG,
+    phi_gu: quFactored ? 1.0 : tbl.bearing,
+    phi_ov: tbl.overturning,
+    phi_gs: tbl.sliding,
+    phi_coh: tbl.slidingCohesive,
+    phi_p: tbl.passive,
+    phi_settle: tbl.settlement,
+    quFactored
+  };
+  const phi_gu = geotech.phi_gu;
+  const phi_gs = geotech.phi_gs;
+  const phi_renv = geotech.phi_ov;
+  const phi_p = geotech.phi_p;
+  const phi_coh = geotech.phi_coh;
   const c2 = foundation.cohesion; // c′ du sol de fondation (adhérence de la base)
 
   interface ForceComp { 
@@ -475,8 +664,10 @@ export function analyzeRetainingWall(
     soil?: { saturated: boolean; hs: number }; // poids de sol porté : facteur 4.1.3.2.(8) et (9)
     stemApplied?: boolean; // charge appliquée au voile (E01)
     dist?: { yBottom: number; yTop: number; w: number }; // charge Fx répartie (kN/m par m), y depuis la sous-face de la semelle
+    lineLoad?: { type: LoadCaseType; label: string; sigmaAt: (z: number) => number }; // poussée d'une charge linéaire (fig. 20.8) : diagramme σh(z), z sous la surface
   }
   const components: ForceComp[] = [];
+  const lineLoadsInfo: { name: string; QL: number; m: number; PH: number; yPH: number }[] = [];
 
   // Poids propres (D)
   // W_stem (voile)
@@ -506,7 +697,6 @@ export function analyzeRetainingWall(
   const hw = hasWater ? Math.min(Math.max(soil.waterTableHeight || 0, 0), totalHeight) : 0;
   const gamma_w = soil.gamma_w ?? 9.81;
   // γ′ = γ − γw, sans plancher : le γ saisi est pris comme poids volumique saturé (hypothèse signalée dans la note)
-  const warnings: string[] = [];
   if (hasWater && soil.gamma <= gamma_w) warnings.push(`Remblai : γ = ${soil.gamma} kN/m³ ≤ γw = ${gamma_w} kN/m³ avec nappe — poids déjaugé non physique, résultats NON VÉRIFIABLES.`);
   if (hasWater && foundation.gamma <= gamma_w) warnings.push(`Fondation : γ = ${foundation.gamma} kN/m³ ≤ γw = ${gamma_w} kN/m³ avec nappe — poids déjaugé non physique, résultats NON VÉRIFIABLES.`);
   const gamma_prime = soil.gamma - gamma_w; // remblai
@@ -718,30 +908,26 @@ export function analyzeRetainingWall(
         dist: al.isDistributed && al.length && al.nature === 'Fx' ? { yBottom: al.y, yTop: al.y + al.length, w: al.magnitude } : undefined
       });
 
-      // Si c'est une charge verticale (Fy > 0) située sur le remblai amont (derrière le voile)
-      // Selon la géotechnique (Terzaghi / Boussinesq / CFEM), elle engendre également une poussée latérale active sur le voile
+      // Charge verticale Fy > 0 sur le remblai amont, assimilée à une charge LINÉAIRE QL (kN/m) parallèle au mur :
+      // poussée horizontale selon la fig. 20.8 du CFEM 5e (p. 694), MUR-02 §3 — corrige E25.
+      // m = distance au mur / H (distance mesurée depuis la face arrière du voile, H = hauteur totale : hypothèse À CONFIRMER).
+      // Une charge répartie sur une longueur est ramenée à sa résultante au centre : approximation À CONFIRMER.
       const stemBack = geo.ePiedAv + geo.epStem;
       if (al.nature === 'Fy' && fy > 0 && x_c >= stemBack) {
-        const distFromStem = x_c - stemBack;
-        // Coin de rupture actif à 45° - phi/2
-        const wedgeDist = totalHeight * Math.tan(((45 - soil.phi / 2) * Math.PI) / 180);
-        // Facteur d'atténuation en fonction de la distance au mur
-        const eta = distFromStem <= wedgeDist 
-          ? 1.0 
-          : Math.max(0, 1.0 - (distFromStem - wedgeDist) / (1.5 * totalHeight));
-        
-        if (eta > 0) {
-          const inducedFx = K_active * fy * eta;
-          const yThrust = Math.min(Math.max(geo.epBase + geo.hMur * 0.4, y_c / 2), totalHeight * 0.85);
+        const m = (x_c - stemBack) / totalHeight;
+        const lt = lineLoadThrust(fy, m, totalHeight);
+        if (lt.PH > 0) {
+          lineLoadsInfo.push({ name: al.name, QL: fy, m, PH: lt.PH, yPH: totalHeight - lt.zc });
           components.push({
-            name: `${al.name} (Poussée latérale induite)`,
+            name: `${al.name} (Poussée de la charge linéaire, fig. 20.8)`,
             type: al.caseType,
-            Fx: inducedFx,
-            y: yThrust,
+            Fx: lt.PH,
+            y: totalHeight - lt.zc,
             Fy: 0,
             x: 0,
             Mz: 0,
-            stemApplied: true
+            stemApplied: true,
+            lineLoad: { type: al.caseType, label: `${al.name} (fig. 20.8)`, sigmaAt: lt.sigmaAt }
           });
         }
       }
@@ -767,76 +953,54 @@ export function analyzeRetainingWall(
     }
   }
 
-  // Action Sismique (E) selon Mononobe-Okabe / Seed & Whitman (CFEM Section 6.7 & Section 24.9)
-  if (soilMethod.seismicMethod !== 'none' && kh_val > 0) {
-    const delta_P_ae = delta_Pae_seed;
-    // Appliqué à 0.6H de la base
-    if (delta_P_ae > 0) {
-      components.push({ 
-        name: `P_seismic_soil (${soilMethod.seismicMethod === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Seed & Whitman'})`, 
-        type: 'E', 
-        Fx: delta_P_ae, 
-        y: y_Pae, 
-        Fy: 0, 
-        x: 0, 
-        Mz: 0 
-      });
+  // Action sismique (E) — MUR-02 §4.4 : ΔPAE (ou ΔP0E de Wood) et forces d'inertie kh·W (et ±kv·W) appliquées au centre de gravité
+  // du voile, de la semelle et du sol situé au-dessus du talon (entre le voile et le plan fictif ; D21, source À CONFIRMER).
+  // Un jeu de composantes par signe de kv ; le sol et le voile suivent la même accélération.
+  const W_stem = geo.hMur * geo.epStem * conc.gamma_c;
+  const W_base = baseWidth * geo.epBase * conc.gamma_c;
+  const xHeel = geo.ePiedAv + geo.epStem + geo.ePiedAr / 2;
+  // sol du talon : γ saisi pris comme poids saturé sous la nappe (masse d'inertie du sol saturé), sec au-dessus
+  const W_heelSub = hSubHeel * geo.ePiedAr * soil.gamma;
+  const W_heelDry = hDryHeel * geo.ePiedAr * soil.gamma;
+  const W_heelSoil = W_heelSub + W_heelDry;
+  const yHeelSub = geo.epBase + hSubHeel / 2;
+  const yHeelDry = geo.epBase + hSubHeel + hDryHeel / 2;
+  const y_heelSoil = W_heelSoil > 0 ? (W_heelSub * yHeelSub + W_heelDry * yHeelDry) / W_heelSoil : geo.epBase + geo.hMur / 2;
+  earthPressures.W_heelSoil_inertia = W_heelSoil;
+  earthPressures.E_heelSoil_nominal = W_heelSoil * kh_val;
+  earthPressures.y_heelSoil = y_heelSoil;
+  const seismicComps: ForceComp[][] = scenarios.map(sc => {
+    const out: ForceComp[] = [];
+    if (kh_val <= 0 && kvInput <= 0) return out;
+    const tag = scenarios.length > 1 ? (sc.sign > 0 ? ' [kv ↑]' : ' [kv ↓]') : '';
+    const nameDp = seisMethod === 'wood' ? 'Wood (ΔP0E)' : seisMethod === 'seed_whitman' ? 'Seed & Whitman' : 'Mononobe-Okabe (ΔPAE)';
+    if (sc.dPae > 0) out.push({ name: `P_seismic_soil (${nameDp})${tag}`, type: 'E', Fx: sc.dPae, y: sc.y_dPae, Fy: 0, x: 0, Mz: 0 });
+    // Westergaard (CFEM éq. 18.33) : poussée hydrodynamique de l'eau à l'avant, action E (facteur de E), à 0,4·hw,av de la base
+    if (sc.Pw_dyn > 0) out.push({ name: `E_westergaard${tag}`, type: 'E', Fx: sc.Pw_dyn, y: 0.4 * hw_av, Fy: 0, x: 0, Mz: 0 });
+    const masses: { name: string; W: number; y: number; x: number }[] = [
+      { name: 'E_stem_inertia', W: W_stem, y: geo.epBase + geo.hMur / 2, x: geo.ePiedAv + geo.epStem / 2 },
+      { name: 'E_base_inertia', W: W_base, y: geo.epBase / 2, x: baseWidth / 2 }
+    ];
+    if (hDryHeel > 0) masses.push({ name: 'E_heelSoil_inertia', W: W_heelDry, y: yHeelDry, x: xHeel });
+    if (hSubHeel > 0) masses.push({ name: 'E_heelSoil_inertia_sat', W: W_heelSub, y: yHeelSub, x: xHeel });
+    for (const m of masses) {
+      if (m.W <= 0) continue;
+      out.push({ name: `${m.name}${tag}`, type: 'E', Fx: kh_val * m.W, y: m.y, Fy: 0, x: m.x, Mz: 0 });
+      // kv·W : force verticale opposée au poids si kv > 0 (poids effectif W(1 − kv)), dans le même sens si kv < 0
+      if (sc.kv !== 0) out.push({ name: `${m.name}_kv${tag}`, type: 'E', Fx: 0, y: 0, Fy: -sc.kv * m.W, x: m.x, Mz: 0 });
     }
-    // Inertie du voile
-    const E_stem = geo.hMur * geo.epStem * conc.gamma_c * kh_val;
-    if (E_stem > 0) {
-      components.push({ 
-        name: 'E_stem_inertia', 
-        type: 'E', 
-        Fx: E_stem, 
-        y: geo.epBase + geo.hMur / 2, 
-        Fy: 0, 
-        x: geo.ePiedAv + geo.epStem / 2, 
-        Mz: 0 
-      });
-    }
-    // Inertie de la semelle
-    const E_base = baseWidth * geo.epBase * conc.gamma_c * kh_val;
-    if (E_base > 0) {
-      components.push({ 
-        name: 'E_base_inertia', 
-        type: 'E', 
-        Fx: E_base, 
-        y: geo.epBase / 2, 
-        Fy: 0, 
-        x: baseWidth / 2, 
-        Mz: 0 
-      });
-    }
-    // Séisme vertical kv si configuré
-    if (kv_val !== 0) {
-      const Ev_stem = geo.hMur * geo.epStem * conc.gamma_c * kv_val;
-      components.push({ 
-        name: 'Ev_stem_inertia', 
-        type: 'E', 
-        Fx: 0, 
-        y: geo.epBase + geo.hMur / 2, 
-        Fy: Ev_stem, 
-        x: geo.ePiedAv + geo.epStem / 2, 
-        Mz: 0 
-      });
-    }
-  }
+    return out;
+  });
 
   // Poussée passive avant
   // moment par rapport à la sous-face : butée du sol (bras y_Pp) + eau à l'avant (bras hw,av/3) ; mêmes facteurs (A3, À CONFIRMER)
-  const M_passive_nominal = P_passive_nominal * y_Pp + P_water_front * y_Pw_front;
+  const M_passive_nominal = P_passive_nominal * y_Pp + P_water_front * y_Pw_front; // statique (cas sans E)
 
   // ---------------------------------------------------------------------------
   // Charges latérales sur le voile, avec TOUTES les charges latérales (E01) :
   // terres, eau, surcharge, séisme, charges de tête, réactions de tête, charges ponctuelles et réparties Fx.
   // z = profondeur sous le haut du voile (m).
   // ---------------------------------------------------------------------------
-  const deltaPaeFor = (h: number): number => {
-    if (soilMethod.seismicMethod === 'seed_whitman') return 0.375 * kh_val * soil.gamma * h * h;
-    if (soilMethod.seismicMethod === 'mononobe_okabe') return Math.max(Kae_mo - K_active, 0) * 0.5 * soil.gamma * h * h;
-    return 0;
-  };
   const stemItems: StemItem[] = [];
   const zWater = hasWater ? Math.max(totalHeight - hw, 0) : Infinity;
   const zDryEnd = Math.min(zWater, geo.hMur);
@@ -851,15 +1015,17 @@ export function analyzeRetainingWall(
   if (loads.surcharge > 0) {
     stemItems.push({ kind: 'linear', type: surType, label: 'Poussée de la surcharge', z1: 0, z2: geo.hMur, a: K_active * loads.surcharge, b: 0 });
   }
-  if (soilMethod.seismicMethod !== 'none' && kh_val > 0) {
-    const dPaeStem = deltaPaeFor(geo.hMur);
-    // résultante à 0,6·h au-dessus du pied du voile, soit à 0,4·h sous le haut
-    if (dPaeStem > 0) stemItems.push({ kind: 'point', type: 'E', label: 'Incrément sismique du sol', z: 0.4 * geo.hMur, F: dPaeStem });
-    const E_stem_only = geo.hMur * geo.epStem * conc.gamma_c * kh_val;
-    if (E_stem_only > 0) stemItems.push({ kind: 'point', type: 'E', label: 'Inertie du voile', z: geo.hMur / 2, F: E_stem_only });
-  }
+  // Séisme : un jeu d'items par signe de kv (ΔPAE du voile à 0,6 h au-dessus du pied, ΔP0E de Wood à 0,58 h, inertie du voile à h/2)
+  const stemItemsE: StemItem[][] = scenarios.map(sc => {
+    const out: StemItem[] = [];
+    if (kh_val <= 0 && kvInput <= 0) return out;
+    const zFrac = seisMethod === 'wood' ? 1 - 0.58 : 1 - 0.6; // profondeur sous le haut = (1 − fraction) · h
+    if (sc.dPae_stem > 0) out.push({ kind: 'point', type: 'E', label: seisMethod === 'wood' ? 'Incrément sismique de Wood (ΔP0E)' : 'Incrément sismique du sol (ΔPAE)', z: zFrac * geo.hMur, F: sc.dPae_stem });
+    if (E_stem_nominal > 0) out.push({ kind: 'point', type: 'E', label: 'Inertie du voile', z: geo.hMur / 2, F: E_stem_nominal });
+    return out;
+  });
   for (const c of components) {
-    if (!c.stemApplied) continue;
+    if (!c.stemApplied || c.lineLoad) continue;
     if (c.Fx !== 0) {
       if (c.dist) {
         const zT = Math.max(totalHeight - c.dist.yTop, 0);
@@ -873,6 +1039,21 @@ export function analyzeRetainingWall(
       stemItems.push({ kind: 'moment', type: c.type, label: c.name, z: Math.max(totalHeight - c.y, 0), M: c.Mz });
     }
   }
+  // Charges linéaires (fig. 20.8) : diagramme σh(z) discrétisé en segments linéaires sur la hauteur du voile
+  for (const c of components) {
+    if (!c.lineLoad) continue;
+    const nSeg = 24;
+    const zEnd = Math.min(geo.hMur, totalHeight);
+    for (let i = 0; i < nSeg; i++) {
+      const z1 = (i / nSeg) * zEnd;
+      const z2 = ((i + 1) / nSeg) * zEnd;
+      const p1 = c.lineLoad.sigmaAt(z1);
+      const p2 = c.lineLoad.sigmaAt(z2);
+      if (p1 === 0 && p2 === 0) continue;
+      const slope = (p2 - p1) / (z2 - z1);
+      stemItems.push({ kind: 'linear', type: c.lineLoad.type, label: c.lineLoad.label, z1, z2, a: p1 - slope * z1, b: slope });
+    }
+  }
 
   const propped = geo.wallType === 'basement';
   const customSupports = propped && !!geo.supports && geo.supports.length > 0;
@@ -882,7 +1063,7 @@ export function analyzeRetainingWall(
   const I_fem = 1.0 * Math.pow(geo.epStem, 3) / 12;
 
   // Efforts du voile pour un jeu de facteurs : sections de 0 à hMur, réaction(s) en tête (mur de sous-sol)
-  const stemAnalysis = (factors: Record<LoadCaseType, number>, dUnfav: number) => {
+  const stemAnalysis = (factors: Record<LoadCaseType, number>, dUnfav: number, stemItems: StemItem[]) => {
     const nSec = 40;
     if (customSupports) {
       // appuis intermédiaires saisis : poutre MEF avec les mêmes charges factorisées (charges nodales comprises)
@@ -934,14 +1115,40 @@ export function analyzeRetainingWall(
   let R_top_default = 0;
 
   const cnbEdition: CnbEdition = loads.cnbEdition ?? DEFAULT_CNB_EDITION;
+  // Une combinaison avec E est étudiée pour chaque signe de kv (MUR-02 §4.1) ; les autres une seule fois.
+  const expanded: { comb: LoadCombination; scIdx: number }[] = [];
   for (const comb of getCnbCombinations(cnbEdition)) {
     // Si aucun séisme n'est retenu (mode statique), les combinaisons sismiques (E > 0) ne sont pas applicables
-    if (soilMethod.seismicMethod === 'none' && (comb.factors.E || 0) > 0) {
-      continue;
+    if (!seismicOn && (comb.factors.E || 0) > 0) continue;
+    if ((comb.factors.E || 0) > 0 && scenarios.length > 0) scenarios.forEach((_, i) => expanded.push({ comb, scIdx: i }));
+    else expanded.push({ comb, scIdx: -1 });
+  }
+  const stemVAtFns: ((dm: number) => number)[] = [];
+  for (const { comb: comb0, scIdx } of expanded) {
+    const sc = scIdx >= 0 ? scenarios[scIdx] : null;
+    const kvSign: 0 | 1 | -1 = sc ? sc.sign : 0;
+    const comb: LoadCombination = sc && scenarios.length > 1
+      ? { ...comb0, name: `${comb0.name} [kv ${sc.sign > 0 ? '↑' : '↓'}]` }
+      : comb0;
+    const allComps = sc ? components.concat(seismicComps[scIdx]) : components;
+    const stemItemsC = sc ? stemItems.concat(stemItemsE[scIdx]) : stemItems;
+    // Résistances de la butée et de l'eau à l'avant : statiques, ou séisme (butée nulle / réduite KPE ; Westergaard sur l'eau à l'avant)
+    let Pp_c = P_passive_nominal;
+    let Mp_c = M_passive_soil;
+    let Pw_c = P_water_front;
+    let Mw_c = P_water_front * y_Pw_front;
+    if (sc) {
+      Pp_c = P_passive_nominal * sc.Pp_factor;
+      Mp_c = M_passive_soil * sc.Pp_factor;
     }
+    const Mpass_c = Mp_c + Mw_c;
 
     // Réaction(s) d'appui en tête (mur de sous-sol) : issue(s) des charges latérales du voile de CETTE combinaison (E10)
-    const stemRes = stemAnalysis(comb.factors, comb.Dunfav);
+    const stemRes = stemAnalysis(comb.factors, comb.Dunfav, stemItemsC);
+    {
+      const Rtop = propped && !customSupports ? proppedTopReaction(stemItemsC, comb.factors, geo.hMur, comb.Dunfav) : 0;
+      stemVAtFns.push((dm: number) => customSupports ? stemRes.maxV : Math.abs(stemSectionEffort(stemItemsC, comb.factors, Math.min(Math.max(geo.hMur - dm, 0), geo.hMur), Rtop, comb.Dunfav).V));
+    }
     let sumRt = 0;
     let momRt = 0;
     for (const r of stemRes.Rt) {
@@ -970,7 +1177,7 @@ export function analyzeRetainingWall(
         // H (poids et poussée de l'eau, terres) n'est jamais mis à zéro ; seules les charges variables et E le sont
         return favourable && zeroFav && comp.type !== 'H' ? 0 : (comb.factors[comp.type] || 0);
       };
-      for (const comp of components) {
+      for (const comp of allComps) {
         if (comp.Fy > 0) {
           const f = fOf(comp, true, true);
           sumV += comp.Fy * f;
@@ -1007,25 +1214,6 @@ export function analyzeRetainingWall(
 
     const sumV_min = stab.sumV;
     const sumH = stab.sumH;
-
-    // CFEM : glissement Fs = c'·B·φcoh + Pp·φp + ΣV·μ·φgs (facteurs φ inchangés, fiche suivante)
-    const phi_sliding_friction = comb.type === 'ULS' ? phi_gs : 1.0;
-    const phi_passive = comb.type === 'ULS' ? phi_p : 1.0;
-    const phi_cohesion = comb.type === 'ULS' ? phi_coh : 1.0;
-
-    const Fs = (c2 * baseWidth * phi_cohesion) +
-               ((P_passive_nominal + P_water_front) * phi_passive) +
-               (Math.max(sumV_min, 0) * soil.mu * phi_sliding_friction);
-    const Fh_destab = Math.max(sumH, 0.01);
-    const FOS_sl = sumH > 0 ? (Fs / Fh_destab) : Infinity;
-    const status_sliding: 'OK' | 'NON' = FOS_sl >= 1.0 ? 'OK' : 'NON';
-
-    // Renversement (critère « moments ») : Ms = ΣM stabilisants + butée·φ_renv ; Mr = ΣM renversants
-    const phi_overturning = comb.type === 'ULS' ? phi_renv : 1.0;
-    const Ms = stab.Mres + (M_passive_nominal * phi_overturning);
-    const Mr = Math.max(stab.Mover, 0.01);
-    const FOS_over = stab.Mover > 0 ? (Ms / Mr) : Infinity;
-    let status_overturning: 'OK' | 'NON' = FOS_over >= 1.0 ? 'OK' : 'NON';
 
     // Portance et excentricité (E06) : ΣV, ΣM et e du MÊME jeu de facteurs ; sans résistance (butée) dans e
     const limitL6 = baseWidth / 6;
@@ -1083,6 +1271,30 @@ export function analyzeRetainingWall(
     const bZ = bearingOf(stab);
     const bF = bearingOf(full);
     const bH = bearingOf(heel);
+
+    // --- MUR-02 §2.1 : glissement  Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·(Pp + Pw,a)] ≥ ΣHf
+    // ΣV′ = force verticale effective (poids déjaugé, sous-pression déduite) ; B′ = B − 2e (largeur comprimée) pour le terme cohésif (D13, À CONFIRMER).
+    const isULS = comb.type === 'ULS';
+    const psiC = isULS ? geotech.psi : 1.0;
+    const phi_sliding_friction = isULS ? phi_gs : 1.0;
+    const phi_passive = isULS ? phi_p : 1.0;
+    const phi_cohesion = isULS ? phi_coh : 1.0;
+    const phi_overturning = isULS ? phi_renv : 1.0;
+    const B_slide = bZ.outside ? 0 : Math.min(bZ.B_eff, baseWidth);
+    const Rf_friction = psiC * phi_sliding_friction * Math.max(sumV_min, 0) * soil.mu;
+    const Rf_cohesion = psiC * phi_cohesion * c2 * B_slide;
+    const Rf_passive = psiC * phi_passive * (Pp_c + Pw_c);
+    const Fs = Rf_friction + Rf_cohesion + Rf_passive;
+    const Fh_destab = Math.max(sumH, 0.01);
+    const FOS_sl = sumH > 0 ? (Fs / Fh_destab) : Infinity;
+    const status_sliding: 'OK' | 'NON' = FOS_sl >= 1.0 ? 'OK' : 'NON';
+
+    // --- MUR-02 §2.3 (E08) : renversement  Ψ·φ_ov·ΣM_stab ≥ ΣM_renv (forme d'application À CONFIRMER) ; la butée fait partie de ΣM_stab
+    const Ms_nominal = stab.Mres + Mpass_c;
+    const Ms = psiC * phi_overturning * Ms_nominal;
+    const Mr = Math.max(stab.Mover, 0.01);
+    const FOS_over = stab.Mover > 0 ? (Ms / Mr) : Infinity;
+    let status_overturning: 'OK' | 'NON' = FOS_over >= 1.0 ? 'OK' : 'NON';
     const bear = [bF, bH].reduce((best, b) => (b.q_design > best.q_design ? b : best), bZ);
     // Résultante hors de la base : renversement (vers l'orteil) ou basculement vers le talon -> NON, avec message
     const outsideSide = bZ.outside ?? bF.outside ?? bH.outside;
@@ -1093,7 +1305,11 @@ export function analyzeRetainingWall(
       : '';
     if (outsideSide) status_overturning = 'NON';
 
-    const qCap = comb.type === 'ULS' ? (soil.qUltimate_ULS * phi_gu) : soil.qAllowable_SLS;
+    // Portance : qf ≤ Ψ·φgu·qu (ELU) ; q_adm,ELS du rapport géotechnique à l'ELS (MUR-02 §1, §2.2)
+    const qCap = isULS ? (psiC * phi_gu * soil.qUltimate_ULS) : soil.qAllowable_SLS;
+    // Limite d'excentricité (D3) : e ≤ B/6 à l'ELU et à l'ELS, sur tous les états étudiés de la combinaison
+    const ecc_max = Math.max(bZ.ecc, bF.ecc, bH.ecc);
+    const status_ecc: 'OK' | 'NON' = (!outsideSide && ecc_max <= limitL6 + 1e-9) ? 'OK' : 'NON';
     const FOS_b = bear.q_design > 0 ? (qCap / bear.q_design) : Infinity;
     const status_bearing: 'OK' | 'NON' = (bear.q_design <= qCap && !bear.uplift && !outsideSide) ? 'OK' : 'NON';
 
@@ -1150,6 +1366,19 @@ export function analyzeRetainingWall(
       formula: comb.formula,
       type: comb.type,
       factors: comb.factors,
+      kvSign,
+      psi: psiC,
+      phi_gs: phi_sliding_friction,
+      phi_coh: phi_cohesion,
+      phi_p: phi_passive,
+      phi_ov: phi_overturning,
+      phi_gu: isULS ? phi_gu : 1.0,
+      Pp_used: Pp_c,
+      Pw_front_used: Pw_c,
+      Rf_friction,
+      Rf_cohesion,
+      Rf_passive,
+      B_slide,
       sumV_min,
       sumV_max: bear.Rv,
       sumH,
@@ -1158,6 +1387,8 @@ export function analyzeRetainingWall(
       FOS_sliding: FOS_sl,
       status_sliding,
       Ms,
+      Ms_nominal,
+      Ms_passive: Mpass_c,
       Mr,
       FOS_overturning: FOS_over,
       status_overturning,
@@ -1170,6 +1401,8 @@ export function analyzeRetainingWall(
       q_capacity: qCap,
       FOS_bearing: FOS_b,
       status_bearing,
+      ecc_max,
+      status_ecc,
       B_eff: bear.B_eff,
       q_design: bear.q_design,
       outside_base: outsideSide,
@@ -1178,6 +1411,7 @@ export function analyzeRetainingWall(
       stabApplicable: comb.stabApplicable,
       mur_Mf: stemRes.maxM,
       mur_Vf: stemRes.maxV,
+      mur_Vf_dv: stemRes.maxV,
       toe_Mf: Math.max(toeZ.M, toeF.M, toeH.M),
       toe_Vf: Math.max(toeZ.V, toeF.V, toeH.V),
       heel_Mf: Math.max(heelZ.M, heelF.M, heelH.M),
@@ -1246,9 +1480,21 @@ export function analyzeRetainingWall(
   const orteil_Mf = Math.max(...results.filter(r => r.type === 'ULS').map(r => r.toe_Mf));
   const orteil_Vf = Math.max(...results.filter(r => r.type === 'ULS').map(r => r.toe_Vf));
 
+  const hookDb = (b: CanadianBarSize) => CANADIAN_REBAR_CATALOG[b]?.diameter || 16;
+  const agg = conc.aggregate_size;
+
+  // dv du voile (pour l'effort tranchant à dv de la face de la semelle — information, 11.3.2 À CONFIRMER)
+  {
+    const dMur = Math.max(hm_mm - conc.cover_h - hookDb(rebarCfg.mur_interieur.barSize) / 2, 50);
+    const dvMur = Math.max(0.9 * dMur, 0.72 * hm_mm);
+    results.forEach((r, i) => { r.mur_Vf_dv = stemVAtFns[i]?.(dvMur / 1000) ?? r.mur_Vf; });
+  }
+  const mur_Vf_dv = Math.max(...results.filter(r => r.type === 'ULS').map(r => r.mur_Vf_dv));
+
   // 1. Mur - Face Intérieure (Traction)
   const designMurInterieur = computeElementConcreteDesign({
     elementName: 'Voile - Face Intérieure (Traction)',
+    kind: 'wall_vertical',
     bw,
     h_mm: hm_mm,
     cover: conc.cover_h,
@@ -1263,12 +1509,16 @@ export function analyzeRetainingWall(
     alpha1,
     beta1,
     Z_limit: 25000,
-    available_hook_depth: hs_mm - conc.cover_base_bottom - 2 * (CANADIAN_REBAR_CATALOG[rebarCfg.mur_interieur.barSize]?.diameter || 16)
+    aggregate_size: agg,
+    available_hook_depth: hs_mm - conc.cover_base_bottom - 2 * hookDb(rebarCfg.mur_interieur.barSize),
+    lateralCover: conc.cover_h,
+    extCover: conc.cover_base_bottom
   });
 
-  // 2. Mur - Face Extérieure
+  // 2. Mur - Face Extérieure (compression en flexion ; armature verticale totale selon 14.1.8.5)
   const designMurExterieur = computeElementConcreteDesign({
     elementName: 'Voile - Face Extérieure',
+    kind: 'wall_vertical_compression',
     bw,
     h_mm: hm_mm,
     cover: conc.cover_h,
@@ -1282,12 +1532,15 @@ export function analyzeRetainingWall(
     Vf: 0,
     alpha1,
     beta1,
-    Z_limit: 25000
+    Z_limit: 25000,
+    aggregate_size: agg,
+    otherVerticalAs: designMurInterieur.As_provided
   });
 
   // 3. Mur - Armature Horizontale (Répartition)
   const designMurHorizontal = computeElementConcreteDesign({
     elementName: 'Voile - Armature Horizontale (Répartition)',
+    kind: 'wall_horizontal',
     bw,
     h_mm: hm_mm,
     cover: conc.cover_h,
@@ -1301,12 +1554,14 @@ export function analyzeRetainingWall(
     Vf: 0,
     alpha1,
     beta1,
-    Z_limit: 25000
+    Z_limit: 25000,
+    aggregate_size: agg
   });
 
   // 4. Semelle - Talon (Armature Supérieure en traction)
   const designTalon = computeElementConcreteDesign({
     elementName: 'Semelle - Talon (Armature Supérieure)',
+    kind: 'footing',
     bw,
     h_mm: hs_mm,
     cover: conc.cover_v,
@@ -1321,12 +1576,15 @@ export function analyzeRetainingWall(
     alpha1: alpha1_s,
     beta1: beta1_s,
     Z_limit: 25000,
-    topBars: true // E12 : k1 = 1,3
+    aggregate_size: agg,
+    distZeroShear_mm: geo.ePiedAr * 1000,
+    topBars: true // E12 : k1 = 1,3 si plus de 300 mm de béton frais dessous
   });
 
   // 5. Semelle - Orteil (Armature Inférieure en traction)
   const designOrteil = computeElementConcreteDesign({
     elementName: 'Semelle - Orteil (Armature Inférieure)',
+    kind: 'footing',
     bw,
     h_mm: hs_mm,
     cover: conc.cover_base_bottom,
@@ -1340,47 +1598,49 @@ export function analyzeRetainingWall(
     Vf: orteil_Vf,
     alpha1: alpha1_s,
     beta1: beta1_s,
-    Z_limit: 25000
+    Z_limit: 25000,
+    aggregate_size: agg,
+    distZeroShear_mm: geo.ePiedAv * 1000
   });
 
-  // 6. Semelle - Armature de Retrait et Température (2 lits longitudinaux 15M @ 250)
+  // 6. Semelle - Armature de Retrait et Température (2 lits longitudinaux 15M @ 250) : 7.8.1, 7.8.3
   const retrait_s = 250;
   const retrait_Ab = CANADIAN_REBAR_CATALOG['15M'].area;
   const retrait_As = 2 * retrait_Ab * (1000 / retrait_s);
+  const retraitSpacingMax = Math.min(5 * hs_mm, 500);
   const designRetrait: ConcreteElementDesign = {
+    ...designOrteil,
     elementName: 'Semelle - Armature Longitudinale (2 Lits Retrait)',
-    section_b: bw,
-    section_h: hs_mm,
-    d: designTalon.d,
-    dv: designTalon.dv,
-    beta: designTalon.beta,
-    Vc: designTalon.Vc,
     Vf: 0,
     shear_ok: true,
-    As_min: designOrteil.As_min,
+    As_min_basis: '7.8.1 : 0,002·Ag (chaque direction)',
     As_provided: retrait_As,
     As_ok: retrait_As >= designOrteil.As_min,
-    checks_ok: retrait_As >= designOrteil.As_min,
+    spacing: retrait_s,
+    spacing_max: retraitSpacingMax,
+    spacing_ok: retrait_s <= retraitSpacingMax,
+    db: CANADIAN_REBAR_CATALOG['15M'].diameter,
+    db_max: undefined,
+    db_ok: undefined,
+    checks_ok: retrait_As >= designOrteil.As_min && retrait_s <= retraitSpacingMax,
     bar_designation: `15M @ ${retrait_s} mm (2 lits)`,
     a_stress_block: 0,
-    alpha1: alpha1_s,
-    beta1: beta1_s,
     c_depth: 0,
     kr: 0,
     rho: retrait_As / (bw * designTalon.d),
-    rho_b: designTalon.rho_b,
     Mr: 0,
     Mf: 0,
     flexure_ok: true,
     ductility_c_over_d: 0,
-    ductility_limit: designMurInterieur.ductility_limit,
     ductility_ok: true,
     ld: designMurInterieur.ld
   };
 
-  // 7. Cisaillement-friction à l'interface voile / semelle (CSA A23.3-19, art. 11.5 ; c et μ : décision D14, valeurs inchangées)
-  // E03 : N = poids du voile seul au-dessus du joint à 0,9D (+ charges permanentes de tête à 0,9D, sans charge variable) ;
-  //       armature traversant le joint = armature verticale des DEUX faces.
+  // 7. Cisaillement par frottement à l'interface voile / semelle (A23.3-19, 11.5.1 à 11.5.4) :
+  //   vr = λφc(c + μσ) + φs·ρv·fy·cos αf, avec λφc(c + μσ) ≤ 0,25·φc·f′c ; αf = 90° (barres verticales) ;
+  //   σ = ρv·fy·sin αf + N/Ag, N = charge permanente NON pondérée (11.5.4) — MUR-02 D19 (remplace 0,9D de MUR-01 E03).
+  //   c = 0,25 MPa et μ = 0,60 (surface non rendue rugueuse, 11.5.2) : décision D14.
+  //   armature traversant le joint = armature verticale des DEUX faces ; cumul avec l'armature tendue en flexion : À CONFIRMER.
   const c_frict = 0.25; // MPa
   const mu_frict = 0.60;
   const Acv = hm_mm * bw;
@@ -1389,10 +1649,12 @@ export function analyzeRetainingWall(
   let N_perm = geo.hMur * geo.epStem * conc.gamma_c; // kN/m
   if (loads.pointLoadTop?.enabled && (loads.pointLoadTop.loadType || 'L') === 'D') N_perm += loads.pointLoadTop.Fy || 0;
   if (loads.reactionsTop?.D) N_perm += loads.reactionsTop.D.Ry || 0;
-  const N_frict = 0.9 * N_perm; // kN/m
+  const N_frict = N_perm; // kN/m, non pondéré
   const Ag = Acv;
   const sigma_frict = (rho_v * conc.fy * Math.sin(Math_PI / 2)) + (N_frict * 1000 / Ag);
-  const Vr_shear_friction = (1.0 * conc.phi_c * (c_frict + mu_frict * sigma_frict) * Acv + (rho_v * conc.phi_s * conc.fy * Math.cos(Math_PI / 2) * Acv)) * 1e-3;
+  const vr_cap = 0.25 * conc.phi_c * Math.min(conc.fc_mur, conc.fc_semelle);
+  const vr_conc = 1.0 * conc.phi_c * (c_frict + mu_frict * sigma_frict);
+  const Vr_shear_friction = (Math.min(vr_conc, vr_cap) + rho_v * conc.phi_s * conc.fy * Math.cos(Math_PI / 2)) * Acv * 1e-3;
 
   const concreteDesign: ConcreteDesignSummary = {
     mur_interieur: designMurInterieur,
@@ -1408,7 +1670,13 @@ export function analyzeRetainingWall(
       status_ok: Vr_shear_friction >= mur_Vf,
       N: N_frict,
       As_crossing,
-      rho_v
+      rho_v,
+      c: c_frict,
+      mu: mu_frict,
+      vr_cap,
+      capped: vr_conc > vr_cap,
+      surface: 'surface non rendue rugueuse (11.5.2 : c = 0,25 MPa, μ = 0,60)',
+      Vf_dv: mur_Vf_dv
     }
   };
 
@@ -1446,7 +1714,12 @@ export function analyzeRetainingWall(
     earthPressures,
     stabilityCriterion: criterion,
     cnbEdition,
-    lateral_nominal: components.filter(c => c.Fx !== 0).map(c => ({ name: c.name, type: c.type, Fx: c.Fx, y: c.y, applied: !!c.stemApplied })),
+    geotech,
+    seismic,
+    frost: { deduct: frostDeduct, df: dfInput, df_entered: dfInput > 0, z_top: zPassiveTop },
+    eccentricity_ok_ULS: results.filter(r => r.type === 'ULS').every(r => r.status_ecc === 'OK'),
+    eccentricity_ok_SLS: results.filter(r => r.type === 'SLS').every(r => r.status_ecc === 'OK'),
+    lateral_nominal: components.concat(seismicComps[0] ?? []).filter(c => c.Fx !== 0).map(c => ({ name: c.name, type: c.type, Fx: c.Fx, y: c.y, applied: !!c.stemApplied })),
     weights_nominal: {
       stem: components.filter(c => c.name === 'Wb1_Mur').reduce((s, c) => s + c.Fy, 0),
       base: components.filter(c => c.name === 'Wb2_Semelle').reduce((s, c) => s + c.Fy, 0),

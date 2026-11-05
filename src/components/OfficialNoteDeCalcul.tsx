@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisResult, WallGeometry, SoilProperties, ConcreteProperties, LoadsConfig } from '../lib/types';
 import { BearingPressureDiagram } from './BearingPressureDiagram';
+import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
 interface OfficialNoteDeCalculProps {
@@ -223,9 +224,10 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
     if (n === 'Pa_sol_déjaugé') return 'Poussée active des terres sous la nappe (γ′)';
     if (n === 'Pw_eau_hydrostatique') return 'Poussée hydrostatique de l\'eau';
     if (n.startsWith('Pa_surcharge_amont')) return 'Poussée de la surcharge amont';
-    if (n.startsWith('P_seismic_soil')) return 'Incrément sismique de poussée ΔPAE';
-    if (n === 'E_stem_inertia') return 'Inertie sismique du voile';
-    if (n === 'E_base_inertia') return 'Inertie sismique de la semelle';
+    if (n.startsWith('P_seismic_soil')) return n.includes('Wood') ? 'Incrément sismique de poussée ΔP0E (Wood)' : 'Incrément sismique de poussée ΔPAE';
+    if (n.startsWith('E_stem_inertia')) return 'Inertie sismique du voile (kh·W)';
+    if (n.startsWith('E_base_inertia')) return 'Inertie sismique de la semelle (kh·W)';
+    if (n.startsWith('E_heelSoil_inertia')) return 'Inertie sismique du sol au-dessus du talon (kh·W)';
     return n;
   };
   for (const c of result.lateral_nominal.filter(c => !c.applied)) {
@@ -289,7 +291,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             <div><strong>Date :</strong> {new Date().toLocaleDateString('fr-CA')}</div>
             <div><strong>Logiciel :</strong> GeoWall PRO v2.4</div>
             <div><strong>Type d'Écran :</strong> {geo.wallType === 'cantilever' ? 'Mur Cantilever Autostable' : 'Mur de Sous-sol Bloqué'}</div>
-            <div><strong>Méthode Séisme :</strong> {result.soilMethodConfig.seismicMethod === 'seed_whitman' ? 'Seed & Whitman (1970)' : (result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Statique')}</div>
+            <div><strong>Méthode Séisme :</strong> {result.seismic.method === 'wood' ? 'Wood (mur retenu)' : result.seismic.method === 'seed_whitman' ? 'Seed & Whitman (1970)' : (result.seismic.method === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Statique')}</div>
           </div>
         </div>
 
@@ -347,7 +349,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               ['Nappe : hauteur au-dessus de la sous-face de la semelle', 'hw', result.hydro.hasWater ? fmt(result.hydro.hw, 2) : 'nappe inactive', result.hydro.hasWater ? 'm' : '—'],
               ['Poids volumique déjaugé retenu (γ − γw, hypothèse : γ saisi = γ saturé)', 'γ′', result.hydro.hasWater ? fmt(result.hydro.gamma_prime, 2) : 'sans objet', result.hydro.hasWater ? 'kN/m³' : '—'],
               ['Portance admissible saisie (ÉLS)', 'qadm', fmt(soil.qAllowable_SLS, 0), 'kPa'],
-              ['Portance ultime saisie (ÉLU, avant facteur φ)', 'qu', fmt(soil.qUltimate_ULS, 0), 'kPa'],
+              [result.geotech.quFactored ? 'Portance ultime saisie (ÉLU, déclarée déjà pondérée : φgu = 1)' : 'Portance ultime saisie (ÉLU, non pondérée : le programme applique Ψ·φgu)', 'qu', fmt(soil.qUltimate_ULS, 0), 'kPa'],
             ]}
           />
         </div>
@@ -360,12 +362,13 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               ['Méthode de poussée active retenue', '—', geo.wallType === 'basement' ? 'K0 (mur de sous-sol, tête non déplaçable)' : ({ rankine: 'Rankine', coulomb: 'Coulomb', at_rest: 'Repos (K0)' } as Record<string, string>)[result.soilMethodConfig.activeMethod], '—'],
               ['Coefficient de poussée actif utilisé', 'Ka', fmt(result.K_active, 4), '—'],
               ['Coefficient de poussée au repos', 'K0', fmt(result.K_0, 4), '—'],
-              ['Méthode de butée', '—', ({ rankine: 'Rankine', coulomb: 'Coulomb', reduced_cfem: 'Rankine réduit', neglected: 'Butée négligée' } as Record<string, string>)[result.soilMethodConfig.passiveMethod], '—'],
+              ['Méthode de butée', '—', ({ rankine: 'Rankine', coulomb: 'Coulomb', neglected: 'Butée négligée' } as Record<string, string>)[result.soilMethodConfig.passiveMethod], '—'],
               ['Coefficient de butée utilisé (sol de fondation)', 'Kp', fmt(result.K_passive, 4), '—'],
-              ['Séisme : méthode', '—', result.soilMethodConfig.seismicMethod === 'seed_whitman' ? 'Seed & Whitman (1970)' : result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Statique (séisme non pris en compte)', '—'],
-              ['Séisme : coefficient horizontal', 'kh', loads && seismicOn ? fmt(loads.kh, 3) : seismicOn ? 'non disponible' : 'sans objet', '—'],
-              ['Séisme : coefficient vertical', 'kv', loads && seismicOn ? fmt(loads.kv, 3) : seismicOn ? 'non disponible' : 'sans objet', '—'],
-              ['Séisme : coefficient de poussée dynamique (Mononobe-Okabe)', 'KAE', result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? fmt(result.earthPressures.Kae_mo, 4) : 'sans objet', '—'],
+              ['Séisme : méthode', '—', result.seismic.method === 'wood' ? 'Wood (mur retenu, ΔP0E = kh·γ·H² à 0,58H)' : result.seismic.method === 'seed_whitman' ? 'Seed & Whitman (1970) — hors fiche MUR-02 (méthode simplifiée, sans (1 − kv) ni contrôle d\'indétermination)' : result.seismic.method === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Statique (séisme non pris en compte)', '—'],
+              ['Séisme : accélération du site (valeur du moteur)', 'ah', seismicOn ? fmt(result.seismic.ah, 3) : 'sans objet', 'g'],
+              ['Séisme : coefficient horizontal (valeur du moteur)', 'kh', seismicOn ? fmt(result.seismic.kh, 3) : 'sans objet', '—'],
+              ['Séisme : coefficient vertical saisi (les deux signes sont étudiés)', 'kv', seismicOn ? (result.seismic.scenarios.length > 1 ? `±${fmt(result.seismic.kvInput, 3)}` : fmt(result.seismic.kvInput, 3)) : 'sans objet', '—'],
+              ['Séisme : coefficient de poussée dynamique (Mononobe-Okabe)', 'KAE', result.seismic.method === 'mononobe_okabe' && result.seismic.scenarios[0] ? (result.seismic.scenarios[0].indeterminate ? 'indéterminé (NON VÉRIFIABLE)' : fmt(result.seismic.scenarios[0].Kae, 4)) : 'sans objet', '—'],
             ]}
           />
         </div>
@@ -421,7 +424,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             <strong>Critère de renversement et de portance :</strong>{' '}
             {result.stabilityCriterion === 'moments'
               ? 'moments (FS = Ms/Mr) et pression linéaire q = V/B·(1 ± 6e/B)'
-              : "excentricité, largeur réduite B′ = B − 2e, pression uniforme V/B′ (limite d'excentricité du CFEM 5e éd. : À CONFIRMER, aucune conclusion tirée de e)"}
+              : "excentricité, largeur réduite B′ = B − 2e, pression uniforme V/B′ (CFEM 5e éq. 10.12, p. 348 ; valable si e < B/6)"}
             {' '}— combinaison de portance gouvernante : e = {result.governingBearing.ecc.toFixed(3)} m, B′ = B − 2e = {result.governingBearing.B_eff.toFixed(3)} m.
           </div>
           {result.notices.map((n, i) => (
@@ -437,6 +440,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             {[
               ['Glissement', result.governingSliding.status_sliding === 'OK', `FS = ${result.governingSliding.FOS_sliding.toFixed(2)}`],
               ['Renversement', result.governingOverturning.status_overturning === 'OK', result.governingOverturning.outside_base ? 'hors base' : `FS = ${result.governingOverturning.FOS_overturning.toFixed(2)}`],
+              ['Excentricité e ≤ B/6 (ÉLU et ÉLS)', result.eccentricity_ok_ULS && result.eccentricity_ok_SLS, `ÉLU : ${result.eccentricity_ok_ULS ? 'respectée' : 'non respectée'} ; ÉLS : ${result.eccentricity_ok_SLS ? 'respectée' : 'non respectée'}`],
               ['Portance ÉLU', result.governingBearing.status_bearing === 'OK', result.governingBearing.outside_base ? 'non vérifiable (résultante hors base)' : `q = ${result.governingBearing.q_design.toFixed(1)} / ${result.governingBearing.q_capacity.toFixed(1)} kPa`],
               ['Béton du mur et de la semelle', Object.values(result.concreteDesign).every((d: any) => (d.checks_ok ?? d.status_ok) === true), 'flexion, cisaillement, As,min, ductilité, fissuration, ancrage, frottement']
             ].map(([label, ok, detail]) => (
@@ -447,9 +451,101 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </div>
         </div>
 
+
+        {/* 4.1 FACTEURS GÉOTECHNIQUES, SÉISME ET BUTÉE : VALEURS, SOURCES, STATUTS (MUR-02 §9) */}
+        <div className="space-y-2">
+          <SubTitle n="4.1" title="Facteurs géotechniques, séisme et butée : valeurs, sources et statut" />
+          <DataTable
+            head={['Désignation', 'Symbole', 'Valeur', 'Source', 'Statut']}
+            rows={[
+              ['Degré de compréhension du site', '—', result.geotech.level === 'low' ? 'faible' : result.geotech.level === 'high' ? 'élevé' : 'typique', 'CFEM 5e, tableau 6.2, p. 199 (PDF 231)', 'Choix de l\'utilisateur'],
+              ['Facteur de conséquence', 'Ψ', fmt(result.geotech.psi, 2), 'CFEM 5e, tableau 6.4, p. 200 (PDF 232) ; éq. 6.1, p. 191', 'Choix de l\'utilisateur ; lu'],
+              ['Portance de la semelle du mur', 'φgu', fmt(result.geotech.phi_gu, 2), 'CFEM 5e, tableau 6.2 (Retaining systems, Bearing)', result.geotech.quFactored ? 'Lu ; qu déclarée déjà pondérée (φgu = 1)' : 'Lu ; qu non pondérée'],
+              ['Renversement', 'φ_ov', fmt(result.geotech.phi_ov, 2), 'CFEM 5e, tableau 6.2 (Retaining systems, Overturning)', 'Lu ; application à ΣM_stab : À CONFIRMER'],
+              ['Glissement à la base (frottement)', 'φgs', fmt(result.geotech.phi_gs, 2), 'CFEM 5e, tableau 6.2 (Retaining systems, Base sliding)', 'Lu'],
+              ['Glissement, sol cohésif (terme c′a·B′)', 'φcoh', fmt(result.geotech.phi_coh, 2), 'CFEM 5e, tableau 6.2 (Shallow foundations, Sliding cohesive)', 'Lu ; application sur B′ : À CONFIRMER (D13)'],
+              ['Butée', 'φp', fmt(result.geotech.phi_p, 2), 'CFEM 5e, tableau 6.2 (Shallow foundations, Passive resistance)', 'Lu ; aucune autre réduction de Kp'],
+              ['Tassement, déplacement (ÉLS)', 'φ', fmt(result.geotech.phi_settle, 1), 'CFEM 5e, tableau 6.2 (Retaining systems, Settlement)', 'Non appliqué : q_adm,ÉLS vient du rapport géotechnique — À CONFIRMER'],
+              ['Facteur de H au cas 5', 'αH', fmt(FACTEUR_H_SISMIQUE, 1), 'CNB, note A-4.1.3.2.(4) ; tableau A-3, Commentaire A du CNB 2020', 'Lu (2020) ; Commentaire 2025 : À CONFIRMER'],
+              ['Accélération horizontale du site', 'ah', seismicOn ? fmt(result.seismic.ah, 3) + ' g' : 'sans objet', seismicOn ? (result.seismic.ahSource.trim() || 'source non renseignée') : '—', seismicOn ? (result.seismic.ahSource.trim() ? 'Saisi par l\'utilisateur' : 'À CONFIRMER : source de ah non renseignée') : '—'],
+              ['Coefficient sismique horizontal', 'kh', seismicOn ? fmt(result.seismic.kh, 3) : 'sans objet', 'CFEM 5e, éq. 18.22, p. 629 (kh = ah/g)', result.seismic.csaS6 ? 'Option avancée active : kh = 0,5·ah (CSA S6 citée par le CFEM p. 631, non du CNB) ; déplacement admis de 25 à 50 mm non vérifié par le logiciel' : 'Lu ; kh = ah (défaut)'],
+              ['Coefficient sismique vertical', 'kv', seismicOn ? (result.seismic.csaS6 ? '0 (option CSA S6)' : result.seismic.scenarios.length > 1 ? `±${fmt(result.seismic.kvInput, 3)} (deux signes étudiés)` : fmt(result.seismic.kvInput, 3)) : 'sans objet', 'CFEM 5e, p. 629 (kv = 2/3·kh à défaut d\'étude du site)', 'Valeur saisie par l\'utilisateur'],
+              ['Butée statique : profondeur de gel', 'df', result.frost.deduct ? fmt(result.frost.df, 2) + ' m (déduite)' : 'non déduite', 'CFEM 5e, 20.7.3.3, p. 698 ; fig. 20.10', result.frost.deduct ? (result.frost.df_entered ? 'Choix de l\'utilisateur ; zone de butée de df à hp' : 'À CONFIRMER : df non saisie') : 'Sol avant déclaré permanent et non gélif par l\'utilisateur'],
+              ['Butée au séisme', '—', result.seismic.passiveMode === 'kpe' ? 'réduite (KPE)' : 'nulle', 'CFEM 5e, éq. 18.27-18.31, p. 630-631', 'Choix de l\'utilisateur'],
+              ['Frottement sur le plan fictif (séisme)', 'δ', result.soilMethodConfig.activeMethod === 'coulomb' ? 'δ de Coulomb (même valeur pour Ka et KAE)' : '0 (remblai horizontal)', 'MUR-02 D11', 'Approuvé'],
+              ['Inertie du sol au-dessus du talon', '—', 'incluse', 'CFEM 5e, fig. 18.34 (khW du coin mobilisé)', 'À CONFIRMER : source de la règle pour un mur en porte-à-faux'],
+              ['Westergaard (eau à l\'avant) / Matsuzawa (remblai saturé)', '—', result.seismic.westergaard ? 'Westergaard appliqué (réduit Pw,a)' : 'sans objet', 'CFEM 5e, éq. 18.33-18.35, p. 632-633', 'Matsuzawa NON APPLIQUÉ (Gs et e absents) — À CONFIRMER ; sens de Westergaard retenu : défavorable, À CONFIRMER'],
+              ['Code de construction du Québec', '—', 'édition et modifications non vérifiées', 'Chapitre I – Bâtiment', 'À CONFIRMER (D17)'],
+              ['Mur isolé hors bâtiment : application de la partie 4 du CNB', '—', 'partie 4 appliquée', 'MUR-02 D18', 'À CONFIRMER'],
+            ]}
+          />
+        </div>
+
+        {/* 4.2 SÉISME : résultats par signe de kv */}
+        {seismicOn && result.seismic.scenarios.length > 0 && (
+          <div className="space-y-2">
+            <SubTitle n="4.2" title="Séisme : coefficients et incréments de poussée (valeurs du moteur)" />
+            <DataTable
+              head={['Signe de kv', 'kv', 'ψ (°)', 'KAE', 'ΔPAE ou ΔP0E (kN/m)', 'Hauteur (m)', 'Butée sismique PPE/PP', 'Statut']}
+              rows={result.seismic.scenarios.map(sc => [
+                sc.sign === 0 ? 'kv = 0' : sc.sign > 0 ? 'vers le haut (+)' : 'vers le bas (−)',
+                fmt(sc.kv, 3), fmt(sc.psi_deg, 3),
+                result.seismic.method === 'mononobe_okabe' ? (sc.indeterminate ? 'indéterminé' : fmt(sc.Kae, 4)) : 'sans objet',
+                sc.indeterminate ? 'non calculé' : fmt(sc.dPae, 2),
+                fmt(sc.y_dPae, 2),
+                result.seismic.passiveMode === 'kpe' ? fmt(sc.Pp_factor, 3) : '0 (butée nulle)',
+                sc.indeterminate ? 'NON VÉRIFIABLE (φ′ − β < ψ)' : 'calculé'
+              ])}
+            />
+            <p className="text-[11px] text-slate-500">
+              Inertie (kN/m) : voile {fmt(ep.E_stem_nominal, 2)}, semelle {fmt(ep.E_base_nominal, 2)}, sol du talon {fmt(ep.E_heelSoil_nominal, 2)} (poids {fmt(ep.W_heelSoil_inertia, 2)} kN/m à y = {fmt(ep.y_heelSoil, 2)} m).
+              Matsuzawa (CFEM 18.7.2.2) : NON APPLIQUÉ, À CONFIRMER ; liquéfaction et déplacements permanents : NON VÉRIFIÉS. Westergaard : action E ajoutée à ΣHf. Hypothèse conservatrice : la force kv·W dirigée vers le bas est prise égale à zéro au glissement et au renversement (charge favorable, 4.1.3.2.(3)) ; elle est comptée à la portance. {result.seismic.method === 'seed_whitman' ? 'Seed & Whitman : hors fiche MUR-02 (méthode simplifiée, sans (1 − kv) ni contrôle d\'indétermination).' : ''}
+            </p>
+          </div>
+        )}
+
+        {/* 4.3 GLISSEMENT ET RENVERSEMENT : tableau 1c */}
+        <div className="space-y-2">
+          <SubTitle n="4.3" title="Tableau 1c : glissement Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·Pp] ≥ ΣHf et renversement Ψ·φ_ov·ΣM_stab ≥ ΣM_renv" />
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-[11px] border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white">
+                  {['Combinaison', 'ΣV′ (kN/m)', 'Friction (kN/m)', 'Cohésion (kN/m)', 'Butée (kN/m)', 'Rf (kN/m)', 'ΣHf (kN/m)', 'Rf/ΣHf', 'Glissement', 'Ψφ_ov·ΣM_stab', 'ΣM_renv', 'Rapport', 'Renversement'].map(h => (
+                    <th key={h} className="px-1.5 py-2 font-bold whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-mono">
+                {result.combinations.filter(c => c.type === 'ULS' && c.stabApplicable).map((c, idx) => (
+                  <tr key={c.combName} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                    <td className="px-1.5 py-1 font-sans font-bold whitespace-nowrap">{c.combName}</td>
+                    <td className="px-1.5 py-1 text-right">{c.sumV_min.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right">{c.Rf_friction.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right">{c.Rf_cohesion.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right">{c.Rf_passive.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right font-bold">{c.Fs.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right">{c.Fh_destab.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right font-bold">{c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(3)}</td>
+                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : c.status_sliding === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
+                    <td className="px-1.5 py-1 text-right">{c.Ms.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right">{c.Mr.toFixed(1)}</td>
+                    <td className="px-1.5 py-1 text-right font-bold">{c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(3)}</td>
+                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : c.status_overturning === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            ΣV′ : force verticale effective (poids déjaugé, sous-pression déduite). Terme cohésif sur B′ = B − 2e (À CONFIRMER). Facteurs : Ψ = {fmt(result.geotech.psi, 2)}, φgs = {fmt(result.geotech.phi_gs, 2)}, φcoh = {fmt(result.geotech.phi_coh, 2)}, φp = {fmt(result.geotech.phi_p, 2)}, φ_ov = {fmt(result.geotech.phi_ov, 2)}.
+            {result.stabilityCriterion === 'eccentricity' && ' Critère B′ = B − 2e : le renversement est en principe couvert par la portance et la limite de e (CFEM 20.7.3.4) ; la vérification Ψ·φ_ov·ΣM_stab est tout de même conservée et affichée.'}
+          </p>
+        </div>
+
         {/* TABLEAUX 1a (ÉLU) et 1b (ÉLS) : PRESSION DE CONTACT, EXCENTRICITÉ & PORTANCE */}
         {([
-          { key: 'ULS', combs: ulsCombs, dot: 'bg-purple-600', title: `Tableau 1a : Combinaisons ÉLU — portance pondérée (CNB ${result.cnbEdition}, ${ulsCombs.length} combinaisons)`, limit: `q_res (ÉLU) = φ·qu = ${(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa` },
+          { key: 'ULS', combs: ulsCombs, dot: 'bg-purple-600', title: `Tableau 1a : Combinaisons ÉLU — portance pondérée (CNB ${result.cnbEdition}, ${ulsCombs.length} combinaisons)`, limit: `q_res (ÉLU) = Ψ·φgu·qu = ${(result.geotech.psi * result.geotech.phi_gu * soil.qUltimate_ULS).toFixed(1)} kPa` },
           { key: 'SLS', combs: slsCombs, dot: 'bg-blue-600', title: `Tableau 1b : Combinaisons ÉLS — pression de contact et tiers central (${slsCombs.length} combinaisons)`, limit: `q_adm (ÉLS) = ${soil.qAllowable_SLS.toFixed(1)} kPa` },
         ] as const).map(({ key, combs, dot, title, limit }) => (
         <div key={key} className="space-y-2">
@@ -476,6 +572,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                   <th className="px-1.5 py-2 font-bold text-right">Rv (kN/m)</th>
                   <th className="px-1.5 py-2 font-bold text-right">e (m)</th>
                   <th className="px-1.5 py-2 font-bold text-right">B/6 (m)</th>
+                  <th className="px-1.5 py-2 font-bold text-center">e ≤ B/6</th>
                   <th className="px-1.5 py-2 font-bold text-right">x1 (m)</th>
                   <th className="px-1.5 py-2 font-bold text-right bg-blue-900">q1 (kPa)</th>
                   <th className="px-1.5 py-2 font-bold text-right">q2 (kPa)</th>
@@ -486,9 +583,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
                 {combs.map((c, idx) => {
-                  const qLimit = c.type === 'SLS' 
-                    ? soil.qAllowable_SLS 
-                    : (soil.qUltimate_ULS * soil.geotechFactors.phi_gu);
+                  const qLimit = c.q_capacity; // Psi.phi_gu.qu (ELU) ou q_adm (ELS), calcule par le moteur
                   const isExceeded = c.status_bearing === 'NON';
                   const isGoverning = c.type === 'SLS' 
                     ? (result.governingSLS && result.governingSLS.combName === c.combName)
@@ -519,6 +614,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                       <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.sumV_max.toFixed(1)}</td>
                       <td className="px-1.5 py-1 whitespace-nowrap text-right">{Math.abs(c.ecc).toFixed(3)}</td>
                       <td className="px-1.5 py-1 whitespace-nowrap text-right text-slate-500">{B_over_6.toFixed(3)}</td>
+                      <td className="px-1.5 py-1 whitespace-nowrap text-center font-sans font-bold">{!result.verifiable ? 'n. v.' : c.status_ecc === 'OK' ? 'OK' : 'NON'}</td>
                       <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.x1.toFixed(3)}</td>
                       <td className="px-1.5 py-1 whitespace-nowrap text-right font-black text-blue-900 bg-blue-50/50">{c.outside_base ? 'n. v.' : c.q_toe.toFixed(1)}</td>
                       <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.outside_base ? 'n. v.' : c.q_heel.toFixed(1)}</td>
@@ -542,6 +638,53 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           )}
         </div>
         ))}
+
+        {/* 4.4 BÉTON ARMÉ : CSA A23.3-19 (MUR-02 §6) — statuts calculés */}
+        <div className="space-y-2">
+          <SubTitle n="4.4" title="Béton armé : vérifications CSA A23.3-19 (valeurs du moteur)" />
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-[11px] border-collapse">
+              <thead>
+                <tr className="bg-slate-800 text-white">
+                  {['Élément', 'Armature', 'As / As,min (mm²/m) — article', 'Espacement / max (mm)', 'Mr / Mf (kN·m/m)', 'c/d ≤ limite (10.5.2)', 'Vf / min(Vc ; Vr,max) (kN/m)', 'z / limite (N/mm) — 10.6.1', 'ld / ldh (mm)', 'Statut'].map(h => (
+                    <th key={h} className="px-1.5 py-2 font-bold whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-mono">
+                {([
+                  result.concreteDesign.mur_interieur,
+                  result.concreteDesign.mur_exterieur,
+                  result.concreteDesign.mur_horizontal,
+                  result.concreteDesign.semelle_talon,
+                  result.concreteDesign.semelle_orteil,
+                  result.concreteDesign.semelle_retrait
+                ]).map((d, idx) => (
+                  <tr key={d.elementName} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                    <td className="px-1.5 py-1 font-sans font-bold whitespace-nowrap">{d.elementName}</td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.bar_designation}</td>
+                    <td className="px-1.5 py-1 max-w-[16rem]">{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="font-sans text-slate-500">({d.As_min_basis})</span></td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.spacing.toFixed(0)} / {d.spacing_max.toFixed(0)} {d.spacing_ok ? '' : '(dépassé)'}{d.db_max !== undefined ? ` ; db ${d.db.toFixed(1)} / ${d.db_max.toFixed(0)}` : ''}</td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.Mr.toFixed(1)} / ${d.Mf.toFixed(1)}` : '—'}</td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.ductility_c_over_d.toFixed(3)} ≤ ${d.ductility_limit.toFixed(3)}` : '—'}</td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Vf > 0 ? `${d.Vf.toFixed(1)} / ${Math.min(d.Vc, d.Vr_max).toFixed(1)}` : '—'}</td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Z_factor !== undefined && d.Z_limit !== undefined ? `${d.Z_factor.toFixed(0)} / ${d.Z_limit.toFixed(0)}` : '—'}</td>
+                    <td className="px-1.5 py-1 whitespace-nowrap">{d.ld.toFixed(0)} / {d.ldh_required !== undefined ? d.ldh_required.toFixed(0) : '—'}</td>
+                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : d.checks_ok ? 'CONFORME' : 'NON CONFORME'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-600">
+            <li>Voile (face intérieure) : β = {result.concreteDesign.mur_interieur.beta.toFixed(4)} [{result.concreteDesign.mur_interieur.beta_rule}] ; Vr,max = 0,25·φc·f′c·bw·dv (11.3.3) ; Vf à dv = {result.concreteDesign.cisaillement_friction.Vf_dv.toFixed(1)} kN/m (information).</li>
+            <li>ld : {[result.concreteDesign.mur_interieur, result.concreteDesign.semelle_talon, result.concreteDesign.semelle_orteil].some(d => d.ld_eq12_1_required) ? 'tableau 12.1 : enrobage ≥ db et espacement ≥ 1,4db non remplis pour au moins un élément : éq. 12.1 requise, À CONFIRMER (coefficient 0,6 retenu par prudence).' : 'conditions du tableau 12.1 remplies (enrobage ≥ db, espacement ≥ 1,4db).'}</li>
+            <li>Talon : β = {result.concreteDesign.semelle_talon.beta.toFixed(4)} [{result.concreteDesign.semelle_talon.beta_rule}] ; patin : β = {result.concreteDesign.semelle_orteil.beta.toFixed(4)} [{result.concreteDesign.semelle_orteil.beta_rule}].</li>
+            <li>Ductilité : {result.concreteDesign.mur_interieur.ductility_rule} (ancienne limite 700/(700 + fy) non sécuritaire, retirée).</li>
+            <li>ld : coefficient {result.concreteDesign.mur_interieur.ld_coeff?.toFixed(2)} · k1 · k4 · fy/√f′c · db ≥ 300 mm (12.2). Talon : k1 = {result.concreteDesign.semelle_talon.ld_k1?.toFixed(1)}. ldh (12.5) : {result.concreteDesign.mur_interieur.ldh_factors}.</li>
+            <li>Joint voile-semelle (11.5) : Vr = {result.concreteDesign.cisaillement_friction.Vr.toFixed(1)} kN/m {result.concreteDesign.cisaillement_friction.status_ok ? '≥' : '<'} Vf = {result.concreteDesign.cisaillement_friction.Vf.toFixed(1)} kN/m (N non pondéré = {result.concreteDesign.cisaillement_friction.N.toFixed(1)} kN/m ; σ = {result.concreteDesign.cisaillement_friction.sigma.toFixed(3)} MPa ; {result.concreteDesign.cisaillement_friction.surface}{result.concreteDesign.cisaillement_friction.capped ? ' ; limite 0,25·φc·f′c atteinte' : ''}) : {!result.verifiable ? 'NON VÉRIFIABLE' : result.concreteDesign.cisaillement_friction.status_ok ? 'CONFORME' : 'NON CONFORME'}.</li>
+          </ul>
+        </div>
 
         {/* TABLE 2: ELU - MUR */}
         <div className="space-y-2">
@@ -701,9 +844,12 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             <li><strong>Non vérifié :</strong> stabilité d'ensemble (glissement profond), gel et profondeur de la semelle, drainage, tassement calculé, pression de compactage.</li>
             <li>Sous-pression sous la semelle uniforme γw·hw sur la largeur B (hypothèse conservatrice, drainage non défini) ; facteur 1,5 appliqué à l'eau : classement À CONFIRMER.</li>
             <li>γ′ du sol sous la nappe = γ − γw (le γ saisi est pris comme poids volumique saturé ; hypothèse).</li>
-            <li>Limite d'excentricité du CFEM 5e éd. : À CONFIRMER, aucune conclusion tirée de e. Numérotation des tableaux et figures du CFEM (4e éd.) à reconfirmer pour la 5e éd.</li>
-            <li>Facteurs φ géotechniques, kh et méthode Mononobe-Okabe : en révision (fiche suivante). Commentaire 2025 sur le facteur de H au cas 5 : À CONFIRMER.</li>
-            <li>Cisaillement-friction : c = 0,25 MPa et μ = 0,60 (état de surface du joint non précisé) ; article de l'armature minimale du voile : À CONFIRMER.</li>
+            <li>Limite d'excentricité e ≤ B/6 à l'ÉLU et à l'ÉLS (CFEM 5e, p. 348 et 20.7.3.4-20.7.3.5) : statut calculé pour chaque combinaison. Une limite plus large (par ex. B/3) n'a aucune source lue : non appliquée.</li>
+            <li>Commentaire 2025 sur le facteur de H au cas 5 : À CONFIRMER. Augmentations de 4.1.8.16.(3) non appliquées (le mur ne fait pas partie du SFRS) : À CONFIRMER.</li>
+            <li>Cisaillement par frottement (A23.3-19, 11.5) : c = 0,25 MPa et μ = 0,60 (surface non rendue rugueuse, D14) ; N = charge permanente non pondérée (11.5.4) ; cumul avec l'armature tendue en flexion : À CONFIRMER.</li>
+            <li>Béton, A23.3-19 : définition de dv, tableau 12.1 (coefficient 0,45 ou 0,6), 12.5.4 (confinement), 10.5.1.1 (Mr ≥ 1,2·Mcr, module de rupture 8.6.4) et correspondance avec l'édition :24 : À CONFIRMER. Enrobages selon la CSA A23.1 (absente) : NON VÉRIFIÉS ; l'enrobage reste saisi par l'utilisateur. L'effort tranchant est vérifié à la face de la semelle (conservateur), non à dv.</li>
+            <li>Charges linéaires derrière le mur : fig. 20.8 du CFEM 5e (p. 694), distance mesurée depuis la face arrière du voile et H = hauteur totale : À CONFIRMER. Charges ponctuelles de la fig. 20.8 et charges réparties assimilées à leur résultante : non implémentées / approximation À CONFIRMER. Compactage (fig. 20.9) : non vérifié.</li>
+            <li><strong>Éléments NON VÉRIFIÉS :</strong> stabilité d'ensemble, gel (hors profondeur déduite de la butée), drainage, tassement calculé, liquéfaction, enrobages (A23.1), Code de construction du Québec (édition et modifications : À CONFIRMER).</li>
             <li>
               Eau à l'avant (scénario {result.earthPressures.frontWaterScenario}) :{' '}
               {result.earthPressures.frontWaterScenario === 'A'

@@ -2,7 +2,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Statut | **PROPOSÉE** (2026-10-31). Seul l'utilisateur peut la passer à APPROUVÉE ou REJETÉE. |
+| Statut | **APPROUVÉE** le 2026-11-04. Message de l'utilisateur : « Le reste de la fiche, tel que décrit ci-dessus. laisser le choix à l'utilisateur », confirmé par « Oui, laisser le choix à l'utilisateur ». Décisions D6 et D16 du 2026-11-01. D9 révisée le 2026-11-04 (voir §8). Édition CNB : 2020 par défaut, 2025 en option (amendement A1). D17 reste À CONFIRMER. Proposée le 2026-10-31. |
 | Base | MUR-00 (revue, §2 et §8 mis à jour le 2026-10-31) ; MUR-01 (APPROUVÉE, combinaisons du CNB 2025) |
 | Éditions | CNB, division B, partie 4 : **2020 par défaut**, 2025 en option à cocher (amendement A1 de MUR-01, 2026-11-01) ; CFEM 5e édition (2023) ; CSA A23.3:19 complète (acceptée par l'utilisateur pour tous les articles béton du mur) ; Paultre, *Structures en béton armé*, comme référence d'enseignement pour les efforts dans le voile, le talon et le patin |
 | Hors périmètre | Stabilité d'ensemble, gel, drainage, tassement calculé, liquéfaction : à signaler comme **NON VÉRIFIÉ** dans la note |
@@ -15,7 +15,7 @@ Notation : « p. » désigne la page imprimée, « PDF » la page du fichier. To
 ## 0. Juridiction : Québec
 
 - Au Québec, la construction des bâtiments relève du **Code de construction du Québec, chapitre I – Bâtiment**, qui reprend le CNB avec des modifications québécoises. **Édition en vigueur et modifications touchant les fondations et les murs : À CONFIRMER**, car aucune source n'était disponible pour cette lecture.
-- L'utilisateur a choisi le **CNB 2025** comme référence. Si l'édition adoptée au Québec est différente au moment du projet, la note doit le signaler et les facteurs de MUR-01 doivent être revérifiés dans cette édition (décision D17).
+- Référence : **CNB 2020 par défaut**, et CNB 2025 au choix dans le menu « Combinaisons » (amendement A1 de MUR-01, 2026-11-01). Si l'édition adoptée au Québec est différente au moment du projet, la note doit le signaler et les facteurs de MUR-01 doivent être revérifiés dans cette édition (décision D17).
 - Un mur de soutènement isolé, qui ne fait pas partie d'un bâtiment, peut sortir du champ de la partie 4. L'application du CNB à ce cas est **À CONFIRMER** (décision D18).
 
 ---
@@ -243,7 +243,7 @@ Le mur de référence ne résiste pas au séisme de G2. Ce n'est pas une erreur 
 | D2 | Degré de compréhension (faible, typique ou élevé) et Ψ (0,9 / 1,0 / 1,15) ; qu saisi pondéré ou non | Typique ; Ψ = 1,0 ; qu non pondéré |
 | D3 | Limite d'excentricité à l'ELU (e ≤ B/6 selon CFEM p. 348, ou plus large sans source) ; option a ou b (déjà au choix dans MUR-01) | e ≤ B/6 à l'ELU et à l'ELS ; option b |
 | D6 | **DÉCIDÉ le 2026-11-01** : kh = ah par défaut ; 0,5·ah (CSA S6) en option avancée, désactivée, réservée aux murs de remblais routiers ou autoroutiers. Reste : kv et la source de ah | kv = 2/3·kh saisissable, deux signes ; ah saisi avec sa source |
-| D9 | Profondeur de gel à négliger pour la butée ; butée en séisme | Butée sous la profondeur de gel seulement ; aucune butée en séisme |
+| D9 | **DÉCIDÉ le 2026-11-04 : choix laissé à l'utilisateur**, dans l'onglet Critères | **Butée statique :** case « déduire la profondeur de gel » cochée par défaut, avec la profondeur df saisie (zone de butée de df à h_pass). Décochée (option b), la butée porte sur toute la hauteur, avec l'avertissement « sol avant déclaré permanent et non gélif par l'utilisateur » dans la note. **Butée au séisme :** « nulle » (défaut) ou « réduite KPE » (CFEM éq. 18.27-18.31, ΔPPE opposé à PP). Kp statique au séisme : non offert. Butée sous la nappe : selon A3 (γ′, eau à l'avant en option). |
 | D11 | δ sur le plan fictif | 0 (remblai horizontal) |
 | D13 | Terme cohésif au glissement (c′a sur B′, court ou long terme) | c′a du sol de fondation sur B′ |
 | **D16** | Facteur de H au cas 5 | **DÉCIDÉ le 2026-11-01 : option A, 1,0H** (tableau A-3 du commentaire du CNB 2020 ; commentaire de 2025 À CONFIRMER) |

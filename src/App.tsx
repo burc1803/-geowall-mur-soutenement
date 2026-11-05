@@ -17,8 +17,8 @@ import {
   Sliders,
   Sparkles
 } from 'lucide-react';
-import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion } from './lib/types';
-import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG } from './lib/analysis';
+import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel } from './lib/types';
+import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
 import { Visualizer } from './components/Visualizer';
 import { ForceCharts } from './components/ForceCharts';
 import { ChargesManager } from './components/ChargesManager';
@@ -54,13 +54,12 @@ const INITIAL_SOIL: SoilProperties = {
   hasWaterTable: true,
   waterTableHeight: 2.50,
   gamma_w: 9.81,
-  geotechFactors: {
-    phi_gu: 0.50,
-    phi_gs: 0.80,
-    phi_renv: 0.50,
-    phi_p: 0.50,
-    phi_coh: 0.60
-  }
+  // MUR-02 §1 : φ du tableau 6.2 du CFEM 5e selon le degré de compréhension ; Ψ du tableau 6.4
+  geotechLevel: 'typical',
+  psi: 1.0,
+  quFactored: false,
+  // MUR-02 D9 : case « déduire la profondeur de gel » cochée par défaut ; df à saisir (0 = non saisie -> avis)
+  frost: { deduct: true, df: 0 }
 };
 
 const INITIAL_LOADS: LoadsConfig = {
@@ -75,9 +74,8 @@ const INITIAL_LOADS: LoadsConfig = {
   },
   gammaM: 1.0,
   gammaF: 1.0,
-  additionalLoads: [],
-  kh: 0.075,
-  kv: 0.0
+  additionalLoads: []
+  // kv absent : kv = 2/3·kh par défaut (MUR-02 D6), tant que l'utilisateur n'a pas saisi de valeur
 };
 
 function StatBox({ label, value, unit, status, nonVerifiable }: { label: string, value: string, unit: string, status?: 'ok' | 'warning' | 'error', nonVerifiable?: boolean }) {
@@ -135,6 +133,7 @@ export default function App() {
         loads={loads}
         onUpdateSoil={setSoil}
         onUpdateLoads={setLoads}
+        seismic={result.seismic}
       />
 
       {/* Header */}
@@ -579,65 +578,94 @@ export default function App() {
                             <option value="moments">Moments Ms/Mr et pression linéaire q = V/B·(1 ± 6e/B)</option>
                             <option value="eccentricity">Excentricité : B′ = B − 2e, pression uniforme V/B′</option>
                           </select>
-                          <p className="text-[10px] text-slate-500">Limite d'excentricité du CFEM 5e éd. : À CONFIRMER. L'excentricité e et B′ sont affichées sans conclusion sur une limite non sourcée.</p>
+                          <p className="text-[10px] text-slate-500">Limite d'excentricité e ≤ B/6 à l'ÉLU et à l'ÉLS (CFEM 5e p. 348 et 20.7.3.4-20.7.3.5, MUR-02 D3) : statut calculé pour chaque combinaison. Le renversement Ψ·φ_ov·ΣM_stab ≥ ΣM_renv est vérifié dans tous les cas (forme d'application À CONFIRMER).</p>
                         </div>
 
-                        {/* CFEM Geotechnical Resistance Factors (Table 8.1) */}
+                        {/* Facteurs géotechniques : CFEM 5e, tableau 6.2 (p. 199) et tableau 6.4 (p. 200) — MUR-02 §1 */}
                         <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100 flex flex-col gap-2 mt-1">
                           <span className="text-[10px] font-black uppercase text-indigo-900 tracking-wider flex items-center justify-between">
-                            <span>Facteurs CFEM (Tableau 8.1)</span>
-                            <span className="text-[9px] text-indigo-600 font-bold">Φ Géotechniques</span>
+                            <span>Facteurs géotechniques (CFEM 5e, tableau 6.2)</span>
+                            <span className="text-[9px] text-indigo-600 font-bold">Ψ·φgu·R̂u ≥ Σαi·F̂i</span>
                           </span>
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">Φ_gu Portance</span>
-                              <input 
-                                type="number" step="0.05" 
-                                className="p-1.5 border rounded bg-white font-mono text-xs" 
-                                value={soil.geotechFactors.phi_gu} 
-                                onChange={e => setSoil(prev => ({
-                                  ...prev, 
-                                  geotechFactors: { ...prev.geotechFactors, phi_gu: parseFloat(e.target.value) || 0.5 }
-                                }))}
-                              />
+                              <span className="text-[9px] text-slate-500 font-bold">Degré de compréhension du site</span>
+                              <select
+                                className="p-1.5 border rounded bg-white text-xs font-semibold"
+                                value={soil.geotechLevel ?? 'typical'}
+                                onChange={e => setSoil(prev => ({ ...prev, geotechLevel: e.target.value as GeotechLevel }))}
+                              >
+                                {(['low', 'typical', 'high'] as GeotechLevel[]).map(l => <option key={l} value={l}>{GEOTECH_LEVEL_LABEL[l]}{l === 'typical' ? ' (défaut)' : ''}</option>)}
+                              </select>
                             </label>
                             <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">Φ_gs Glissement</span>
-                              <input 
-                                type="number" step="0.05" 
-                                className="p-1.5 border rounded bg-white font-mono text-xs" 
-                                value={soil.geotechFactors.phi_gs} 
-                                onChange={e => setSoil(prev => ({
-                                  ...prev, 
-                                  geotechFactors: { ...prev.geotechFactors, phi_gs: parseFloat(e.target.value) || 0.8 }
-                                }))}
-                              />
-                            </label>
-                            <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">Φ_renv Renversement</span>
-                              <input 
-                                type="number" step="0.05" 
-                                className="p-1.5 border rounded bg-white font-mono text-xs" 
-                                value={soil.geotechFactors.phi_renv} 
-                                onChange={e => setSoil(prev => ({
-                                  ...prev, 
-                                  geotechFactors: { ...prev.geotechFactors, phi_renv: parseFloat(e.target.value) || 0.5 }
-                                }))}
-                              />
-                            </label>
-                            <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">Φ_p Butée Passive</span>
-                              <input 
-                                type="number" step="0.05" 
-                                className="p-1.5 border rounded bg-white font-mono text-xs" 
-                                value={soil.geotechFactors.phi_p} 
-                                onChange={e => setSoil(prev => ({
-                                  ...prev, 
-                                  geotechFactors: { ...prev.geotechFactors, phi_p: parseFloat(e.target.value) || 0.5 }
-                                }))}
-                              />
+                              <span className="text-[9px] text-slate-500 font-bold">Ψ : facteur de conséquence (tableau 6.4)</span>
+                              <select
+                                className="p-1.5 border rounded bg-white font-mono text-xs"
+                                value={soil.psi ?? 1.0}
+                                onChange={e => setSoil(prev => ({ ...prev, psi: parseFloat(e.target.value) }))}
+                              >
+                                {PSI_CHOICES.map(v => <option key={v} value={v}>{v.toFixed(2)} {v === 0.9 ? '(conséquence élevée)' : v === 1.0 ? '(typique, défaut)' : '(faible)'}</option>)}
+                              </select>
                             </label>
                           </div>
+                          <label className="flex items-start gap-2 text-[10px] text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={!!soil.quFactored}
+                              onChange={e => setSoil(prev => ({ ...prev, quFactored: e.target.checked }))}
+                            />
+                            <span>La résistance ultime qu saisie est <strong>déjà pondérée</strong> par le géotechnicien (φgu = 1). Décoché : qu non pondérée, le programme applique φgu.</span>
+                          </label>
+                          <div className="grid grid-cols-3 gap-1 text-[10px] font-mono text-indigo-900 bg-white/70 rounded p-2 border border-indigo-100">
+                            <span>φgu = {result.geotech.phi_gu.toFixed(2)}</span>
+                            <span>φgs = {result.geotech.phi_gs.toFixed(2)}</span>
+                            <span>φ_ov = {result.geotech.phi_ov.toFixed(2)}</span>
+                            <span>φp = {result.geotech.phi_p.toFixed(2)}</span>
+                            <span>φcoh = {result.geotech.phi_coh.toFixed(2)}</span>
+                            <span>Ψ = {result.geotech.psi.toFixed(2)}</span>
+                          </div>
+                          <p className="text-[9px] text-slate-500">Valeurs lues du moteur. Aucune réduction supplémentaire de Kp (l'option « Kp réduit » est supprimée).</p>
+                        </div>
+
+                        {/* Butée statique et profondeur de gel (MUR-02 D9) */}
+                        <div className="bg-sky-50/70 p-3.5 rounded-xl border border-sky-200 flex flex-col gap-2 mt-1">
+                          <span className="text-[10px] font-black uppercase text-sky-900 tracking-wider">Butée à l'avant : profondeur de gel</span>
+                          <label className="flex items-start gap-2 text-[10px] text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={soil.frost?.deduct ?? true}
+                              onChange={e => setSoil(prev => ({ ...prev, frost: { deduct: e.target.checked, df: prev.frost?.df ?? 0 } }))}
+                            />
+                            <span>Déduire la profondeur de gel (cochée par défaut). La butée statique va alors de df à h_pass. Décochée, la butée porte sur toute la hauteur : <strong>sol avant déclaré permanent et non gélif par l'utilisateur</strong>.</span>
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[9px] text-slate-500 font-bold">df : profondeur de gel depuis la surface du sol avant (m)</span>
+                            <input
+                              type="number" step="0.1" min="0"
+                              className="p-1.5 border rounded bg-white font-mono text-xs disabled:opacity-40"
+                              value={soil.frost?.df ?? 0}
+                              disabled={!(soil.frost?.deduct ?? true)}
+                              onChange={e => setSoil(prev => ({ ...prev, frost: { deduct: prev.frost?.deduct ?? true, df: Math.max(parseFloat(e.target.value) || 0, 0) } }))}
+                            />
+                          </label>
+                          <p className="text-[10px] font-mono text-sky-900">h_pass = {result.earthPressures.h_pass.toFixed(2)} m ; zone de butée : de {result.frost.z_top.toFixed(2)} m à {result.earthPressures.h_pass.toFixed(2)} m ; Pp′ = {result.earthPressures.P_passive_nominal.toFixed(1)} kN/m</p>
+                        </div>
+
+                        {/* Butée au séisme (MUR-02 D9) */}
+                        <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
+                          <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Butée au séisme</span>
+                          <select
+                            className="p-2 border rounded-lg text-xs bg-white font-semibold text-slate-700"
+                            value={soil.methodConfig?.seismicPassive ?? 'none'}
+                            onChange={e => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), seismicPassive: e.target.value as 'none' | 'kpe' } }))}
+                          >
+                            <option value="none">Nulle (défaut, conservateur)</option>
+                            <option value="kpe">Réduite : KPE de Mononobe-Okabe (CFEM éq. 18.27-18.31)</option>
+                          </select>
+                          <p className="text-[9px] text-slate-500">PPE = PP − ΔPPE ; ΔPPE s'oppose à PP. Le Kp statique n'est pas offert au séisme.</p>
                         </div>
                     </section>
                 )}
@@ -700,15 +728,42 @@ export default function App() {
                                 </button>
                               </div>
                             ) : (
-                              <div className="grid grid-cols-2 gap-4">
+                              <div className="flex flex-col gap-3">
+                                <div className="grid grid-cols-2 gap-4">
                                    <label className="flex flex-col gap-1.5">
-                                      <span className="text-[10px] font-bold text-slate-500 uppercase">Coeff. Horizontal (kh)</span>
-                                      <input type="number" step="0.01" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={loads.kh} onChange={(e) => handleChangeLoads('kh', parseFloat(e.target.value) || 0)} />
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase">ah (g) : accélération du site</span>
+                                      <input type="number" step="0.01" min="0" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.methodConfig?.pga ?? DEFAULT_SOIL_METHOD_CONFIG.pga} onChange={(e) => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), pga: Math.max(parseFloat(e.target.value) || 0, 0) } }))} />
                                    </label>
                                    <label className="flex flex-col gap-1.5">
-                                      <span className="text-[10px] font-bold text-slate-500 uppercase">Coeff. Vertical (kv)</span>
-                                      <input type="number" step="0.01" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={loads.kv} onChange={(e) => handleChangeLoads('kv', parseFloat(e.target.value) || 0)} />
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase">|kv| saisi (deux signes étudiés)</span>
+                                      <input type="number" step="0.01" min="0" disabled={result.seismic.csaS6} className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold disabled:opacity-40" value={Number(result.seismic.kvInput.toFixed(4))} onChange={(e) => handleChangeLoads('kv', Math.abs(parseFloat(e.target.value) || 0))} />
                                    </label>
+                                </div>
+                                <input
+                                  type="text"
+                                  aria-label="Source de ah"
+                                  placeholder="Source de ah (RNCan, F(PGA)·PGA…)"
+                                  className="p-2 border rounded-lg text-xs bg-slate-50"
+                                  value={soil.methodConfig?.ahSource ?? ''}
+                                  onChange={(e) => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), ahSource: e.target.value } }))}
+                                />
+                                <div className="flex items-center justify-between text-[10.5px] bg-amber-50 border border-amber-200 rounded-lg p-2 font-mono text-amber-900">
+                                  <span>kh = {result.seismic.kh.toFixed(3)}{result.seismic.csaS6 ? ' (0,5·ah, CSA S6)' : ' (= ah)'}</span>
+                                  <button
+                                    type="button"
+                                    disabled={result.seismic.csaS6}
+                                    onClick={() => setLoads(prev => ({ ...prev, kv: undefined }))}
+                                    className="text-[10px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200 disabled:opacity-40"
+                                    title="CFEM 5e p. 629 : kv = 2/3·kh à défaut d'étude du site"
+                                  >
+                                    kv = 2/3·kh {result.seismic.kvIsDefault ? '(défaut, suit kh)' : '(rétablir)'}
+                                  </button>
+                                </div>
+                                {result.seismic.csaS6 && (
+                                  <div role="alert" className="text-[10.5px] text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-2 font-semibold">
+                                    Option CSA S6 active (kh = 0,5·ah, kv = 0) : règle des remblais routiers ou autoroutiers, non du CNB ; déplacement de 25 à 50 mm admis, non vérifié par le logiciel.
+                                  </div>
+                                )}
                               </div>
                             )}
                         </div>
@@ -721,10 +776,11 @@ export default function App() {
          <section className="flex-1 overflow-y-auto bg-slate-50/50 p-6 lg:p-10 flex flex-col gap-6 print:p-0 print:bg-white print:gap-0">
             
             {/* Dashboard Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-2 print:hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-2 print:hidden">
                 <StatBox label="Crit. Glissement ELU" nonVerifiable={!result.verifiable} value={result.critical_sliding_ULS === Infinity ? '∞' : result.critical_sliding_ULS.toFixed(2)} unit="FS (Req > 1.0)" status={result.critical_sliding_ULS >= 1.0 ? 'ok' : 'error'} />
                 <StatBox label="Crit. Renvers. ELU" nonVerifiable={!result.verifiable} value={result.governingOverturning.outside_base ? 'hors base' : result.critical_overturning_ULS === Infinity ? '∞' : result.critical_overturning_ULS.toFixed(2)} unit={result.governingOverturning.outside_base ? '(résultante hors base)' : 'FS (Req > 1.0)'} status={result.critical_overturning_ULS >= 1.0 && result.governingOverturning.status_overturning === 'OK' ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELS)' : 'Pression Max (ELS)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_SLS.toFixed(0)} unit={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.critical_q_toe_SLS <= soil.qAllowable_SLS ? 'ok' : 'error'} />
+                <StatBox label="Excentricité e ≤ B/6 (ELU+ELS)" nonVerifiable={!result.verifiable} value={result.eccentricity_ok_ULS && result.eccentricity_ok_SLS ? 'respectée' : `non respectée (${[!result.eccentricity_ok_ULS ? 'ÉLU' : '', !result.eccentricity_ok_SLS ? 'ÉLS' : ''].filter(Boolean).join(', ')})`} unit="" status={result.eccentricity_ok_ULS && result.eccentricity_ok_SLS ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELU)' : 'Pression Max (ELU)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_ULS.toFixed(0)} unit={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.governingBearing.status_bearing === 'OK' ? 'ok' : 'error'} />
             </div>
 

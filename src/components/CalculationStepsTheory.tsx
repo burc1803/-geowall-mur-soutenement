@@ -185,14 +185,14 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   Kp = tan²(45° + φ / 2) = (1 + sin φ) / (1 - sin φ)
                 </div>
                 <p className="text-xs text-slate-600 mb-2">
-                  Selon le CFEM (Tableau 8.1), la résistance passive mobilisée est pondérée avec Φ_p ({soil.geotechFactors.phi_p}, valeur saisie) ; la profondeur de gel ou d'affouillement à négliger n'est pas déduite (point À CONFIRMER).
+                  Selon le CFEM 5e (tableau 6.2), la butée est pondérée avec Φ_p = {result.geotech.phi_p}, sans autre réduction de Kp. Zone de butée : de {result.frost.z_top.toFixed(2)} m à {ep.h_pass.toFixed(2)} m sous la surface avant ({result.frost.deduct ? `profondeur de gel df = ${result.frost.df.toFixed(2)} m déduite` : 'profondeur de gel non déduite : sol avant déclaré permanent et non gélif par l\'utilisateur'}).
                 </p>
                 <div className="bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-200 text-xs font-mono flex justify-between items-center">
                   <span className="text-slate-600">Kp Rankine = {ep.Kp_rankine.toFixed(4)}</span>
                   <span className="font-bold text-emerald-900">
                     {result.soilMethodConfig.passiveMethod === 'neglected'
                       ? 'Butée négligée (Kp = 0)'
-                      : `Kp retenu (${({ rankine: 'Rankine', coulomb: 'Coulomb', reduced_cfem: 'Rankine réduit', neglected: '' } as Record<string, string>)[result.soilMethodConfig.passiveMethod]}) = ${ep.K_passive_used.toFixed(4)} ; Φ_p = ${soil.geotechFactors.phi_p}`}
+                      : `Kp retenu (${({ rankine: 'Rankine', coulomb: 'Coulomb', neglected: '' } as Record<string, string>)[result.soilMethodConfig.passiveMethod]}) = ${ep.K_passive_used.toFixed(4)} ; Φ_p = ${result.geotech.phi_p}`}
                   </span>
                 </div>
               </div>
@@ -282,7 +282,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between border-b border-slate-200 pb-1">
                     <span className="text-slate-600">kh appliqué :</span>
-                    <span className="font-mono font-bold">{loads.kh.toFixed(3)}</span>
+                    <span className="font-mono font-bold">{result.seismic.kh.toFixed(3)}{result.seismic.csaS6 ? ' (0,5·ah, option CSA S6)' : ' (= ah)'}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-200 pb-1">
                     <span className="text-slate-600">Angle d'inertie sismique θ_eq :</span>
@@ -387,11 +387,11 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-700">
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Frottement Sol-Béton :</span>
-                  <strong className="font-mono">μ = {soil.mu.toFixed(2)}</strong> (Φ_gs = {soil.geotechFactors.phi_gs})
+                  <strong className="font-mono">μ = {soil.mu.toFixed(2)}</strong> (Φ_gs = {result.geotech.phi_gs} ; Ψ = {result.geotech.psi})
                 </div>
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Butée Passive Mobilisée :</span>
-                  <strong className="font-mono">(Pp′ + Pw,a) · Φ_p = ({ep.P_passive_nominal.toFixed(1)} + {ep.P_water_front.toFixed(1)}) · {soil.geotechFactors.phi_p} = {((ep.P_passive_nominal + ep.P_water_front) * soil.geotechFactors.phi_p).toFixed(1)} kN/m</strong>
+                  <strong className="font-mono">Ψ · Φ_p · (Pp′ + Pw,a) = {result.geotech.psi} · {result.geotech.phi_p} · ({ep.P_passive_nominal.toFixed(1)} + {ep.P_water_front.toFixed(1)}) = {(result.geotech.psi * result.geotech.phi_p * (ep.P_passive_nominal + ep.P_water_front)).toFixed(1)} kN/m (statique)</strong>
                 </div>
                 <div className="bg-white p-2.5 rounded border border-slate-200">
                   <span className="text-slate-500 block text-[10px]">Combinaison critique ÉLU :</span>
@@ -502,7 +502,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
               </div>
 
               <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-xs flex flex-col sm:flex-row justify-between items-center gap-2">
-                <span>Résistance ultime ÉLU : <strong>q_ult · Φ_gu = {(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa</strong> (avec Φ_gu={soil.geotechFactors.phi_gu})</span>
+                <span>Résistance ultime ÉLU : <strong>Ψ · Φ_gu · q_u = {(result.geotech.psi * result.geotech.phi_gu * soil.qUltimate_ULS).toFixed(1)} kPa</strong> (Ψ={result.geotech.psi}, Φ_gu={result.geotech.phi_gu}{result.geotech.quFactored ? ' ; qu déclarée déjà pondérée' : ' ; qu non pondérée'})</span>
                 <span>Contrainte admissible ÉLTS : <strong>q_adm = {soil.qAllowable_SLS.toFixed(1)} kPa</strong></span>
               </div>
             </div>
@@ -559,7 +559,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <div className="flex-1">
                     <div className="font-bold text-slate-900">Vérification de l'Armature Minimale As,min :</div>
                     <p className="text-slate-600 font-mono mt-0.5">
-                      As,min = 0.002 · Ag = 0.002 · 1000 · {cd.mur_interieur.section_h} = <strong className="text-indigo-700">{cd.mur_interieur.As_min} mm²/m</strong> (CSA A23.3-19, article À CONFIRMER)
+                      As,min = <strong className="text-indigo-700">{cd.mur_interieur.As_min.toFixed(0)} mm²/m</strong> [{cd.mur_interieur.As_min_basis}] ; 10.5.1.2 b) : {cd.mur_interieur.As_min_flexure.toFixed(0)} mm²/m{cd.mur_interieur.flexure_min_waived ? ' (dispensée)' : ''} (CSA A23.3-19)
                     </p>
                     <p className="text-slate-500 text-[11px] mt-0.5">
                       Armature fournie : {cd.mur_interieur.bar_designation} &rarr; <strong className={`font-mono ${cd.mur_interieur.As_ok ? 'text-emerald-600' : 'text-rose-600'}`}>{cd.mur_interieur.As_provided} mm²/m {cd.mur_interieur.As_ok ? '≥' : '<'} As,min ({cd.mur_interieur.As_ok ? 'CONFORME' : 'NON CONFORME'})</strong>
@@ -615,7 +615,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <div className="flex-1">
                     <div className="font-bold text-slate-900">Vérification de la Ductilité (Section Sous-Armée) :</div>
                     <p className="text-slate-600 font-mono mt-0.5">
-                      (c / d) = {cd.mur_interieur.c_depth.toFixed(1)} / {cd.mur_interieur.d} = <strong className="text-indigo-700">{(cd.mur_interieur.ductility_c_over_d).toFixed(3)}</strong> &le; (c/d)max = 700 / (700 + fy) = <strong className="text-indigo-700">0.636</strong> [Éq. 3.12]
+                      (c / d) = {cd.mur_interieur.c_depth.toFixed(1)} / {cd.mur_interieur.d} = <strong className="text-indigo-700">{(cd.mur_interieur.ductility_c_over_d).toFixed(3)}</strong> &le; (c/d)max = 0,8 · 700 / (700 + fy) = <strong className="text-indigo-700">{cd.mur_interieur.ductility_limit.toFixed(3)}</strong> [A23.3-19, 10.5.2]
                     </p>
                     <p className="text-emerald-600 font-bold text-[11px] mt-0.5">
                       &check; Rupture ductile garantie avec écoulement plastique préalable des armatures tendues.
@@ -655,7 +655,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <p className="text-slate-600 font-mono">
                     dv = max(0.9·d, 0.72·h) = max(0.9·{cd.mur_interieur.d}, 0.72·{cd.mur_interieur.section_h}) = <strong className="text-indigo-700">{cd.mur_interieur.dv} mm</strong> [Éq. 5.4]
                     <br />
-                    β = 230 / (1000 + dv) = 230 / (1000 + {cd.mur_interieur.dv}) = <strong className="text-indigo-700">{cd.mur_interieur.beta.toFixed(4)}</strong> [Éq. 5.7]
+                    β = <strong className="text-indigo-700">{cd.mur_interieur.beta.toFixed(4)}</strong> [{cd.mur_interieur.beta_rule}] ; Vr,max = 0,25·Φc·f'c·bw·dv = <strong className="text-indigo-700">{cd.mur_interieur.Vr_max.toFixed(0)} kN/m</strong> [11.3.3]
                     <br />
                     Vc = Φc · λ · β · √f'c · bw · dv · 10⁻³ = {conc.phi_c} · 1.0 · {cd.mur_interieur.beta.toFixed(4)} · √{conc.fc_mur} · 1000 · {cd.mur_interieur.dv} · 10⁻³
                     <br />
@@ -712,7 +712,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   1. Barre Droite en Tension ($l_d$)
                 </h3>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  ld = 0.45 · k₁ · k₂ · k₃ · k₄ · (fy / √f'c) · db &ge; 300 mm [Éq. 7.6]
+                  ld = {cd.mur_interieur.ld_coeff?.toFixed(2)} · k₁ · k₂ · k₃ · k₄ · (fy / √f'c) · db &ge; 300 mm [Éq. 7.6]
                 </div>
                 <div className="space-y-1 text-xs text-slate-600 font-mono">
                   <div>k₁ = {cd.mur_interieur.ld_k1} (1.3 barres supérieures ; talon : {cd.semelle_talon.ld_k1}), k₂ = 1.0 (non époxy)</div>
@@ -731,11 +731,11 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 </h3>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
                   lhb = (100 · db) / √f'c [Éq. 7.12]<br />
-                  ldh = 0.70 · lhb (avec enrobage latéral &gt; 60 mm)
+                  ldh = lhb · fy/400 · 0,7 (si enrobage latéral ≥ 60 mm et du prolongement ≥ 50 mm) ≥ max(8db ; 150 mm) [12.5]
                 </div>
                 <div className="space-y-1 text-xs text-slate-600 font-mono">
                   <div>lhb de base (15M) = {cd.mur_interieur.lhb?.toFixed(1)} mm</div>
-                  <div>ldh avec facteur 0.70 = <strong className="text-indigo-700">{cd.mur_interieur.ldh_required?.toFixed(1)} mm</strong></div>
+                  <div>ldh = <strong className="text-indigo-700">{cd.mur_interieur.ldh_required?.toFixed(1)} mm</strong> ({cd.mur_interieur.ldh_factors})</div>
                   <div>Épaisseur disponible semelle hs = {geo.epBase * 1000} mm</div>
                   <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-emerald-700">
                     <span>Hauteur disponible semelle ({cd.mur_interieur.ldh_available} mm) :</span>

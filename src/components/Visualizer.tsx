@@ -174,8 +174,9 @@ export function Visualizer({
   // Seismic dynamic lateral thrust
   const seismicMethod = soil.methodConfig?.seismicMethod || result.soilMethodConfig?.seismicMethod || 'seed_whitman';
   const isSeismicEnabled = seismicMethod !== 'none';
-  const seismicMethodName = seismicMethod === 'mononobe_okabe' ? 'Mononobe-Okabe' : 'Seed & Whitman';
-  const seismicKh = isSeismicEnabled ? (loads.kh || 0) : 0;
+  // MUR-02 §4 : kh, méthode et ΔPAE viennent du moteur (result.seismic), jamais recalculés ici
+  const seismicMethodName = result.seismic.method === 'wood' ? 'Wood' : result.seismic.method === 'seed_whitman' ? 'Seed & Whitman' : 'Mononobe-Okabe';
+  const seismicKh = isSeismicEnabled ? result.seismic.kh : 0;
   const deltaPae = isSeismicEnabled ? (result.earthPressures?.delta_Pae_seed ?? 0) : 0;
   const yPae = result.earthPressures?.y_Pae || (0.60 * totalH);
   const isSeismicActive = isSeismicEnabled && deltaPae > 0;
@@ -340,7 +341,7 @@ export function Visualizer({
                 { id: 'soil', label: `Sol Actif Pa (${result.earthPressures.P_active_nominal.toFixed(1)} kN/m)`, activeBg: 'bg-blue-600 text-white shadow-sm' },
                 { id: 'surcharge', label: `Surcharge P_sur (${result.earthPressures.P_surcharge_nominal.toFixed(1)} kN/m)`, activeBg: 'bg-purple-600 text-white shadow-sm' },
                 ...(isSeismicEnabled ? [{ id: 'seismic', label: `Séisme ΔPae (${deltaPae.toFixed(1)} kN/m)`, activeBg: 'bg-rose-600 text-white shadow-sm' }] : []),
-                { id: 'water', label: `Eau Pw (${(0.5 * 9.81 * hw * hw).toFixed(1)} kN/m)`, activeBg: 'bg-cyan-600 text-white shadow-sm' },
+                { id: 'water', label: `Eau Pw (${(0.5 * (result.hydro.gamma_w) * hw * hw).toFixed(1)} kN/m)`, activeBg: 'bg-cyan-600 text-white shadow-sm' },
                 { id: 'passive', label: `Butée Aval Pp′ (${result.earthPressures.P_passive_nominal.toFixed(1)} kN/m)`, activeBg: 'bg-amber-600 text-white shadow-sm' },
                 { id: 'bearing', label: `Portance Sol (${(uls?.q_toe ?? result.q_toe).toFixed(0)} kPa)`, activeBg: 'bg-emerald-600 text-white shadow-sm' },
               ].map((btn) => (
@@ -360,14 +361,10 @@ export function Visualizer({
           </div>
 
           {/* Quick Seismic kh activation button when deltaPae is 0 (only if seismic method is enabled) */}
-          {isSeismicEnabled && selectedPressure === 'seismic' && deltaPae === 0 && onUpdateLoads && (
-            <button
-              onClick={() => onUpdateLoads({ ...loads, kh: 0.12 })}
-              className="px-2.5 py-1 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-700/60 hover:bg-rose-900 text-[10.5px] font-bold transition-colors shadow-sm"
-              title="Définir un coefficient sismique kh = 0.12 g"
-            >
-              + Activer Séisme (kh = 0.12 g)
-            </button>
+          {isSeismicEnabled && selectedPressure === 'seismic' && deltaPae === 0 && (
+            <span className="px-2.5 py-1 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-700/60 text-[10.5px] font-bold shadow-sm">
+              ΔPAE nul : saisir ah (g) dans « Sol & Séisme » (kh = {seismicKh.toFixed(3)})
+            </span>
           )}
         </div>
       )}
@@ -1800,7 +1797,7 @@ export function Visualizer({
                         fontSize="10" 
                         fontWeight="bold"
                       >
-                        Pw (Eau = {(0.5 * 9.81 * hw * hw).toFixed(1)} kN/m)
+                        Pw (Eau = {(0.5 * result.hydro.gamma_w * hw * hw).toFixed(1)} kN/m)
                       </text>
                     </>
                   ) : (

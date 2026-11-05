@@ -2,6 +2,7 @@ import React from 'react';
 import { 
   SoilProperties, 
   LoadsConfig, 
+  SeismicSummary,
   SoilMethodConfig, 
   SoilPresetType, 
   ActivePressureMethod, 
@@ -18,6 +19,7 @@ interface SoilAndSeismicMethodModalProps {
   loads: LoadsConfig;
   onUpdateSoil: (soil: SoilProperties) => void;
   onUpdateLoads: (loads: LoadsConfig) => void;
+  seismic: SeismicSummary; // valeurs du moteur (kh, méthode) : jamais recalculées ici
 }
 
 export function SoilAndSeismicMethodModal({
@@ -26,7 +28,8 @@ export function SoilAndSeismicMethodModal({
   soil,
   loads,
   onUpdateSoil,
-  onUpdateLoads
+  onUpdateLoads,
+  seismic
 }: SoilAndSeismicMethodModalProps) {
   if (!isOpen) return null;
 
@@ -49,27 +52,11 @@ export function SoilAndSeismicMethodModal({
     });
   };
 
+  // MUR-02 D6 : kh = ah par défaut ; le moteur calcule kh (voir `seismic.kh`). Aucun kh n'est recalculé ici.
   const handleUpdateMethod = (updates: Partial<SoilMethodConfig>) => {
-    const updatedMethod = { ...currentMethod, ...updates };
-    
-    // Auto-calculate kh if PGA or tolerance changed
-    let newKh = loads.kh;
-    if (updatedMethod.seismicMethod === 'none') {
-      newKh = 0;
-    } else {
-      const pga = updatedMethod.pga || 0.15;
-      const factor = updatedMethod.seismicDisplacementTolerance === 'free_cantilever' ? 0.50 : 1.00;
-      newKh = parseFloat((pga * factor).toFixed(3));
-    }
-
     onUpdateSoil({
       ...soil,
-      methodConfig: updatedMethod
-    });
-
-    onUpdateLoads({
-      ...loads,
-      kh: newKh
+      methodConfig: { ...currentMethod, ...updates }
     });
   };
 
@@ -212,12 +199,7 @@ export function SoilAndSeismicMethodModal({
                   {
                     value: 'rankine',
                     label: 'Rankine Pleine Mobilisation',
-                    sub: 'Kp = tan²(45° + φ/2). Sol avant compact et permanent.'
-                  },
-                  {
-                    value: 'reduced_cfem',
-                    label: 'CFEM Réduite (Recommandé)',
-                    sub: 'Kp pondéré à 50% pour tenir compte du grand déplacement de mobilisation.'
+                    sub: 'Kp = tan²(45° + φ/2), sans réduction ; seul φ_p du tableau 6.2 réduit la butée. Zone gelée : onglet Critères.'
                   },
                   {
                     value: 'coulomb',
@@ -269,7 +251,7 @@ export function SoilAndSeismicMethodModal({
                 </p>
               </div>
               <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-100 text-amber-900 rounded-lg">
-                kh actuel = {loads.kh.toFixed(3)} g
+                kh = {seismic.kh.toFixed(3)} g · méthode : {seismic.method === 'wood' ? 'Wood (mur retenu)' : seismic.method === 'mononobe_okabe' ? 'Mononobe-Okabe' : seismic.method === 'seed_whitman' ? 'Seed & Whitman' : 'aucune'}
               </span>
             </div>
 
@@ -278,13 +260,13 @@ export function SoilAndSeismicMethodModal({
               {[
                 {
                   value: 'seed_whitman',
-                  label: 'Seed & Whitman (1970)',
-                  sub: 'ΔKae = 0.75·kh. Recommandé par CFEM 24.9 pour soutènements usuels.'
+                  label: 'Seed & Whitman (1970) — hors fiche MUR-02',
+                  sub: 'Hors fiche MUR-02 : méthode simplifiée, sans (1 − kv) ni contrôle d\'indétermination. ΔPAE = 0,375·kh·γ·H² à 0,6H. Reprise par le CFEM 5e : À CONFIRMER. Méthode par défaut : Mononobe-Okabe.'
                 },
                 {
                   value: 'mononobe_okabe',
                   label: 'Mononobe-Okabe (1926)',
-                  sub: 'Formulation trigonométrique exacte avec angle sismique θ = atan(kh/(1-kv)).'
+                  sub: 'Mur libre : PAE = ½·KAE·γ·H²·(1 − kv), ψ = atan[kh/(1 − kv)] (CFEM éq. 18.20-18.21). Mur retenu (sous-sol) : Wood, ΔP0E = kh·γ·H² à 0,58H.'
                 },
                 {
                   value: 'none',
@@ -316,43 +298,53 @@ export function SoilAndSeismicMethodModal({
               ))}
             </div>
 
-            {/* Seismic PGA & Wall Displacement Behaviour */}
+            {/* ah, source et option avancée CSA S6 (MUR-02 D6) */}
             {currentMethod.seismicMethod !== 'none' && (
               <div className="p-4 bg-white rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Accélération Maximale du Sol (PGA) :
+                  <label htmlFor="ah-input" className="text-xs font-bold text-slate-700 block mb-1">
+                    ah : accélération horizontale du site (kh = ah/g, CFEM éq. 18.22) :
                   </label>
                   <div className="flex items-center gap-2">
                     <input
+                      id="ah-input"
                       type="number"
                       step="0.01"
-                      min="0.01"
-                      max="1.00"
-                      value={currentMethod.pga || 0.15}
-                      onChange={(e) => handleUpdateMethod({ pga: parseFloat(e.target.value) || 0.15 })}
+                      min="0"
+                      max="2"
+                      value={currentMethod.pga}
+                      onChange={(e) => handleUpdateMethod({ pga: Math.max(parseFloat(e.target.value) || 0, 0) })}
                       className="w-32 p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-800 bg-slate-50"
                     />
-                    <span className="text-xs text-slate-500 font-bold">g (Selon carte sismique CNB)</span>
+                    <span className="text-xs text-slate-500 font-bold">g</span>
                   </div>
+                  <label htmlFor="ah-source" className="text-[11px] font-bold text-slate-600 block mt-2 mb-1">Source de ah (RNCan, F(PGA)·PGA, rapport géotechnique…) :</label>
+                  <input
+                    id="ah-source"
+                    type="text"
+                    value={currentMethod.ahSource ?? ''}
+                    onChange={(e) => handleUpdateMethod({ ahSource: e.target.value })}
+                    placeholder="à renseigner (apparaît dans la note)"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs text-slate-800 bg-slate-50"
+                  />
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Comportement et Tolérance de Déplacement (CFEM 24.9) :
+                <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-3">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!currentMethod.csaS6Reduction}
+                      onChange={(e) => handleUpdateMethod({ csaS6Reduction: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span className="text-xs font-bold text-amber-900">
+                      Option avancée (désactivée par défaut) : kh = 0,5·ah et kv = 0
+                      <span className="block font-normal text-[11px] text-amber-900/80 mt-0.5">
+                        Réservée aux murs de remblais routiers ou autoroutiers pouvant se déplacer de 25 à 50 mm. Règle de la CSA S6 citée par le CFEM 5e (p. 631), non du CNB.
+                        Le déplacement admis n'est pas vérifié par le logiciel. Ne s'applique pas aux murs rigides ou retenus.
+                      </span>
+                    </span>
                   </label>
-                  <select
-                    value={currentMethod.seismicDisplacementTolerance}
-                    onChange={(e) => handleUpdateMethod({ seismicDisplacementTolerance: e.target.value as any })}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-slate-50 focus:outline-none"
-                  >
-                    <option value="free_cantilever">
-                      Mur autostable avec déplacement résiduel 25-50 mm (kh = 0.50 · PGA)
-                    </option>
-                    <option value="rigid_wall">
-                      Mur rigide ou bloqué sans déplacement permanent (kh = 1.00 · PGA)
-                    </option>
-                  </select>
                 </div>
               </div>
             )}

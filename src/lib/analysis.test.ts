@@ -74,7 +74,8 @@ describe('Cas R1 (MUR-00 §5.1)', () => {
     close(c09.FOS_sliding, 1.018, 0.005);
     close(c125.FOS_sliding, 1.414, 0.005);
   });
-  it('renversement 0,9D + 1,5H : Ms/Mr = 2,901', () => { close(c09.FOS_overturning, 2.901, 0.005); });
+  // MUR-02 §2.3 et §7.1 (E08) : Ψ·φ_ov·ΣM_stab / ΣM_renv = 0,50 x 2,901 = 1,451 (l'ancien test attendait 2,901 sans φ_ov)
+  it('renversement 0,9D + 1,5H : Ψφ_ov·Ms/Mr = 1,451 (MUR-02 §7.1)', () => { close(c09.FOS_overturning, 1.451, 0.005); });
   it('portance cas 1 (1,4D + 1,5H) facteurs cohérents : e = 0,094, q_toe = 93,7, q_heel = 58,1', () => {
     close(c14.ecc, 0.094, 0.02);
     close(c14.q_toe, 93.7, 0.005);
@@ -98,7 +99,7 @@ describe('Cas R1 (MUR-00 §5.1)', () => {
     close(d.Vc, 145.5, 0.005);
     close(d.a_stress_block, 36.10, 0.005);
     close(d.Mr, 121.24, 0.005);
-    close(d.Z_factor!, 24850, 0.005);
+    close(d.Z_factor!, 22350, 0.005); // MUR-02 §7.1 : enrobage pris ≤ 50 mm pour dc et A (10.6.1) ; l'ancien test attendait 24 850 avec un enrobage de 60 mm
     close(d.ld, 420.7, 0.005); // 15M : k4 = 0,8, k1 = 1,0
     expect(d.As_ok).toBe(true);
   });
@@ -108,9 +109,9 @@ describe('Cas R1 (MUR-00 §5.1)', () => {
     expect(r25.concreteDesign.mur_interieur.ld_k4).toBe(1.0);
     expect(r.concreteDesign.mur_interieur.ld_k4).toBe(0.8);
   });
-  it('E03 : N = 0,9 x poids du voile ; armature des deux faces', () => {
+  it('E03 / MUR-02 D19 (11.5.4) : N = poids du voile NON pondéré ; armature des deux faces', () => {
     const f = r.concreteDesign.cisaillement_friction;
-    close(f.N, 0.9 * 3.0 * 0.3 * 24, 1e-9);
+    close(f.N, 3.0 * 0.3 * 24, 1e-9); // l'ancien test attendait 0,9 x le poids (MUR-01 E03)
     close(f.As_crossing, r.concreteDesign.mur_interieur.As_provided + r.concreteDesign.mur_exterieur.As_provided, 1e-9);
   });
 });
@@ -124,9 +125,10 @@ describe('Cas R2 (MUR-00 §5.2) - sismique kh = 0,15', () => {
     close(r.earthPressures.E_stem_nominal, 3.24, 1e-9);
     close(r.earthPressures.E_base_nominal, 3.456, 1e-9);
   });
-  it('Kae (M-O, δ = 21,34°) = 0,3799 ; Ka Coulomb = 0,2750', () => {
+  it('Kae (M-O, δ = 0 sur le plan fictif, D11) = 0,4025 ; Ka Coulomb = 0,2750', () => {
+    // MUR-02 §4.2 et §7.2 : PA et KAE prennent le même δ (E13b) ; δ = 0 avec Rankine -> KAE = 0,4025 (l'ancien test utilisait δ = 21,34° : 0,3799)
     const rm = analyzeRetainingWall(GEO_R, soilR({ methodConfig: { ...soilR().methodConfig!, seismicMethod: 'mononobe_okabe' } }), loadsR({ kh: 0.15 }), DEFAULT_CONCRETE_PROPS, rebarR);
-    close(rm.earthPressures.Kae_mo, 0.3799, 0.002);
+    close(rm.earthPressures.Kae_mo, 0.4025, 0.002);
     close(rm.earthPressures.Ka_coulomb, 0.2750, 0.002);
     close(rm.earthPressures.Kp_coulomb, 7.34, 0.005); // Kp avec δ = 21,34° (E19)
   });
@@ -147,9 +149,9 @@ describe('Cas R2 (MUR-00 §5.2) - sismique kh = 0,15', () => {
     close(c5.mur_Mf, 1.0 * 26.27 + 17.31 + 4.86, 0.005);
     close(c5.mur_Vf, 1.0 * 26.27 + 9.62 + 3.24, 0.005);
   });
-  it('glissement cas 5 (1,0D + 1,0E + 1,0H, sans inertie du sol du talon) ', () => {
+  it('glissement cas 5 (1,0D + 1,0E + 1,0H, avec inertie du sol du talon : MUR-02 §4.4, D21)', () => {
     const c5 = r.combinations.find(c => c.caseNo === 5)!;
-    const sumH = 1.0 * 33.746 + 12.355 + 3.24 + 3.456;
+    const sumH = 1.0 * 33.746 + 12.355 + 3.24 + 3.456 + 12.825; // + kh·W du sol du talon = 0,15 x 85,5
     close(c5.sumH, sumH, 0.005);
     close(c5.FOS_sliding, (130.14 * 0.55 * 0.8) / sumH, 0.005);
   });

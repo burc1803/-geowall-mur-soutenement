@@ -63,7 +63,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
           </div>
           <div className="bg-slate-800/80 backdrop-blur border border-slate-700 px-3 py-2 rounded-xl text-center">
             <span className="block text-[9px] uppercase font-bold text-slate-400">Portance Max ULS</span>
-            <span className={`text-base font-black ${!outsideULS && maxQ_ULS <= soil.qUltimate_ULS * (soil.geotechFactors.phi_gu) ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <span className={`text-base font-black ${!outsideULS && maxQ_ULS <= result.geotech.psi * result.geotech.phi_gu * soil.qUltimate_ULS ? 'text-emerald-400' : 'text-rose-400'}`}>
               {outsideULS ? <>non vérifiable <span className="text-[10px] text-slate-400 font-normal">(résultante hors base)</span></> : <>{maxQ_ULS.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">kPa</span></>}
             </span>
           </div>
@@ -138,10 +138,12 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
         <div className="flex items-center gap-2">
           <Info size={16} className="text-blue-600 shrink-0" />
           <span>
-            <strong>Coefficients CFEM actifs :</strong> Portance <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_gu = {soil.geotechFactors.phi_gu}</code> • 
-            Glissement friction <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_gs = {soil.geotechFactors.phi_gs}</code> • 
-            Renversement <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_renv = {soil.geotechFactors.phi_renv}</code> • 
-            Passive <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_p = {soil.geotechFactors.phi_p}</code> • 
+            <strong>Facteurs CFEM 5e (tableau 6.2, compréhension {result.geotech.level === 'low' ? 'faible' : result.geotech.level === 'high' ? 'élevée' : 'typique'}) :</strong> Portance <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_gu = {result.geotech.phi_gu}</code> • 
+            Glissement friction <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_gs = {result.geotech.phi_gs}</code> • 
+            Cohésion <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_coh = {result.geotech.phi_coh}</code> • 
+            Renversement <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_ov = {result.geotech.phi_ov}</code> • 
+            Butée <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_p = {result.geotech.phi_p}</code> • 
+            Conséquence <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Ψ = {result.geotech.psi}</code> • 
             Frottement sol-béton <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">μ = {soil.mu} (tan δ)</code>
           </span>
         </div>
@@ -187,8 +189,9 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCombinations.map((c, i) => {
-                  const frictionPart = (Math.max(c.sumV_min, 0) * soil.mu * (c.type === 'ULS' ? soil.geotechFactors.phi_gs : 1.0));
-                  const passivePart = ((result.earthPressures.P_passive_nominal + result.earthPressures.P_water_front) * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
+                  // valeurs du moteur (MUR-02 §2.1) : Ψ·φ appliqués par le calcul, jamais recalculés ici
+                  const frictionPart = c.Rf_friction + c.Rf_cohesion;
+                  const passivePart = c.Rf_passive;
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
                       <td className="p-3 font-bold text-slate-900">
@@ -266,7 +269,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCombinations.map((c, i) => {
-                  const passiveMomentPart = (result.earthPressures.P_passive_nominal * result.earthPressures.y_Pp + result.earthPressures.P_water_front * result.earthPressures.y_Pw_front) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
+                  const passiveMomentPart = c.psi * c.phi_ov * c.Ms_passive; // Ψ·φ_ov · moment de la butée (valeurs du moteur)
                   const vertMomPart = c.Ms - passiveMomentPart;
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
@@ -326,7 +329,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
               </div>
             </div>
             <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
-              <span>Capacité ÉLU: <strong className="text-slate-800 font-mono">{(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa</strong></span>
+              <span>Capacité ÉLU: <strong className="text-slate-800 font-mono">{(result.geotech.psi * result.geotech.phi_gu * soil.qUltimate_ULS).toFixed(1)} kPa</strong></span>
               <span>Capacité ÉLTS: <strong className="text-slate-800 font-mono">{soil.qAllowable_SLS.toFixed(1)} kPa</strong></span>
             </div>
           </div>

@@ -78,9 +78,9 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
               <tr><th className="py-1.5 font-semibold text-slate-700">Capacité portante admissible ELS (q_adm)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.qAllowable_SLS.toFixed(1)} kPa</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Capacité portante ultime ULS (q_ult)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.qUltimate_ULS.toFixed(1)} kPa</td></tr>
               <tr className="bg-indigo-50/50">
-                <th className="py-1.5 font-bold text-indigo-950">Facteurs CFEM (Φ_gu / Φ_gs / Φ_renv / Φ_p)</th>
+                <th className="py-1.5 font-bold text-indigo-950">Facteurs CFEM 5e, tableau 6.2 (Φ_gu / Φ_gs / Φ_ov / Φ_p / Φ_coh) et Ψ</th>
                 <td className="py-1.5 text-right font-mono font-black text-indigo-950">
-                  {soil.geotechFactors.phi_gu} / {soil.geotechFactors.phi_gs} / {soil.geotechFactors.phi_renv} / {soil.geotechFactors.phi_p}
+                  {result.geotech.phi_gu} / {result.geotech.phi_gs} / {result.geotech.phi_ov} / {result.geotech.phi_p} / {result.geotech.phi_coh} ; Ψ = {result.geotech.psi}
                 </td>
               </tr>
             </tbody>
@@ -114,12 +114,12 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                 <td className="p-2.5 text-right font-mono">Y = {totalHeight.toFixed(2)} m</td>
                 <td className="p-2.5 text-slate-500">Surcharge appliquée sur le terre-plein amont</td>
               </tr>
-              {loads.kh > 0 && (
+              {result.seismic.kh > 0 && (
                 <tr>
                   <td className="p-2.5 font-bold text-amber-700">Séisme Pseudo-Statique Mononobe-Okabe (kh)</td>
                   <td className="p-2.5"><span className="px-2 py-0.5 rounded font-bold bg-rose-50 text-rose-700 border border-rose-200 text-[10px]">E</span></td>
                   <td className="p-2.5 font-mono">Inertie + Poussée</td>
-                  <td className="p-2.5 text-right font-mono font-bold text-amber-700">kh = {loads.kh.toFixed(3)}</td>
+                  <td className="p-2.5 text-right font-mono font-bold text-amber-700">kh = {result.seismic.kh.toFixed(3)}</td>
                   <td className="p-2.5 text-right font-mono">Y = 0.6·Ht</td>
                   <td className="p-2.5 text-slate-500">Inertie de structure et poussée dynamique additionnelle</td>
                 </tr>
@@ -167,8 +167,9 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             </thead>
             <tbody className="divide-y divide-slate-100">
               {result.combinations.map((c, i) => {
-                const frictionPart = (Math.max(c.sumV_min, 0) * soil.mu * (c.type === 'ULS' ? soil.geotechFactors.phi_gs : 1.0));
-                const passivePart = ((result.earthPressures.P_passive_nominal + result.earthPressures.P_water_front) * (c.type === 'ULS' ? soil.geotechFactors.phi_p : 1.0));
+                // valeurs du moteur (MUR-02 §2.1)
+                const frictionPart = c.Rf_friction + c.Rf_cohesion;
+                const passivePart = c.Rf_passive;
                 return (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
                     <td className="p-2 font-bold text-slate-900">{c.combName}</td>
@@ -227,7 +228,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             </thead>
             <tbody className="divide-y divide-slate-100">
               {result.combinations.map((c, i) => {
-                const passiveMomentPart = (result.earthPressures.P_passive_nominal * result.earthPressures.y_Pp + result.earthPressures.P_water_front * result.earthPressures.y_Pw_front) * (c.type === 'ULS' ? soil.geotechFactors.phi_renv : 1.0);
+                const passiveMomentPart = c.psi * c.phi_ov * c.Ms_passive; // valeurs du moteur
                 const vertMomPart = c.Ms - passiveMomentPart;
                 return (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
@@ -269,7 +270,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
         </div>
         <p className="text-[11px] text-slate-600 mb-2">
           Position résultante <strong className="font-mono">x₁ = (Ms - Mr)/Rv</strong> • Excentricité <strong className="font-mono">e = |B/2 - x₁|</strong> • Limite tiers central <strong className="font-mono">B/6 = {(baseWidth / 6).toFixed(3)} m</strong>.
-          Capacité ÉLU = <strong className="font-mono">{(soil.qUltimate_ULS * soil.geotechFactors.phi_gu).toFixed(1)} kPa</strong> (avec Φ_gu={soil.geotechFactors.phi_gu}) • Capacité ÉLTS = <strong className="font-mono">{soil.qAllowable_SLS.toFixed(1)} kPa</strong>.
+          Capacité ÉLU = <strong className="font-mono">{(result.geotech.psi * result.geotech.phi_gu * soil.qUltimate_ULS).toFixed(1)} kPa</strong> (Ψ·Φ_gu·qu, Ψ={result.geotech.psi}, Φ_gu={result.geotech.phi_gu}) • Capacité ÉLTS = <strong className="font-mono">{soil.qAllowable_SLS.toFixed(1)} kPa</strong>.
         </p>
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
@@ -353,7 +354,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                   <th className="p-2.5 text-right font-bold text-indigo-700">Mr (kNm/m)</th>
                   <th className="p-2.5 text-right font-bold">Vf (kN/m)</th>
                   <th className="p-2.5 text-right font-bold text-indigo-700">Vc (kN/m)</th>
-                  <th className="p-2.5 text-center">Ductilité (c/d &le; 0.636)</th>
+                  <th className="p-2.5 text-center">Ductilité (c/d &le; {result.concreteDesign.mur_interieur.ductility_limit.toFixed(3)})</th>
                   <th className="p-2.5 text-center">Fissuration Z (N/mm)</th>
                   <th className="p-2.5 text-center">Statut</th>
                 </tr>

@@ -32,7 +32,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
 
   // Factored resistance or allowable bearing
   const q_limit = selectedComb.type === 'ULS' 
-    ? (soil.geotechFactors?.phi_gu ?? 0.50) * soil.qUltimate_ULS
+    ? selectedComb.q_capacity // Ψ·φgu·qu calculé par le moteur (MUR-02 §1)
     : soil.qAllowable_SLS;
 
   const isTensionSeparation = ecc > B_over_6;

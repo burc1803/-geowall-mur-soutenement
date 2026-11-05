@@ -140,3 +140,82 @@ export function stemSectionEffort(
   }
   return { V: V - R, M: M - R * d };
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Mononobe-Okabe (MUR-02 §4.2) — parement vertical (θ = 0), remblai de pente β */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Coefficient actif sismique KAE (CFEM 5e, éq. 18.21 / 18.25 avec θ = 0) :
+ *   KAE = cos²(φ − ψ) / [cos ψ · cos(δ + ψ) · (1 + √(sin(φ + δ)·sin(φ − β − ψ) / (cos(δ + ψ)·cos β)))²]
+ * avec ψ = atan[kh/(1 − kv)]. Angles en radians.
+ * Retourne `null` (jamais NaN) si KAE est indéterminé : φ − β < ψ (CFEM p. 632) ou dénominateur dégénéré.
+ */
+export function mononobeOkabeKae(phi: number, delta: number, psi: number, beta = 0): number | null {
+  if (!Number.isFinite(phi) || !Number.isFinite(delta) || !Number.isFinite(psi) || !Number.isFinite(beta)) return null;
+  if (phi - beta < psi) return null;
+  const cDP = Math.cos(delta + psi);
+  const cB = Math.cos(beta);
+  if (cDP <= 1e-9 || cB <= 1e-9 || Math.cos(psi) <= 1e-9) return null;
+  const arg = (Math.sin(phi + delta) * Math.sin(phi - beta - psi)) / (cDP * cB);
+  if (arg < 0) return null;
+  const denom = Math.cos(psi) * cDP * Math.pow(1 + Math.sqrt(arg), 2);
+  if (!(denom > 1e-12)) return null;
+  const K = Math.pow(Math.cos(phi - psi), 2) / denom;
+  return Number.isFinite(K) ? K : null;
+}
+
+/**
+ * Coefficient passif sismique KPE (CFEM 5e, éq. 18.28 avec θ = 0) :
+ *   KPE = cos²(φ − ψ) / [cos ψ · cos(δ + ψ) · (1 − √(sin(φ + δ)·sin(φ + β − ψ) / (cos(δ + ψ)·cos β)))²]
+ * Retourne `null` si la racine n'existe pas (φ + β < ψ) ou si le dénominateur est dégénéré.
+ */
+export function mononobeOkabeKpe(phi: number, delta: number, psi: number, beta = 0): number | null {
+  if (!Number.isFinite(phi) || !Number.isFinite(delta) || !Number.isFinite(psi) || !Number.isFinite(beta)) return null;
+  if (phi + beta < psi) return null;
+  const cDP = Math.cos(delta + psi);
+  const cB = Math.cos(beta);
+  if (cDP <= 1e-9 || cB <= 1e-9 || Math.cos(psi) <= 1e-9) return null;
+  const arg = (Math.sin(phi + delta) * Math.sin(phi + beta - psi)) / (cDP * cB);
+  if (arg < 0) return null;
+  const bracket = 1 - Math.sqrt(arg);
+  const denom = Math.cos(psi) * cDP * bracket * bracket;
+  if (!(denom > 1e-12)) return null;
+  const K = Math.pow(Math.cos(phi - psi), 2) / denom;
+  return Number.isFinite(K) ? K : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Charge linéaire derrière le mur (CFEM 5e, fig. 20.8, p. 694) — MUR-02 §3, E25 */
+/* -------------------------------------------------------------------------- */
+
+export interface LineLoadThrust {
+  PH: number; // kN/m — poussée horizontale résultante
+  zc: number; // m — profondeur de la résultante sous la surface (centroïde du diagramme σh)
+  sigmaAt: (z: number) => number; // kPa — pression horizontale à la profondeur z sous la surface, normalisée pour que ∫σh dz = PH sur [0, H]
+}
+
+/**
+ * Charge linéaire QL (kN/m) parallèle au mur, à la distance m·H du mur (m = x/H), mur de hauteur H.
+ * Fig. 20.8 : m ≤ 0,4 : σh·H/QL = 0,20·n/(0,16 + n²)² ; PH = 0,55·QL.
+ *             m > 0,4 : σh·H/QL = 1,28·m²·n/(m² + n²)² ; PH = 0,64·QL/(m² + 1). n = z/H.
+ * La forme du diagramme est celle de la figure ; son intégrale est ramenée à la valeur PH de la figure.
+ * La charge ponctuelle de la fig. 20.8 n'est pas représentable dans une section 2D : non implémentée.
+ */
+export function lineLoadThrust(QL: number, m: number, H: number): LineLoadThrust {
+  if (!(QL > 0) || !(H > 0) || !Number.isFinite(m) || m < 0) return { PH: 0, zc: H / 2, sigmaAt: () => 0 };
+  const near = m <= 0.4;
+  const g = (n: number) => (near ? (0.20 * n) / Math.pow(0.16 + n * n, 2) : (1.28 * m * m * n) / Math.pow(m * m + n * n, 2));
+  const PH = near ? 0.55 * QL : (0.64 * QL) / (m * m + 1);
+  const N = 400;
+  let I0 = 0;
+  let I1 = 0;
+  for (let i = 0; i < N; i++) {
+    const n = (i + 0.5) / N;
+    I0 += g(n) / N;
+    I1 += (g(n) * n) / N;
+  }
+  if (!(I0 > 0)) return { PH: 0, zc: H / 2, sigmaAt: () => 0 };
+  const scale = PH / I0; // (kN/m) par unité de ∫g dn
+  return { PH, zc: (I1 / I0) * H, sigmaAt: (z: number) => (z < 0 || z > H ? 0 : (scale * g(z / H)) / H) };
+}

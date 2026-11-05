@@ -353,7 +353,7 @@ export function RebarManager({ rebarConfig, onChange, conc, result }: RebarManag
                       </div>
                       <div className="font-mono text-xs text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
                         c / d = {elem.design.c_depth.toFixed(1)} / {elem.design.d.toFixed(1)} = <strong className="text-slate-900">{elem.design.ductility_c_over_d.toFixed(3)}</strong> <br />
-                        Limite CSA 10.5.2 = 700/(700+fy) = <strong>{elem.design.ductility_limit.toFixed(3)}</strong>
+                        Limite CSA 10.5.2 = 0,8·700/(700 + fy) = <strong>{elem.design.ductility_limit.toFixed(3)}</strong>
                       </div>
                       <p className="text-[11px] text-slate-500">
                         Garantit une rupture ductile par plastification préalable des armatures en traction.
