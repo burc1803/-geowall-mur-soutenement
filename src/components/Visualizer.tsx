@@ -146,6 +146,16 @@ export function Visualizer({
   // Origin (x=0, y=0) at bottom-left corner of footing (toe point)
   const tx = (x: number) => padLeft + x * scale;
   const ty = (y: number) => h - padBottom - y * scale;
+  // Libellé de la nappe aval : au-dessus de la ligne, sauf s'il chevauche l'encadré des paramètres du sol avant ; alors sous la ligne
+  const avalLineY = ty(result.earthPressures.hw_av);
+  const avalCardL = tx(-1.9);
+  const avalCardR = avalCardL + 130;
+  const avalCardT = ty(geo.epBase + soil.hSolAv + 1.2);
+  const avalCardB = avalCardT + 70;
+  const avalLblR = tx(geo.ePiedAv) - 4;
+  const avalLblL = avalLblR - 175;
+  const avalOverlapsCard = options.soilParameters && avalLblL < avalCardR && avalLblR > avalCardL && avalLineY - 17 < avalCardB && avalLineY - 6 > avalCardT;
+  const avalLabelY = avalOverlapsCard ? avalLineY + 16 : avalLineY - 6;
 
   // Water table height
   const isWaterActive = options.waterTable && (soil.hasWaterTable || (soil.waterTableHeight ?? 0) > 0);
@@ -821,7 +831,7 @@ export function Visualizer({
               />
               <text
                 x={tx(geo.ePiedAv) - 4}
-                y={ty(result.earthPressures.hw_av) - 6}
+                y={avalLabelY}
                 fill="#38bdf8"
                 fontSize="11"
                 fontWeight="900"

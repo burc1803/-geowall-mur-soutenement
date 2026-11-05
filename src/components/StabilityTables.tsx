@@ -29,6 +29,8 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
   const minOverturning = result.critical_overturning_ULS;
   const maxQ_ULS = result.critical_q_toe_ULS;
   const maxQ_SLS = result.critical_q_toe_SLS;
+  // Résultante hors base : valeurs fictives non affichées
+  const outsideULS = result.combinations.some(c => c.type === 'ULS' && c.outside_base);
 
   return (
     <div className="flex flex-col gap-8 w-full">
@@ -55,14 +57,14 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
           </div>
           <div className="bg-slate-800/80 backdrop-blur border border-slate-700 px-3 py-2 rounded-xl text-center">
             <span className="block text-[9px] uppercase font-bold text-slate-400">Renversement Min</span>
-            <span className={`text-base font-black ${minOverturning >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {minOverturning === Infinity ? '∞' : minOverturning.toFixed(2)}
+            <span className={`text-base font-black ${!outsideULS && minOverturning >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {outsideULS ? 'hors base' : minOverturning === Infinity ? '∞' : minOverturning.toFixed(2)}
             </span>
           </div>
           <div className="bg-slate-800/80 backdrop-blur border border-slate-700 px-3 py-2 rounded-xl text-center">
             <span className="block text-[9px] uppercase font-bold text-slate-400">Portance Max ULS</span>
-            <span className={`text-base font-black ${maxQ_ULS <= soil.qUltimate_ULS * (soil.geotechFactors.phi_gu) ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {maxQ_ULS.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">kPa</span>
+            <span className={`text-base font-black ${!outsideULS && maxQ_ULS <= soil.qUltimate_ULS * (soil.geotechFactors.phi_gu) ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {outsideULS ? <>non vérifiable <span className="text-[10px] text-slate-400 font-normal">(résultante hors base)</span></> : <>{maxQ_ULS.toFixed(1)} <span className="text-[10px] text-slate-400 font-normal">kPa</span></>}
             </span>
           </div>
         </div>
