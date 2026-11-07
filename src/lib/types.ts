@@ -302,6 +302,7 @@ export interface CombinationResult {
   mur_Mf: number;
   mur_Vf: number;
   mur_Vf_dv: number; // effort tranchant du voile à dv de la face de la semelle (information ; 11.3.2 À CONFIRMER)
+  slab_ok: boolean; // au moins un état (Z, F, H) a la résultante dans la base : efforts du patin et du talon valides
   toe_Mf: number;
   toe_Vf: number;
   heel_Mf: number;
@@ -542,4 +543,6 @@ export interface AnalysisResult {
   stemForces: { depth: number; shear: number; moment: number }[];
   toeForces: { x: number; shear: number; moment: number }[];
   heelForces: { x: number; shear: number; moment: number }[];
+  toeForcesComb: string; // combinaison ÉLU tracée pour le patin
+  heelForcesComb: string; // combinaison ÉLU tracée pour le talon
 }

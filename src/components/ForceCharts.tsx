@@ -63,6 +63,7 @@ export function ForceCharts({ result }: ForceChartsProps) {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              <p className="text-[10px] text-slate-500 mt-2">{result.toeForcesComb ? <>Combinaison tracée : <strong>{result.toeForcesComb}</strong> (|M<sub>f</sub>| maximal parmi les combinaisons ÉLU valides ; V et M du même état)</> : 'Aucune combinaison valide : efforts NON VÉRIFIABLES (résultante hors base)'}</p>
           </div>
         </div>
 
@@ -84,6 +85,7 @@ export function ForceCharts({ result }: ForceChartsProps) {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              <p className="text-[10px] text-slate-500 mt-2">{result.heelForcesComb ? <>Combinaison tracée : <strong>{result.heelForcesComb}</strong> (|M<sub>f</sub>| maximal parmi les combinaisons ÉLU valides ; V et M du même état)</> : 'Aucune combinaison valide : efforts NON VÉRIFIABLES (résultante hors base)'}</p>
           </div>
         </div>
 

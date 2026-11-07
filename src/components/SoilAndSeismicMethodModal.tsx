@@ -158,7 +158,7 @@ export function SoilAndSeismicMethodModal({
                   {
                     value: 'coulomb',
                     label: 'Coulomb (Avec Frottement δ)',
-                    sub: 'Prend en compte le frottement sol-béton δ = min(atan μ ; r·φ), r = rapport δ/φ de la saisie. Réduit la poussée active.'
+                    sub: 'Prend en compte le frottement sol-béton δ = min(atan μ ; r·φ), r = rapport δ/φ de la saisie. Réduit la poussée active. μ limite aussi δ (Coulomb actif et butée) ; pas de saisie δ séparée.'
                   },
                   {
                     value: 'at_rest',

@@ -479,6 +479,7 @@ export default function App() {
                              </label>
                              <label className="flex flex-col gap-1">
                                 <span className="text-[10px] font-bold text-slate-500 uppercase">Frottement Base μ</span>
+                                <span className="text-[9px] text-slate-500 normal-case leading-tight">μ limite aussi δ (Coulomb actif et butée)</span>
                                 <input type="number" step="0.05" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.mu} onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value) || 0)} />
                              </label>
                              <label className="flex flex-col gap-1">

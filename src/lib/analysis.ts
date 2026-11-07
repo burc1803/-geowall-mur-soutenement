@@ -1329,7 +1329,11 @@ export function analyzeRetainingWall(
           ? (x: number) => (x < Lc ? qt0 * (1 - x / Lc) : 0)
           : (x: number) => (x > baseWidth - Lc ? qh0 * (1 - (baseWidth - x) / Lc) : 0))
         : (x: number) => qt0 + ((qh0 - qt0) * x) / baseWidth;
-      return { Rv, uplift, x1, ecc, B_eff, distributionCase, q_t, q_h, q_design, q_lin, q_bp, pAt, pAtLin, outside };
+      // Pression linéaire par morceaux : un seul segment [a ; b] de q(a) = qa à q(b) = qb (trapèze sur toute la base, ou triangle de longueur de contact Lc)
+      const seg = distributionCase === 'Cas 4'
+        ? (toeSide ? { a: 0, b: Lc, qa: qt0, qb: 0 } : { a: baseWidth - Lc, b: baseWidth, qa: 0, qb: qh0 })
+        : { a: 0, b: baseWidth, qa: qt0, qb: qh0 };
+      return { Rv, uplift, x1, ecc, B_eff, distributionCase, q_t, q_h, q_design, q_lin, q_bp, pAt, pAtLin, seg, outside };
     };
     const bZ = bearingOf(stab);
     const bF = bearingOf(full);
@@ -1380,10 +1384,10 @@ export function analyzeRetainingWall(
     const fH = comb.factors['H'] || 0;
     const fSur = comb.factors[surType] || 0;
     const fSoil = (saturated: boolean, hs: number) => soilWeightFactor(comb, saturated, hs);
-    const slabEffort = (pAt: (x: number) => number, kind: 'toe' | 'heel', xLen: number): { V: number; M: number } => {
+    // Efforts de la semelle (MUR-02 §5) : intégration EXACTE de la pression linéaire par morceaux (trapèze ou triangle, longueur de contact exacte),
+    // plus les charges verticales constantes. u = distance depuis l'extrémité libre ; V et M à la distance xLen (face du voile).
+    const slabEffort = (seg: { a: number; b: number; qa: number; qb: number }, kind: 'toe' | 'heel', xLen: number): { V: number; M: number } => {
       if (xLen <= 0) return { V: 0, M: 0 };
-      const n = 100;
-      const dx = xLen / n;
       const uplift = hasWater ? fH * gamma_w * hw : 0;
       let down: number;
       if (kind === 'heel') {
@@ -1398,29 +1402,41 @@ export function analyzeRetainingWall(
           + fSoil(true, soil.hSolAv) * gamma_prime_f * hSubToe
           + fH * gamma_w * hSubToe; // charge variable à l'avant : favorable, facteur 0
       }
-      let V = 0;
-      let M = 0;
-      for (let i = 0; i < n; i++) {
-        const xi = (i + 0.5) * dx; // distance depuis l'extrémité libre
-        const pos = kind === 'toe' ? xi : baseWidth - xi;
-        const qn = pAt(pos) + uplift - down;
-        V += qn * dx;
-        M += qn * dx * (xLen - xi);
+      const k = uplift - down;
+      let V = k * xLen;
+      let M = (k * xLen * xLen) / 2;
+      const lo = kind === 'toe' ? seg.a : baseWidth - seg.b;
+      const hi = kind === 'toe' ? seg.b : baseWidth - seg.a;
+      const pLo = kind === 'toe' ? seg.qa : seg.qb;
+      const pHi = kind === 'toe' ? seg.qb : seg.qa;
+      const u0 = Math.max(lo, 0);
+      const u1 = Math.min(hi, xLen);
+      if (hi > lo && u1 > u0) {
+        const slope = (pHi - pLo) / (hi - lo);
+        const alpha = pLo - slope * lo; // p(u) = alpha + slope·u
+        const Ip = alpha * (u1 - u0) + (slope * (u1 * u1 - u0 * u0)) / 2;
+        const Ipu = (alpha * (u1 * u1 - u0 * u0)) / 2 + (slope * (u1 ** 3 - u0 ** 3)) / 3;
+        V += Ip;
+        M += xLen * Ip - Ipu;
       }
       return { V: Math.abs(V), M: Math.abs(M) };
     };
-    const toeZ = slabEffort(bZ.pAtLin, 'toe', geo.ePiedAv);
-    const toeF = slabEffort(bF.pAtLin, 'toe', geo.ePiedAv);
-    const heelZ = slabEffort(bZ.pAtLin, 'heel', geo.ePiedAr);
-    const heelF = slabEffort(bF.pAtLin, 'heel', geo.ePiedAr);
-    const toeH = slabEffort(bH.pAtLin, 'toe', geo.ePiedAv);
-    const heelH = slabEffort(bH.pAtLin, 'heel', geo.ePiedAr);
+    // Les états dont la résultante est hors de la base (pic fictif de pression) sont exclus des efforts de dimensionnement.
+    const slabStates = [bZ, bF, bH].filter(st => !st.outside);
+    const slabOk = slabStates.length > 0;
+    const lenOf = (kind: 'toe' | 'heel') => (kind === 'toe' ? geo.ePiedAv : geo.ePiedAr);
+    const evalStates = (kind: 'toe' | 'heel') => slabStates.map(st => ({ st, e: slabEffort(st.seg, kind, lenOf(kind)) }));
+    const toeEv = evalStates('toe');
+    const heelEv = evalStates('heel');
+    const bestState = (ev: { st: typeof bZ; e: { V: number; M: number } }[]) => ev.reduce<typeof ev[number] | null>((best, x) => (!best || x.e.M > best.e.M ? x : best), null);
+    const toeBest = bestState(toeEv);
+    const heelBest = bestState(heelEv);
+    const maxOf = (ev: { e: { V: number; M: number } }[], f: 'V' | 'M') => ev.reduce((m, x) => Math.max(m, x.e[f]), 0);
     slabEnvFns.push((kind, x) => {
-      const len = kind === 'toe' ? geo.ePiedAv : geo.ePiedAr;
-      const a = slabEffort(bZ.pAtLin, kind, Math.min(x, len));
-      const b = slabEffort(bF.pAtLin, kind, Math.min(x, len));
-      const h = slabEffort(bH.pAtLin, kind, Math.min(x, len));
-      return [b, h].reduce((best, e) => (e.M > best.M ? e : best), a);
+      // même état (Z, F ou H) pour V et M : celui qui gouverne M
+      const best = kind === 'toe' ? toeBest : heelBest;
+      if (!best) return { V: 0, M: 0 };
+      return slabEffort(best.st.seg, kind, Math.min(x, lenOf(kind)));
     });
     stemSectionsByComb.push(stemRes.sections);
 
@@ -1477,10 +1493,11 @@ export function analyzeRetainingWall(
       mur_Mf: stemRes.maxM,
       mur_Vf: stemRes.maxV,
       mur_Vf_dv: stemRes.maxV,
-      toe_Mf: Math.max(toeZ.M, toeF.M, toeH.M),
-      toe_Vf: Math.max(toeZ.V, toeF.V, toeH.V),
-      heel_Mf: Math.max(heelZ.M, heelF.M, heelH.M),
-      heel_Vf: Math.max(heelZ.V, heelF.V, heelH.V)
+      toe_Mf: maxOf(toeEv, 'M'),
+      toe_Vf: maxOf(toeEv, 'V'),
+      heel_Mf: maxOf(heelEv, 'M'),
+      heel_Vf: maxOf(heelEv, 'V'),
+      slab_ok: slabOk
     });
 
     if (comb.type === 'SLS') {
@@ -1501,29 +1518,45 @@ export function analyzeRetainingWall(
   const defaultComb = results.find(r => r.combName.includes('ELS 1')) || results[0];
 
   // Diagrammes d'efforts : combinaison ELU qui gouverne (même jeu de facteurs que le calcul, E11b)
-  let iMaxBase = -1;
   let iMaxStem = -1;
   results.forEach((r, i) => {
     if (r.type !== 'ULS') return;
-    if (iMaxBase < 0 || r.q_design > results[iMaxBase].q_design) iMaxBase = i;
     if (iMaxStem < 0 || Math.abs(r.mur_Mf) > Math.abs(results[iMaxStem].mur_Mf)) iMaxStem = i;
   });
-  if (iMaxBase < 0) iMaxBase = 0;
   if (iMaxStem < 0) iMaxStem = 0;
 
   const toeForces: { x: number; shear: number; moment: number }[] = [];
   const heelForces: { x: number; shear: number; moment: number }[] = [];
-  const numPts = 20;
-  for (let i = 0; i <= numPts; i++) {
-    const x = (i / numPts) * geo.ePiedAv;
-    const e = slabEnvFns[iMaxBase]('toe', x);
-    toeForces.push({ x, shear: e.V, moment: e.M });
+  // Diagrammes du patin et du talon : combinaison ÉLU VALIDE (hors combinaisons à résultante hors base) de plus grand |Mf|
+  const slabGov = (key: 'toe_Mf' | 'heel_Mf') => {
+    let idx = -1;
+    results.forEach((r, i) => {
+      if (r.type !== 'ULS' || !r.slab_ok) return;
+      if (idx < 0 || r[key] > results[idx][key]) idx = i;
+    });
+    return idx;
+  };
+  const iToe = slabGov('toe_Mf');
+  const iHeel = slabGov('heel_Mf');
+  const numPts = 40;
+  if (iToe >= 0) {
+    for (let i = 0; i <= numPts; i++) {
+      const x = (i / numPts) * geo.ePiedAv;
+      const e = slabEnvFns[iToe]('toe', x);
+      toeForces.push({ x, shear: e.V, moment: e.M });
+    }
   }
-  for (let i = 0; i <= numPts; i++) {
-    const x = (i / numPts) * geo.ePiedAr;
-    const e = slabEnvFns[iMaxBase]('heel', x);
-    heelForces.push({ x, shear: e.V, moment: e.M });
+  if (iHeel >= 0) {
+    for (let i = 0; i <= numPts; i++) {
+      const x = (i / numPts) * geo.ePiedAr;
+      const e = slabEnvFns[iHeel]('heel', x);
+      heelForces.push({ x, shear: e.V, moment: e.M });
+    }
   }
+  const toeForcesComb = iToe >= 0 ? results[iToe].combName : '';
+  const heelForcesComb = iHeel >= 0 ? results[iHeel].combName : '';
+  if (iToe < 0) warnings.push("Patin : toutes les combinaisons ÉLU ont la résultante hors de la base ; efforts du patin NON VÉRIFIABLES (aucune valeur fictive).");
+  if (iHeel < 0) warnings.push("Talon : toutes les combinaisons ÉLU ont la résultante hors de la base ; efforts du talon NON VÉRIFIABLES (aucune valeur fictive).");
   // profondeur décroissante comme l'ancien tracé MEF (du pied au haut)
   const stemForces = [...stemSectionsByComb[iMaxStem]].reverse();
 
@@ -1813,8 +1846,8 @@ export function analyzeRetainingWall(
     ulsCombs.reduce((best, c) => (f(c) > f(best) ? c : best), ulsCombs[0] || results[0]);
   const governingBearing = maxBy(c => (c.q_capacity > 0 ? c.q_design / c.q_capacity : Infinity));
   const governingStem = maxBy(c => Math.abs(c.mur_Mf));
-  const governingToe = maxBy(c => Math.abs(c.toe_Mf));
-  const governingHeel = maxBy(c => Math.abs(c.heel_Mf));
+  const governingToe = iToe >= 0 ? results[iToe] : maxBy(c => Math.abs(c.toe_Mf));
+  const governingHeel = iHeel >= 0 ? results[iHeel] : maxBy(c => Math.abs(c.heel_Mf));
 
   return {
     K_active,
@@ -1866,13 +1899,15 @@ export function analyzeRetainingWall(
     sumV: defaultComb.sumV_max,
     stemMaxShear: mur_Vf,
     stemMaxMoment: mur_Mf,
-    toeMaxShear: Math.max(...toeForces.map(f => Math.abs(f.shear))),
-    toeMaxMoment: Math.max(...toeForces.map(f => Math.abs(f.moment))),
-    heelMaxShear: Math.max(...heelForces.map(f => Math.abs(f.shear))),
-    heelMaxMoment: Math.max(...heelForces.map(f => Math.abs(f.moment))),
+    toeMaxShear: Math.max(0, ...toeForces.map(f => Math.abs(f.shear))),
+    toeMaxMoment: Math.max(0, ...toeForces.map(f => Math.abs(f.moment))),
+    heelMaxShear: Math.max(0, ...heelForces.map(f => Math.abs(f.shear))),
+    heelMaxMoment: Math.max(0, ...heelForces.map(f => Math.abs(f.moment))),
     concreteDesign,
     stemForces,
     toeForces,
-    heelForces
+    heelForces,
+    toeForcesComb,
+    heelForcesComb
   };
 }

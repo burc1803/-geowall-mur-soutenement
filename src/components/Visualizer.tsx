@@ -163,8 +163,8 @@ export function Visualizer({
 
   // Stability status
   const uls = result.governingULS || result.combinations[0];
-  const slidingStatus = uls ? uls.status_sliding : 'OK';
-  const overturningStatus = uls ? uls.status_overturning : 'OK';
+  const slidingStatus = result.governingSliding ? result.governingSliding.status_sliding : 'OK'; // combinaisons gouvernantes du moteur (ÉLU)
+  const overturningStatus = result.governingOverturning ? result.governingOverturning.status_overturning : 'OK';
   const bearingStatus = uls ? uls.status_bearing : 'OK';
 
   const rx = uls ? uls.sumH : result.sumH_active;
