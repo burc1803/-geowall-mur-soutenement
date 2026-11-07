@@ -19,7 +19,7 @@ export function buildSlidingEq(c: CombinationResult, r: AnalysisResult, soil: So
   const sumV = Math.max(c.sumV_min, 0);
   const cohesion = r.foundationSoil.cohesion ?? 0;
   const substituted = `${fr(c.psi)} · [ ${fr(c.phi_gs)} · ${fr(sumV, 1)} · ${fr(soil.mu)} + ${fr(c.phi_coh)} · ${fr(cohesion, 1)} · ${fr(c.B_slide)} + ${fr(c.phi_p)} · (${fr(c.Pp_used, 1)} + ${fr(c.Pw_front_used, 1)}) ]`;
-  const result = `Fs = ${fr(c.Fs, 1)} kN/m ; ΣHf = ${fr(c.Fh_destab, 1)} kN/m ; Fs / ΣHf = ${fr(c.FOS_sliding)} ${c.FOS_sliding >= 1 ? '≥' : '<'} 1,00 (${c.status_sliding})`;
+  const result = `Fs = ${fr(c.Fs, 1)} kN/m ; ΣHf = ${fr(c.Fh_destab, 1)} kN/m ; Fs / ΣHf = ${fr(c.FOS_sliding)} ${c.FOS_sliding >= 1 ? '≥' : '<'} 1,00 (${r.verifiable ? c.status_sliding : 'NON VÉRIFIABLE'})`;
   return { psi: c.psi, phi_gs: c.phi_gs, sumV, mu: soil.mu, phi_coh: c.phi_coh, c: cohesion, Bp: c.B_slide, phi_p: c.phi_p, Pp: c.Pp_used, Pw: c.Pw_front_used, sumHf: c.Fh_destab, Fs: c.Fs, ratio: c.FOS_sliding, substituted, result };
 }
 
@@ -29,10 +29,10 @@ export interface OverturningEq {
 }
 
 /** Renversement (MUR-02 §2.3, E08) : Ψ·φov·ΣMstab ≥ ΣMrenv, la butée faisant partie de ΣMstab. */
-export function buildOverturningEq(c: CombinationResult): OverturningEq {
+export function buildOverturningEq(c: CombinationResult, verifiable = true): OverturningEq {
   const Mres = c.Ms_nominal - c.Ms_passive;
   const substituted = `${fr(c.psi)} · ${fr(c.phi_ov)} · (${fr(Mres, 1)} + ${fr(c.Ms_passive, 1)}) = ${fr(c.Ms, 1)} ; ΣMrenv = ${fr(c.Mr, 1)}`;
-  const result = `Ψ·φov·ΣMstab / ΣMrenv = ${fr(c.FOS_overturning)} ${c.FOS_overturning >= 1 ? '≥' : '<'} 1,00 (${c.status_overturning})`;
+  const result = `Ψ·φov·ΣMstab / ΣMrenv = ${fr(c.FOS_overturning)} ${c.FOS_overturning >= 1 ? '≥' : '<'} 1,00 (${verifiable ? c.status_overturning : 'NON VÉRIFIABLE'})`;
   return { psi: c.psi, phi_ov: c.phi_ov, Mres, Mpass: c.Ms_passive, Ms: c.Ms, Mr: c.Mr, ratio: c.FOS_overturning, substituted, result };
 }
 

@@ -31,4 +31,18 @@ describe('Étapes & formules et modale : rendu', () => {
     expect(html).not.toMatch(/CNB (<!-- -->)?2020/);
     expect(html).not.toContain('NaN');
   });
+
+  it('KAE indéterminé (φ = 20°, kh = 0,5) : NON VÉRIFIABLE partout, aucun (OK) ni 0,00 kN/m pour ΔPAE', () => {
+    const soilI: SoilProperties = { ...SOIL, phi: 20, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, seismicMethod: 'mononobe_okabe', pga: 0.5 } };
+    const r = analyzeRetainingWall(GEO, soilI, LOADS, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
+    expect(r.verifiable).toBe(false);
+    expect(r.seismic.scenarios.some(sc => sc.indeterminate)).toBe(true);
+    const html = (['seisme', 'stabilite', 'conception_omar', 'ancrage'] as const)
+      .map(sec => renderToString(<CalculationStepsTheory geo={GEO} soil={soilI} loads={LOADS} result={r} conc={DEFAULT_CONCRETE_PROPS} initialSection={sec} />))
+      .join('');
+    expect(html).toContain('NON VÉRIFIABLE');
+    expect(html).not.toContain('(OK)');
+    expect(html).not.toContain('0,00 kN/m');
+    expect(html).not.toContain('NaN');
+  });
 });

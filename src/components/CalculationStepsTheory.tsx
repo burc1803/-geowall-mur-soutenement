@@ -24,12 +24,13 @@ interface CalculationStepsTheoryProps {
   loads: LoadsConfig;
   result: AnalysisResult;
   conc?: ConcreteProperties;
+  initialSection?: SectionKey; // section ouverte au départ (utile aux tests de rendu)
 }
 
-type SectionKey = 'poussee' | 'seisme' | 'stabilite' | 'conception_omar' | 'ancrage';
+export type SectionKey = 'poussee' | 'seisme' | 'stabilite' | 'conception_omar' | 'ancrage';
 
-export function CalculationStepsTheory({ geo, soil, loads, result, conc }: CalculationStepsTheoryProps) {
-  const [activeSection, setActiveSection] = useState<SectionKey>('poussee');
+export function CalculationStepsTheory({ geo, soil, loads, result, conc, initialSection }: CalculationStepsTheoryProps) {
+  const [activeSection, setActiveSection] = useState<SectionKey>(initialSection ?? 'poussee');
   const ep = result.earthPressures;
   const cd = result.concreteDesign;
   const baseWidth = geo.ePiedAv + geo.epStem + geo.ePiedAr;
@@ -39,8 +40,10 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
   const ulsSliding = result.governingSliding;
   const ulsOverturning = result.governingOverturning;
   const ulsBearing = result.governingBearing;
+  const nv = !result.verifiable; // KAE indéterminé, γ ≤ γw, etc. : aucun statut CONFORME / OK n'est affiché
+  const st = (ok: boolean, okTxt = 'CONFORME', koTxt = 'NON CONFORME') => (nv ? 'NON VÉRIFIABLE' : ok ? okTxt : koTxt);
   const slidingEq = buildSlidingEq(ulsSliding, result, soil);
-  const overturningEq = buildOverturningEq(ulsOverturning);
+  const overturningEq = buildOverturningEq(ulsOverturning, result.verifiable);
   const bearingEq = buildBearingEq(ulsBearing, baseWidth, result.stabilityCriterion);
   const inertia = conc ? inertiaStrings(result, geo, conc) : { stem: ' = ', base: ' = ' };
 
@@ -99,7 +102,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm">1</div>
                 <div>
                   <h2 className="text-base font-black text-slate-900">Coefficients de poussée et de butée des terres</h2>
-                  <p className="text-xs text-slate-500">Rankine, Coulomb et Jaky (CFEM 5e éd., À CONFIRMER) ; butée intégrée par couches (CFEM 5e éd., § 20.7)</p>
+                  <p className="text-xs text-slate-500">Rankine, Coulomb et Jaky (CFEM 5e éd., À CONFIRMER) ; butée intégrée par couches (amendement A3 ; CFEM 5e éd., 20.7.3.3)</p>
                 </div>
               </div>
               <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 px-2.5 py-1 rounded border border-indigo-200">
@@ -245,7 +248,12 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                           />
                         </>
                       )}
-                      {dp && (
+                      {sc.indeterminate && result.seismic.method === 'mononobe_okabe' && (
+                        <div role="alert" className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                          Non vérifiable : K<sub>AE</sub> indéterminé (φ − β &lt; ψ). La poussée dynamique ΔP<sub>AE</sub> n'est pas calculée ; équilibre limite requis (CFEM 5e éd., 18.7.4).
+                        </div>
+                      )}
+                      {dp && !sc.indeterminate && (
                         <Eq
                           general={result.seismic.method === 'mononobe_okabe'
                             ? <>Δ<V n="P" s="AE" /> = ½ · <V n="γ" /> · <V n="H" />² · [(1 − <V n="k" s="v" />) · <V n="K" s="AE" /> − <V n="K" s="A" />] ≥ 0 (<V n="P" s="AE" /> = <V n="P" s="A" /> + Δ<V n="P" s="AE" />, éq. 18.20-18.23), appliquée à 0,6<V n="H" /></>
@@ -311,8 +319,8 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
             <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black uppercase text-blue-900 flex items-center gap-1.5"><ArrowRightLeft size={16} /><span>A. Glissement à la base</span></h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsSliding.status_sliding === 'NON VÉRIFIABLE' ? 'bg-amber-100 text-amber-800' : ulsSliding.FOS_sliding >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  {ulsSliding.status_sliding === 'NON VÉRIFIABLE' ? 'Rapport min : non vérifiable (df non saisie)' : <>Rapport min = {fr(ulsSliding.FOS_sliding)} ({ulsSliding.status_sliding})</>}
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${nv || ulsSliding.status_sliding === 'NON VÉRIFIABLE' ? 'bg-amber-100 text-amber-800' : ulsSliding.FOS_sliding >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                  {nv ? 'Rapport min : non vérifiable (résultats NON VÉRIFIABLES)' : ulsSliding.status_sliding === 'NON VÉRIFIABLE' ? 'Rapport min : non vérifiable (df non saisie)' : <>Rapport min = {fr(ulsSliding.FOS_sliding)} ({ulsSliding.status_sliding})</>}
                 </span>
               </div>
               <Eq
@@ -327,8 +335,8 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
             <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black uppercase text-amber-900 flex items-center gap-1.5"><Scale size={16} /><span>B. Renversement autour de l'orteil</span></h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsOverturning.outside_base || ulsOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'bg-amber-100 text-amber-800' : ulsOverturning.FOS_overturning >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  {ulsOverturning.outside_base ? 'Rapport min : non vérifiable (hors base)' : ulsOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'Rapport min : non vérifiable (df non saisie)' : <>Rapport min = {fr(ulsOverturning.FOS_overturning)} ({ulsOverturning.status_overturning})</>}
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${nv || ulsOverturning.outside_base || ulsOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'bg-amber-100 text-amber-800' : ulsOverturning.FOS_overturning >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                  {nv ? 'Rapport min : non vérifiable (résultats NON VÉRIFIABLES)' : ulsOverturning.outside_base ? 'Rapport min : non vérifiable (hors base)' : ulsOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'Rapport min : non vérifiable (df non saisie)' : <>Rapport min = {fr(ulsOverturning.FOS_overturning)} ({ulsOverturning.status_overturning})</>}
                 </span>
               </div>
               <Eq
@@ -343,8 +351,8 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black uppercase text-emerald-900 flex items-center gap-1.5"><Layers size={16} /><span>C. Capacité portante et répartition des pressions</span></h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsBearing.outside_base ? 'bg-amber-100 text-amber-800' : ulsBearing.status_bearing === 'OK' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  {ulsBearing.outside_base ? <><i>q</i>/<i>q</i><sub>cap</sub> : non vérifiable (hors base)</> : <><i>q</i>/<i>q</i><sub>cap</sub> = {fr(ulsBearing.q_capacity > 0 ? ulsBearing.q_design / ulsBearing.q_capacity : Infinity)} ({ulsBearing.status_bearing})</>}
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${nv || ulsBearing.outside_base ? 'bg-amber-100 text-amber-800' : ulsBearing.status_bearing === 'OK' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                  {nv ? <><i>q</i>/<i>q</i><sub>cap</sub> : non vérifiable (résultats NON VÉRIFIABLES)</> : ulsBearing.outside_base ? <><i>q</i>/<i>q</i><sub>cap</sub> : non vérifiable (hors base)</> : <><i>q</i>/<i>q</i><sub>cap</sub> = {fr(ulsBearing.q_capacity > 0 ? ulsBearing.q_design / ulsBearing.q_capacity : Infinity)} ({ulsBearing.status_bearing})</>}
                 </span>
               </div>
               <p className="text-xs text-slate-600">
@@ -416,7 +424,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <Eq
                     general={<><V n="A" s="s,min" /> = max(0,0015 <V n="A" s="g" /> ; 0,2 √<V n="f" prime s="c" /> / <V n="f" s="y" /> · <V n="b" /> · <V n="h" />) (14.1.8.5 ; 10.5.1.2 b), sauf dispense 10.5.1.3)</>}
                     substituted={<>0,0015 · {fr(1000 * cd.mur_interieur.section_h, 0)} = {fr(0.0015 * 1000 * cd.mur_interieur.section_h, 0)} ; 10.5.1.2 b) : {fr(cd.mur_interieur.As_min_flexure, 0)}{cd.mur_interieur.flexure_min_waived ? ' (dispensée)' : ''}</>}
-                    result={<><V n="A" s="s,min" /> = {fr(cd.mur_interieur.As_min, 0)} mm²/m ; fourni : {cd.mur_interieur.bar_designation} → {fr(cd.mur_interieur.As_provided, 0)} {cd.mur_interieur.As_ok ? '≥' : '<'} {fr(cd.mur_interieur.As_min, 0)} ({cd.mur_interieur.As_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    result={<><V n="A" s="s,min" /> = {fr(cd.mur_interieur.As_min, 0)} mm²/m ; fourni : {cd.mur_interieur.bar_designation} → {fr(cd.mur_interieur.As_provided, 0)} {cd.mur_interieur.As_ok ? '≥' : '<'} {fr(cd.mur_interieur.As_min, 0)} ({st(cd.mur_interieur.As_ok)})</>}
                     note={cd.mur_interieur.As_min_basis}
                   />
                 </div>
@@ -454,7 +462,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <Eq
                     general={<><V n="c" />/<V n="d" /> ≤ 0,8 · <Frac n="700" d={<>700 + <V n="f" s="y" /></>} /></>}
                     substituted={<>{fr(cd.mur_interieur.c_depth, 1)} / {fr(cd.mur_interieur.d, 1)} ≤ 0,8 · 700 / (700 + {fr(conc.fy, 0)})</>}
-                    result={<>{fr(cd.mur_interieur.ductility_c_over_d, 3)} {cd.mur_interieur.ductility_ok ? '≤' : '>'} {fr(cd.mur_interieur.ductility_limit, 3)} ({cd.mur_interieur.ductility_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    result={<>{fr(cd.mur_interieur.ductility_c_over_d, 3)} {cd.mur_interieur.ductility_ok ? '≤' : '>'} {fr(cd.mur_interieur.ductility_limit, 3)} ({st(cd.mur_interieur.ductility_ok)})</>}
                   />
                 </div>
 
@@ -463,7 +471,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <Eq
                     general={<><V n="z" /> = <V n="f" s="s" /> · ∛(<V n="d" s="c" /> · <V n="A" />) ≤ <V n="z" s="lim" />, <V n="f" s="s" /> = 0,6 <V n="f" s="y" />, <V n="A" /> = 2 <V n="d" s="c" /> <V n="s" /></>}
                     substituted={<>{fr(0.6 * conc.fy, 0)} · ∛({fr(cd.mur_interieur.crack_dc ?? 0, 1)} · {fr(cd.mur_interieur.crack_A ?? 0, 0)})</>}
-                    result={<><V n="z" /> = {fr(cd.mur_interieur.Z_factor ?? NaN, 0)} N/mm {cd.mur_interieur.Z_ok ? '≤' : '>'} {fr(cd.mur_interieur.Z_limit ?? NaN, 0)} N/mm ({cd.mur_interieur.Z_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    result={<><V n="z" /> = {fr(cd.mur_interieur.Z_factor ?? NaN, 0)} N/mm {cd.mur_interieur.Z_ok ? '≤' : '>'} {fr(cd.mur_interieur.Z_limit ?? NaN, 0)} N/mm ({st(cd.mur_interieur.Z_ok)})</>}
                     note="Enrobage pris au plus 50 mm pour d_c et A."
                   />
                 </div>
@@ -481,7 +489,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <Eq
                     general={<><V n="d" s="v" /> = max(0,9 <V n="d" /> ; 0,72 <V n="h" />) ; <V n="V" s="c" /> = <V n="φ" s="c" /> <V n="λ" /> <V n="β" /> √<V n="f" prime s="c" /> <V n="b" s="w" /> <V n="d" s="v" /> · 10⁻³ ≥ <V n="V" s="f" /></>}
                     substituted={<>{fr(cd.mur_interieur.dv, 1)} ; {fr(conc.phi_c)} · 1,0 · {fr(cd.mur_interieur.beta, 4)} · √{fr(Math.min(conc.fc_mur, 64), 0)} (≤ 8 MPa) · 1000 · {fr(cd.mur_interieur.dv, 1)} · 10⁻³</>}
-                    result={<><V n="V" s="c" /> = {fr(cd.mur_interieur.Vc, 1)} kN/m {cd.mur_interieur.shear_ok ? '≥' : '<'} <V n="V" s="f" /> = {fr(cd.mur_interieur.Vf, 1)} kN/m ({cd.mur_interieur.shear_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    result={<><V n="V" s="c" /> = {fr(cd.mur_interieur.Vc, 1)} kN/m {cd.mur_interieur.shear_ok ? '≥' : '<'} <V n="V" s="f" /> = {fr(cd.mur_interieur.Vf, 1)} kN/m ({st(cd.mur_interieur.shear_ok)})</>}
                     note={<>β : {cd.mur_interieur.beta_rule}. <i>V</i><sub>r,max</sub> = 0,25 <i>φ</i><sub>c</sub> <i>f</i>′<sub>c</sub> <i>b</i><sub>w</sub> <i>d</i><sub>v</sub> = {fr(cd.mur_interieur.Vr_max, 0)} kN/m (11.3.3). Définition de <i>d</i><sub>v</sub> : À CONFIRMER.</>}
                   />
                 </div>
@@ -491,7 +499,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <Eq
                     general={<><V n="v" s="r" /> = min[ <V n="λ" /> <V n="φ" s="c" /> (<V n="c" /> + <V n="μ" /> <V n="σ" />) ; 0,25 <V n="φ" s="c" /> <V n="f" prime s="c" /> ] + <V n="φ" s="s" /> <V n="ρ" s="v" /> <V n="f" s="y" /> cos <V n="α" s="f" /> ; <V n="V" s="r" /> = <V n="v" s="r" /> <V n="A" s="cv" /></>}
                     substituted={<>c = {fr(cd.cisaillement_friction.c)} MPa ; μ = {fr(cd.cisaillement_friction.mu)} ; σ = {fr(cd.cisaillement_friction.sigma, 3)} MPa ; limite 0,25 φc f′c = {fr(cd.cisaillement_friction.vr_cap, 2)} MPa{cd.cisaillement_friction.capped ? ' (atteinte)' : ''} ; ρv = {fr(cd.cisaillement_friction.rho_v, 5)} ; αf = 90° (cos αf = 0)</>}
-                    result={<><V n="V" s="r" /> = {fr(cd.cisaillement_friction.Vr, 1)} kN/m {cd.cisaillement_friction.status_ok ? '≥' : '<'} <V n="V" s="f" /> = {fr(cd.cisaillement_friction.Vf, 1)} kN/m ({cd.cisaillement_friction.status_ok ? 'OK' : 'NON'})</>}
+                    result={<><V n="V" s="r" /> = {fr(cd.cisaillement_friction.Vr, 1)} kN/m {cd.cisaillement_friction.status_ok ? '≥' : '<'} <V n="V" s="f" /> = {fr(cd.cisaillement_friction.Vf, 1)} kN/m ({st(cd.cisaillement_friction.status_ok, 'OK', 'NON')})</>}
                     note={<>{cd.cisaillement_friction.surface}. σ = ρ<sub>v</sub> <i>f</i><sub>y</sub> sin α<sub>f</sub> + N/A<sub>g</sub>, N = {fr(cd.cisaillement_friction.N, 1)} kN/m non pondéré (11.5.4). Cumul avec l'armature de flexion : À CONFIRMER.</>}
                   />
                 </div>
@@ -501,7 +509,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   <Eq
                     general={<>Σ<V n="A" s="s,hor" /> (A3 + A4) ≥ 0,002 <V n="A" s="g" /> ; espacement ≤ min(3<V n="t" /> ; 500) et <V n="d" s="b" /> ≤ <V n="t" />/10 par nappe</>}
                     substituted={<>{fr(cd.mur_horizontal_ext.As_provided, 0)} + {fr(cd.mur_horizontal_int.As_provided, 0)} ≥ 0,002 · {fr(1000 * cd.mur_interieur.section_h, 0)}</>}
-                    result={<>Σ = {fr(cd.mur_horizontal.As_provided, 0)} {cd.mur_horizontal.As_ok ? '≥' : '<'} {fr(cd.mur_horizontal.As_min, 0)} mm²/m ({cd.mur_horizontal.As_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    result={<>Σ = {fr(cd.mur_horizontal.As_provided, 0)} {cd.mur_horizontal.As_ok ? '≥' : '<'} {fr(cd.mur_horizontal.As_min, 0)} mm²/m ({st(cd.mur_horizontal.As_ok)})</>}
                     note="14.1.8.6 : aire totale ; répartition entre faces non prescrite par la norme."
                   />
                 </div>
@@ -542,7 +550,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 <Eq
                   general={<><V n="l" s="hb" /> = 100 <V n="d" s="b" /> / √<V n="f" prime s="c" /> ; <V n="l" s="dh" /> = max[ <V n="l" s="hb" /> · <V n="f" s="y" />/400 · (0,7 si 12.5.3) ; 8<V n="d" s="b" /> ; 150 mm ]</>}
                   substituted={<>100 · {fr(cd.mur_interieur.db, 1)} / √{fr(conc.fc_mur, 0)} = {fr(cd.mur_interieur.lhb ?? NaN, 1)} ; {fr(cd.mur_interieur.lhb ?? NaN, 1)} · {fr(conc.fy, 0)}/400</>}
-                  result={<><V n="l" s="dh" /> = {fr(cd.mur_interieur.ldh_required ?? NaN, 1)} mm {cd.mur_interieur.anchorage_ok ? '≤' : '>'} {fr(cd.mur_interieur.ldh_available ?? NaN, 0)} mm disponibles ({cd.mur_interieur.anchorage_ok ? 'ANCRAGE VALIDE' : 'NON SUFFISANT'})</>}
+                  result={<><V n="l" s="dh" /> = {fr(cd.mur_interieur.ldh_required ?? NaN, 1)} mm {cd.mur_interieur.anchorage_ok ? '≤' : '>'} {fr(cd.mur_interieur.ldh_available ?? NaN, 0)} mm disponibles ({st(cd.mur_interieur.anchorage_ok, 'ANCRAGE VALIDE', 'NON SUFFISANT')})</>}
                   note={<>{cd.mur_interieur.ldh_factors}. Épaisseur de la semelle <i>h</i><sub>s</sub> = {fr(geo.epBase * 1000, 0)} mm.</>}
                 />
               </div>
