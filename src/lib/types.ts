@@ -167,7 +167,7 @@ export interface SoilProperties {
   stabilityCriterion?: StabilityCriterion; // Défaut : 'moments'
   // Amendement A3 : eau à l'avant (scénario B), désactivée par défaut (scénario A : sol déjaugé, sans eau à l'avant)
   frontWater?: { enabled: boolean; hwAv?: number }; // hwAv mesuré depuis la sous-face ; défaut : h_pass
-  mu: number; // Coefficient de frottement sol-béton (tan delta) - default 0.55 (CFEM Table 24.4)
+  mu: number; // Coefficient de frottement sol-béton (tan delta) - default 0.55 (CFEM 5e éd., À CONFIRMER)
   soilFrictionType?: string; // e.g. 'compact_sand' | 'clean_gravel' | 'silty_sand' | 'custom'
   presetType?: SoilPresetType;
   methodConfig?: SoilMethodConfig;

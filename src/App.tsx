@@ -157,6 +157,20 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 text-xs font-bold">
+            {/* Étapes, formules et ME : ouvre l'onglet « theory » (retiré de la barre d'onglets principale) */}
+            <button
+              onClick={() => setActiveTab('theory')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition-colors border whitespace-nowrap ${
+                activeTab === 'theory'
+                  ? 'bg-amber-600 text-white border-amber-500'
+                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+              }`}
+              title="Étapes de calcul, formules et moments équivalents"
+            >
+              <BookOpen size={14} />
+              <span className="hidden sm:inline">Étapes & formules</span>
+            </button>
+
             {/* Édition du CNB pour le tableau 4.1.3.2.-A (amendement A1 de MUR-01) */}
             <label
               className="flex items-center gap-1.5 bg-slate-800 text-blue-300 px-3 py-2 rounded-xl border border-slate-700 shadow-sm"
@@ -433,7 +447,7 @@ export default function App() {
                                 <input type="number" step="1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.cohesion ?? 0} onChange={(e) => handleChangeSoil('cohesion', parseFloat(e.target.value) || 0)} />
                              </label>
                              <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Preset μ (CFEM 24.4)</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Preset μ (CFEM 5e éd., À CONFIRMER)</span>
                                 <select 
                                   className="p-2 border rounded-lg text-xs bg-slate-50 font-semibold text-slate-700 truncate"
                                   value={soil.mu}
@@ -892,13 +906,6 @@ export default function App() {
                     Plans
                 </button>
                 <button 
-                    className={`pb-3 px-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'theory' ? 'border-amber-500 text-amber-800 bg-amber-50/50 rounded-t-lg font-black' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
-                    onClick={() => setActiveTab('theory')}
-                >
-                    <BookOpen size={14} className="text-amber-600" />
-                    <span>Étapes, Formules & me</span>
-                </button>
-                <button 
                     className={`pb-3 px-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'report' ? 'border-emerald-600 text-emerald-600 font-black' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
                     onClick={() => setActiveTab('report')}
                 >
@@ -958,8 +965,8 @@ export default function App() {
                 )}
                 
                 {activeTab === 'efforts' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col xl:flex-row gap-8">
-                        <div className="xl:w-1/3">
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col gap-8">
+                        <div className="w-full">
                             <Visualizer 
                               mode="dcl" 
                               geo={geo} 
@@ -972,7 +979,7 @@ export default function App() {
                               conc={conc}
                             />
                         </div>
-                        <div className="xl:w-2/3">
+                        <div className="w-full">
                             <ForceCharts result={result} />
                         </div>
                     </div>

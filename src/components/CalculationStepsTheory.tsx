@@ -59,7 +59,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
         <div className="flex items-center gap-2 mt-6 overflow-x-auto pb-1 text-xs">
           {[
             { id: 'poussee', label: '1. Poussée & Butée (Ka, Kp, K0, Kae)', icon: Layers },
-            { id: 'seisme', label: '2. Séisme CFEM (kh, Seed & Whitman)', icon: Activity },
+            { id: 'seisme', label: '2. Séisme (CFEM 5e éd., § 18.7 : M-O, Wood)', icon: Activity },
             { id: 'stabilite', label: '3. Stabilité (Glissement, Renversement, Q)', icon: Scale },
             { id: 'conception_omar', label: '4. Conception Omar Chaallal (Flexion & Cisaillement)', icon: ShieldCheck },
             { id: 'ancrage', label: '5. Ancrage & Crochets (CSA Chap. 7 & 12)', icon: ArrowRightLeft },
@@ -104,7 +104,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                 </div>
               </div>
               <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 px-2.5 py-1 rounded border border-indigo-200">
-                CFEM Section 24.3 & 24.4
+                CFEM 5e éd., § 20.7 (À CONFIRMER pour Rankine, Coulomb et Jaky)
               </span>
             </div>
 
@@ -228,7 +228,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                     Paramètres Sismiques & Poussée Dynamique selon le CFEM
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Méthode de Mononobe-Okabe et formule simplifiée de Seed & Whitman (CFEM 5e éd., § 18.7)
+                    Méthode de Mononobe-Okabe (CFEM 5e éd., § 18.7) ; Seed & Whitman : méthode simplifiée hors fiche MUR-02
                   </p>
                 </div>
               </div>
@@ -298,7 +298,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
               {/* Formule simplifiée de Seed & Whitman */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <h3 className="text-xs font-black uppercase text-slate-900 mb-2">
-                  2. Méthode Seed & Whitman (1970 / CFEM 5e éd., § 18.7)
+                  2. Méthode Seed & Whitman (1970) — hors fiche MUR-02
                 </h3>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-[11px] leading-relaxed mb-3">
                   ΔKae ≈ 0.75 · kh<br />

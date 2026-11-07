@@ -12,13 +12,13 @@ export function ForceCharts({ result }: ForceChartsProps) {
   // We can just negate depth or use reversed YAxis.
 
   return (
-    <div className="flex flex-col gap-8 w-full mt-8">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div className="flex flex-col gap-8 w-full mt-2">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
         {/* Stem Forces */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider mb-6 flex items-center gap-2">
-             Efforts dans le Voile (Stem)
+             Efforts dans le voile
           </h3>
           <div className="h-[300px] w-full flex">
              <ResponsiveContainer width="50%" height="100%">
@@ -44,14 +44,13 @@ export function ForceCharts({ result }: ForceChartsProps) {
           </div>
         </div>
 
-        {/* Toe and Heel Forces */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-6">
-          
+        {/* Patin et talon : une carte chacune */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <div>
               <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider mb-4 flex items-center gap-2">
-                 Talon Avant (Toe)
+                 Patin (avant)
               </h3>
-              <div className="h-[150px] w-full">
+              <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={result.toeForces} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -65,12 +64,14 @@ export function ForceCharts({ result }: ForceChartsProps) {
                 </ResponsiveContainer>
               </div>
           </div>
+        </div>
 
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <div>
               <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider mb-4 flex items-center gap-2">
-                 Talon Arrière (Heel)
+                 Talon (arrière)
               </h3>
-               <div className="h-[150px] w-full">
+               <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={result.heelForces} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -84,7 +85,6 @@ export function ForceCharts({ result }: ForceChartsProps) {
                 </ResponsiveContainer>
               </div>
           </div>
-          
         </div>
 
       </div>
