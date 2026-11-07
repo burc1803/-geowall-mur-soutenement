@@ -253,13 +253,13 @@ export interface CombinationResult {
   Rf_cohesion: number;
   Rf_passive: number;
   B_slide: number; // largeur comprimée B′ pour le terme cohésif (m)
-  // Stabilité au Glissement (CFEM Table 8.1 & Fig 24.12)
+  // Stabilité au Glissement (CFEM 5e éd., tableau 6.2)
   Fs: number; // Force stabilisante totale (pondérée : Rf_friction + Rf_cohesion + Rf_passive)
   Fh_destab: number; // Sollicitation horizontale déstabilisante
   FOS_sliding: number; // Fs / Fh
   status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE';
   
-  // Stabilité au Renversement (CFEM Fig 24.12)
+  // Stabilité au Renversement (CFEM 5e éd., fig. 20.10)
   Ms: number; // Moment stabilisant pondéré : Ψ·φ_ov·ΣM_stab (MUR-02 §2.3, E08)
   Ms_nominal: number; // ΣM_stab (butée comprise), avant Ψ·φ_ov
   Ms_passive: number; // part de la butée (sol + eau à l'avant) dans ΣM_stab, avant Ψ·φ_ov

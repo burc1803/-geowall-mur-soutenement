@@ -556,9 +556,9 @@ export function analyzeRetainingWall(
   if (h_pass > 0 && soilMethod.passiveMethod !== 'neglected') {
     if (!frostDeduct) notices.push("Butée sur toute la hauteur : sol avant déclaré permanent et non gélif par l'utilisateur.");
     else if (!(dfInput > 0)) notices.push(
-      noDfTreatment === 'zero' ? "Profondeur de gel df non saisie (0 m) : butée statique prise nulle (choix par défaut, MUR-02 §11). Saisir df dans l'onglet Critères, ou décocher la case si le sol avant est permanent et non gélif."
-      : noDfTreatment === 'not_verifiable' ? "Profondeur de gel df non saisie (0 m) : butée prise nulle ; glissement et renversement NON VÉRIFIABLES (MUR-02 §11). Saisir df dans l'onglet Critères."
-      : "Profondeur de gel df non saisie (0 m) : aucune déduction appliquée, butée pleine (choix « butée pleine avec avis »). Saisir df dans l'onglet Critères, ou décocher la case si le sol avant est permanent et non gélif.");
+      noDfTreatment === 'zero' ? "Profondeur de gel df non saisie (0 m) : butée statique prise nulle (choix par défaut, MUR-02 §11). Saisir df dans l'onglet Eau, ou décocher la case si le sol avant est permanent et non gélif."
+      : noDfTreatment === 'not_verifiable' ? "Profondeur de gel df non saisie (0 m) : butée prise nulle ; glissement et renversement NON VÉRIFIABLES (MUR-02 §11). Saisir df dans l'onglet Eau."
+      : "Profondeur de gel df non saisie (0 m) : aucune déduction appliquée, butée pleine (choix « butée pleine avec avis »). Saisir df dans l'onglet Eau, ou décocher la case si le sol avant est permanent et non gélif.");
     else if (dfInput >= h_pass) notices.push(`Profondeur de gel df = ${dfInput.toFixed(2)} m ≥ profondeur de butée ${h_pass.toFixed(2)} m : butée statique nulle.`);
   }
   const frontWaterReq = !!soil.frontWater?.enabled;

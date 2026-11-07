@@ -99,7 +99,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                     Coefficients de Poussée et Butée des Terres
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Théories de Rankine, Coulomb et Jaky (CFEM Chapitre 24)
+                    Théories de Rankine, Coulomb et Jaky (CFEM 5e éd., À CONFIRMER)
                   </p>
                 </div>
               </div>
@@ -228,7 +228,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                     Paramètres Sismiques & Poussée Dynamique selon le CFEM
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Méthode de Mononobe-Okabe et formule simplifiée de Seed & Whitman (CFEM 6.7 & 24.9)
+                    Méthode de Mononobe-Okabe et formule simplifiée de Seed & Whitman (CFEM 5e éd., § 18.7)
                   </p>
                 </div>
               </div>
@@ -237,7 +237,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                   ? 'bg-slate-100 text-slate-700 border-slate-300'
                   : 'bg-rose-50 text-rose-800 border-rose-200'
               }`}>
-                {soil.methodConfig?.seismicMethod === 'none' ? 'Option : Aucun Séisme (Statique)' : 'CFEM Section 6.7.3 & 24.9'}
+                {soil.methodConfig?.seismicMethod === 'none' ? 'Option : Aucun Séisme (Statique)' : 'CFEM 5e éd., § 18.7'}
               </span>
             </div>
 
@@ -298,7 +298,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
               {/* Formule simplifiée de Seed & Whitman */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <h3 className="text-xs font-black uppercase text-slate-900 mb-2">
-                  2. Méthode Seed & Whitman (1970 / CFEM 24.9)
+                  2. Méthode Seed & Whitman (1970 / CFEM 5e éd., § 18.7)
                 </h3>
                 <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-[11px] leading-relaxed mb-3">
                   ΔKae ≈ 0.75 · kh<br />
@@ -345,7 +345,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
         </div>
       )}
 
-      {/* SECTION 3: STABILITÉ GÉOTECHNIQUE (CFEM TABLE 8.1 & FIG. 24.12) */}
+      {/* SECTION 3: STABILITÉ GÉOTECHNIQUE (CFEM 5e éd., tableau 6.2 et fig. 20.10) */}
       {activeSection === 'stabilite' && (
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
@@ -359,12 +359,12 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                     Formules de Vérification de la Stabilité Externe
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Glissement, Renversement & Portance selon le CFEM 5e éd. (Figure 24.12 & Tableau 8.1)
+                    Glissement, Renversement & Portance selon le CFEM 5e éd. (tableau 6.2 et fig. 20.10)
                   </p>
                 </div>
               </div>
               <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded border border-blue-200">
-                CFEM Tableau 8.1
+                CFEM 5e éd., tableau 6.2
               </span>
             </div>
 
@@ -443,7 +443,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
                     Détail du Calcul de me (Moment d'Excentricité) et Étapes Précédentes
                   </h4>
                   <span className="text-[10px] font-mono font-bold bg-white text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
-                    CFEM §24.4 & Équation de Navier
+                    CFEM 5e éd., § 20.7.3.4 & équation de Navier
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 mb-3">

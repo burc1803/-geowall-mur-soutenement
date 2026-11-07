@@ -990,7 +990,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             />
             
             <p className="text-[10px] text-sky-700 pt-1 border-t border-sky-200">
-              * Références : CNB {result.cnbEdition}, 4.1.3.2 ; CFEM 5e éd. (numérotation des tableaux et figures de la 4e éd. à reconfirmer) ; CSA A23.3-19. Éléments NON VÉRIFIÉS : stabilité d'ensemble, gel, drainage, tassement.
+              * Références : CNB {result.cnbEdition}, 4.1.3.2 ; CFEM 5e éd. (tableaux et figures : voir la fiche MUR-02) ; CSA A23.3-19. Éléments NON VÉRIFIÉS : stabilité d'ensemble, gel, drainage, tassement.
             </p>
           </div>
         )}

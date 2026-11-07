@@ -238,7 +238,7 @@ export function SoilAndSeismicMethodModal({
             </div>
           </div>
 
-          {/* Section 3: Façon de Calcul du Séisme (CFEM 6.7 & 24.9) */}
+          {/* Section 3: Façon de Calcul du Séisme (CFEM 5e éd., § 18.7) */}
           <div className="p-5 bg-gradient-to-br from-amber-50/40 via-white to-slate-50 rounded-2xl border border-amber-200/80 space-y-4">
             <div className="flex items-center justify-between">
               <div>

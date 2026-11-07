@@ -47,7 +47,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
           </div>
           <h2 className="text-2xl font-black tracking-tight">Tableaux de Stabilité & Combinaisons</h2>
           <p className="text-xs text-slate-300 mt-1">
-            Génération automatique de {result.combinations.length} combinaisons d'états limites ({totalULS} ÉLU + {totalSLS} ÉLTS) avec facteurs géotechniques CFEM (Tableau 8.1 & Fig 24.12).
+            Génération automatique de {result.combinations.length} combinaisons d'états limites ({totalULS} ÉLU + {totalSLS} ÉLTS) avec facteurs géotechniques CFEM 5e éd. (tableau 6.2).
           </p>
         </div>
 

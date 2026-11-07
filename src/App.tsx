@@ -15,7 +15,9 @@ import {
   Scale, 
   BookOpen,
   Sliders,
-  Sparkles
+  Sparkles,
+  Droplets,
+  Activity
 } from 'lucide-react';
 import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment } from './lib/types';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
@@ -30,7 +32,7 @@ import { RebarPlans } from './components/RebarPlans';
 import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModal';
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
 
-type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'plans' | 'theory' | 'report';
+type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'plans' | 'eau' | 'seisme' | 'theory' | 'report';
 
 const INITIAL_GEO: WallGeometry = {
   wallType: 'cantilever',
@@ -216,33 +218,53 @@ export default function App() {
          <aside className="w-full lg:w-[380px] bg-white border-r border-slate-200 flex flex-col shrink-0">
              
             <div className="flex border-b border-slate-200">
-                <button 
-                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${['geom', 'efforts', 'report', 'rebar', 'plans'].includes(activeTab) ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                <button
+                  title="Géométrie"
+                  className={`flex-1 min-w-0 flex flex-col items-center text-[9px] font-black uppercase tracking-tight whitespace-nowrap py-3 px-0.5 border-b-2 transition-all ${['geom', 'efforts', 'report', 'rebar', 'plans'].includes(activeTab) ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                   onClick={() => setActiveTab('geom')}
                 >
-                  <Ruler size={14} className="mx-auto mb-1" />
+                  <Ruler size={14} className="mb-1" />
                   Géométrie
                 </button>
-                <button 
-                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${activeTab === 'pressures' ? 'border-amber-500 text-amber-500 bg-amber-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                <button
+                  title="Sol & Pressions"
+                  className={`flex-1 min-w-0 flex flex-col items-center text-[9px] font-black uppercase tracking-tight whitespace-nowrap py-3 px-0.5 border-b-2 transition-all ${activeTab === 'pressures' ? 'border-amber-500 text-amber-500 bg-amber-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                   onClick={() => setActiveTab('pressures')}
                 >
-                  <Layers size={14} className="mx-auto mb-1" />
-                  Sol & Pressions
+                  <Layers size={14} className="mb-1" />
+                  Sol/Press.
                 </button>
                 <button
-                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${activeTab === 'criteres' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                  title="Critères"
+                  className={`flex-1 min-w-0 flex flex-col items-center text-[9px] font-black uppercase tracking-tight whitespace-nowrap py-3 px-0.5 border-b-2 transition-all ${activeTab === 'criteres' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                   onClick={() => setActiveTab('criteres')}
                 >
-                  <ShieldCheck size={14} className="mx-auto mb-1" />
+                  <ShieldCheck size={14} className="mb-1" />
                   Critères
                 </button>
-                <button 
-                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${activeTab === 'charges' ? 'border-pink-600 text-pink-600 bg-pink-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                <button
+                  title="Charges"
+                  className={`flex-1 min-w-0 flex flex-col items-center text-[9px] font-black uppercase tracking-tight whitespace-nowrap py-3 px-0.5 border-b-2 transition-all ${activeTab === 'charges' ? 'border-pink-600 text-pink-600 bg-pink-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                   onClick={() => setActiveTab('charges')}
                 >
-                  <BarChart2 size={14} className="mx-auto mb-1" />
+                  <BarChart2 size={14} className="mb-1" />
                   Charges
+                </button>
+                <button
+                  title="Eau et gel"
+                  className={`flex-1 min-w-0 flex flex-col items-center text-[9px] font-black uppercase tracking-tight whitespace-nowrap py-3 px-0.5 border-b-2 transition-all ${activeTab === 'eau' ? 'border-cyan-600 text-cyan-700 bg-cyan-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                  onClick={() => setActiveTab('eau')}
+                >
+                  <Droplets size={14} className="mb-1" />
+                  Eau
+                </button>
+                <button
+                  title="Séisme"
+                  className={`flex-1 min-w-0 flex flex-col items-center text-[9px] font-black uppercase tracking-tight whitespace-nowrap py-3 px-0.5 border-b-2 transition-all ${activeTab === 'seisme' ? 'border-orange-600 text-orange-600 bg-orange-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                  onClick={() => setActiveTab('seisme')}
+                >
+                  <Activity size={14} className="mb-1" />
+                  Séisme
                 </button>
             </div>
 
@@ -433,33 +455,6 @@ export default function App() {
                              </label>
                         </div>
 
-                        {/* Eau à l'avant (amendement A3) : scénario A par défaut */}
-                        <div className="bg-cyan-50/50 p-3 rounded-xl border border-cyan-200 flex flex-col gap-1.5 mt-1">
-                          <label className="flex items-center gap-2 text-[11px] font-bold text-cyan-900 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!!soil.frontWater?.enabled && !!soil.hasWaterTable}
-                              disabled={!soil.hasWaterTable}
-                              title={soil.hasWaterTable ? undefined : 'Exige une nappe'}
-                              onChange={e => setSoil(prev => ({ ...prev, frontWater: { enabled: e.target.checked, hwAv: prev.frontWater?.hwAv } }))}
-                            />
-                            Eau à l'avant (niveau fiable et maintenu){!soil.hasWaterTable ? ' — exige une nappe' : ''}
-                          </label>
-                          {soil.frontWater?.enabled && soil.hasWaterTable ? (
-                            <label className="flex flex-col text-[10px] text-slate-600 font-bold">
-                              Niveau hw,av depuis la sous-face (m) — défaut : profondeur de butée {result.earthPressures.h_pass.toFixed(2)} m
-                              <input
-                                type="number" step="0.05" min={0}
-                                className="p-1.5 border rounded bg-white font-mono text-xs"
-                                value={soil.frontWater.hwAv ?? result.earthPressures.h_pass}
-                                onChange={e => setSoil(prev => ({ ...prev, frontWater: { enabled: true, hwAv: parseFloat(e.target.value) || 0 } }))}
-                              />
-                            </label>
-                          ) : (
-                            <span className="text-[10px] text-slate-500" title={soil.hasWaterTable ? undefined : 'Exige une nappe'}>Scénario A : sol déjaugé sous la nappe, eau à l'avant non comptée (conservateur).</span>
-                          )}
-                        </div>
-
                         {/* Sol de fondation (portance, glissement) — distinct du remblai (poussée) */}
                         <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
                           <div className="flex items-center justify-between">
@@ -504,59 +499,6 @@ export default function App() {
                               </label>
                             ))}
                           </div>
-                        </div>
-
-                        {/* Nappe Phréatique Amont (Option à Cocher) */}
-                        <div className="bg-cyan-50/70 p-3.5 rounded-xl border border-cyan-200 flex flex-col gap-2 mt-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                              <span className="text-[10px] font-black uppercase text-cyan-900 tracking-wider">Nappe Phréatique Amont</span>
-                            </div>
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <span className="text-[10px] font-bold text-cyan-800">Activer</span>
-                              <input 
-                                type="checkbox"
-                                checked={soil.hasWaterTable ?? true}
-                                onChange={(e) => setSoil(prev => ({
-                                  ...prev,
-                                  hasWaterTable: e.target.checked,
-                                  waterTableHeight: prev.waterTableHeight ?? 2.50
-                                }))}
-                                className="w-3.5 h-3.5 rounded text-cyan-600 focus:ring-cyan-500 cursor-pointer"
-                              />
-                            </label>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[9px] text-slate-500 font-bold">Nappe hw depuis la sous-face (m)</span>
-                              <input 
-                                type="number" step="0.25" min="0" max={geo.hMur + geo.epBase}
-                                className="p-1.5 border rounded bg-white font-mono text-xs font-bold text-cyan-800 disabled:opacity-40" 
-                                value={soil.waterTableHeight ?? 2.50} 
-                                disabled={!(soil.hasWaterTable ?? true)}
-                                onChange={e => setSoil(prev => ({
-                                  ...prev, 
-                                  waterTableHeight: parseFloat(e.target.value) || 0
-                                }))}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[9px] text-slate-500 font-bold">Poids Eau γw (kN/m³)</span>
-                              <input 
-                                type="number" step="0.1" 
-                                className="p-1.5 border rounded bg-white font-mono text-xs text-slate-600" 
-                                value={soil.gamma_w ?? 9.81} 
-                                onChange={e => setSoil(prev => ({
-                                  ...prev, 
-                                  gamma_w: parseFloat(e.target.value) || 9.81
-                                }))}
-                              />
-                            </label>
-                          </div>
-                          <span className="text-[9px] text-cyan-900 leading-tight">
-                            Poussée hydrostatique Pw = ½·γw·Hw² + Déjaugeage du sol sous l'eau (γ' = γ - γw).
-                          </span>
                         </div>
 
                     </section>
@@ -630,6 +572,120 @@ export default function App() {
                           <p className="text-[9px] text-slate-500">Valeurs lues du moteur. Aucune réduction supplémentaire de Kp (l'option « Kp réduit » est supprimée).</p>
                         </div>
 
+                    </section>
+                )}
+
+                {(activeTab === 'charges') && (
+                    <section className="flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                <BarChart2 size={16} className="text-pink-600" />
+                                <h2 className="text-xs font-black uppercase tracking-wider text-slate-800">Surcharges</h2>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                 <label className="flex flex-col gap-1.5">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Surcharge S/C (kPa)</span>
+                                    <input type="number" step="1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={loads.surcharge} onChange={(e) => handleChangeLoads('surcharge', parseFloat(e.target.value) || 0)} />
+                                 </label>
+                                 <label className="flex flex-col gap-1.5">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Type Charge</span>
+                                    <select className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={loads.surchargeType} onChange={(e) => handleChangeLoads('surchargeType', e.target.value as any)}>
+                                        <option value="D">D (Morte)</option>
+                                        <option value="L">L (Vive)</option>
+                                        <option value="S">S (Neige)</option>
+                                    </select>
+                                 </label>
+                            </div>
+                        </div>
+
+                    </section>
+                )}
+                {(activeTab === 'eau') && (
+                    <section className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <Droplets size={16} className="text-cyan-600" />
+                            <h2 className="text-xs font-black uppercase tracking-wider text-slate-800">Eau et gel</h2>
+                        </div>
+                        {/* Nappe Phréatique Amont (Option à Cocher) */}
+                        <div className="bg-cyan-50/70 p-3.5 rounded-xl border border-cyan-200 flex flex-col gap-2 mt-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+                              <span className="text-[10px] font-black uppercase text-cyan-900 tracking-wider">Nappe Phréatique Amont</span>
+                            </div>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <span className="text-[10px] font-bold text-cyan-800">Activer</span>
+                              <input 
+                                type="checkbox"
+                                checked={soil.hasWaterTable ?? true}
+                                onChange={(e) => setSoil(prev => ({
+                                  ...prev,
+                                  hasWaterTable: e.target.checked,
+                                  waterTableHeight: prev.waterTableHeight ?? 2.50
+                                }))}
+                                className="w-3.5 h-3.5 rounded text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                              />
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[9px] text-slate-500 font-bold">Nappe hw depuis la sous-face (m)</span>
+                              <input 
+                                type="number" step="0.25" min="0" max={geo.hMur + geo.epBase}
+                                className="p-1.5 border rounded bg-white font-mono text-xs font-bold text-cyan-800 disabled:opacity-40" 
+                                value={soil.waterTableHeight ?? 2.50} 
+                                disabled={!(soil.hasWaterTable ?? true)}
+                                onChange={e => setSoil(prev => ({
+                                  ...prev, 
+                                  waterTableHeight: parseFloat(e.target.value) || 0
+                                }))}
+                              />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[9px] text-slate-500 font-bold">Poids Eau γw (kN/m³)</span>
+                              <input 
+                                type="number" step="0.1" 
+                                className="p-1.5 border rounded bg-white font-mono text-xs text-slate-600" 
+                                value={soil.gamma_w ?? 9.81} 
+                                onChange={e => setSoil(prev => ({
+                                  ...prev, 
+                                  gamma_w: parseFloat(e.target.value) || 9.81
+                                }))}
+                              />
+                            </label>
+                          </div>
+                          <span className="text-[9px] text-cyan-900 leading-tight">
+                            Poussée hydrostatique Pw = ½·γw·Hw² + Déjaugeage du sol sous l'eau (γ' = γ - γw).
+                          </span>
+                        </div>
+
+                        {/* Eau à l'avant (amendement A3) : scénario A par défaut */}
+                        <div className="bg-cyan-50/50 p-3 rounded-xl border border-cyan-200 flex flex-col gap-1.5 mt-1">
+                          <label className="flex items-center gap-2 text-[11px] font-bold text-cyan-900 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!soil.frontWater?.enabled && !!soil.hasWaterTable}
+                              disabled={!soil.hasWaterTable}
+                              title={soil.hasWaterTable ? undefined : 'Exige une nappe'}
+                              onChange={e => setSoil(prev => ({ ...prev, frontWater: { enabled: e.target.checked, hwAv: prev.frontWater?.hwAv } }))}
+                            />
+                            Eau à l'avant (niveau fiable et maintenu){!soil.hasWaterTable ? ' — exige une nappe' : ''}
+                          </label>
+                          {soil.frontWater?.enabled && soil.hasWaterTable ? (
+                            <label className="flex flex-col text-[10px] text-slate-600 font-bold">
+                              Niveau hw,av depuis la sous-face (m) — défaut : profondeur de butée {result.earthPressures.h_pass.toFixed(2)} m
+                              <input
+                                type="number" step="0.05" min={0}
+                                className="p-1.5 border rounded bg-white font-mono text-xs"
+                                value={soil.frontWater.hwAv ?? result.earthPressures.h_pass}
+                                onChange={e => setSoil(prev => ({ ...prev, frontWater: { enabled: true, hwAv: parseFloat(e.target.value) || 0 } }))}
+                              />
+                            </label>
+                          ) : (
+                            <span className="text-[10px] text-slate-500" title={soil.hasWaterTable ? undefined : 'Exige une nappe'}>Scénario A : sol déjaugé sous la nappe, eau à l'avant non comptée (conservateur).</span>
+                          )}
+                        </div>
+
                         {/* Butée statique et profondeur de gel (MUR-02 D9) */}
                         <div className="bg-sky-50/70 p-3.5 rounded-xl border border-sky-200 flex flex-col gap-2 mt-1">
                           <span className="text-[10px] font-black uppercase text-sky-900 tracking-wider">Butée à l'avant : profondeur de gel</span>
@@ -668,50 +724,16 @@ export default function App() {
                           <p className="text-[10px] font-mono text-sky-900">h_pass = {result.earthPressures.h_pass.toFixed(2)} m ; zone de butée : de {result.frost.z_top.toFixed(2)} m à {result.earthPressures.h_pass.toFixed(2)} m ; Pp′ = {result.earthPressures.P_passive_nominal.toFixed(1)} kN/m</p>
                         </div>
 
-                        {/* Butée au séisme (MUR-02 D9) */}
-                        <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
-                          <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Butée au séisme</span>
-                          <select
-                            className="p-2 border rounded-lg text-xs bg-white font-semibold text-slate-700"
-                            value={soil.methodConfig?.seismicPassive ?? 'none'}
-                            onChange={e => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), seismicPassive: e.target.value as 'none' | 'kpe' } }))}
-                          >
-                            <option value="none">Nulle (défaut, conservateur)</option>
-                            <option value="kpe">Réduite : KPE de Mononobe-Okabe (CFEM éq. 18.27-18.31)</option>
-                          </select>
-                          <p className="text-[9px] text-slate-500">PPE = PP − ΔPPE ; ΔPPE s'oppose à PP. Le Kp statique n'est pas offert au séisme.</p>
-                        </div>
                     </section>
                 )}
 
-                {(activeTab === 'charges') && (
+                {(activeTab === 'seisme') && (
                     <section className="flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                                <BarChart2 size={16} className="text-pink-600" />
-                                <h2 className="text-xs font-black uppercase tracking-wider text-slate-800">Surcharges</h2>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                 <label className="flex flex-col gap-1.5">
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Surcharge S/C (kPa)</span>
-                                    <input type="number" step="1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={loads.surcharge} onChange={(e) => handleChangeLoads('surcharge', parseFloat(e.target.value) || 0)} />
-                                 </label>
-                                 <label className="flex flex-col gap-1.5">
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Type Charge</span>
-                                    <select className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={loads.surchargeType} onChange={(e) => handleChangeLoads('surchargeType', e.target.value as any)}>
-                                        <option value="D">D (Morte)</option>
-                                        <option value="L">L (Vive)</option>
-                                        <option value="S">S (Neige)</option>
-                                    </select>
-                                 </label>
-                            </div>
-                        </div>
-
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                 <div className="flex items-center gap-2">
                                   <AlertTriangle size={16} className="text-amber-500" />
-                                  <h2 className="text-xs font-black uppercase tracking-wider text-slate-800">Séisme CFEM 24.9</h2>
+                                  <h2 className="text-xs font-black uppercase tracking-wider text-slate-800">Séisme (CFEM 5e éd., § 18.7)</h2>
                                 </div>
                                 <button
                                   onClick={() => setIsSoilModalOpen(true)}
@@ -780,6 +802,19 @@ export default function App() {
                                 )}
                               </div>
                             )}
+                        </div>
+                        {/* Butée au séisme (MUR-02 D9) */}
+                        <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
+                          <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Butée au séisme</span>
+                          <select
+                            className="p-2 border rounded-lg text-xs bg-white font-semibold text-slate-700"
+                            value={soil.methodConfig?.seismicPassive ?? 'none'}
+                            onChange={e => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), seismicPassive: e.target.value as 'none' | 'kpe' } }))}
+                          >
+                            <option value="none">Nulle (défaut, conservateur)</option>
+                            <option value="kpe">Réduite : KPE de Mononobe-Okabe (CFEM éq. 18.27-18.31)</option>
+                          </select>
+                          <p className="text-[9px] text-slate-500">PPE = PP − ΔPPE ; ΔPPE s'oppose à PP. Le Kp statique n'est pas offert au séisme.</p>
                         </div>
                     </section>
                 )}
@@ -896,7 +931,7 @@ export default function App() {
                     </div>
                 )}
                 
-                {activeTab === 'pressures' && (
+                {(activeTab === 'pressures' || activeTab === 'eau' || activeTab === 'seisme') && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
                         <BearingPressureDiagram geo={geo} soil={soil} result={result} />
                         <div className="mt-6">

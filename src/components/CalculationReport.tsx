@@ -66,7 +66,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
         <div className="bg-slate-50/70 p-5 rounded-xl border border-slate-200">
           <h2 className="text-xs font-black uppercase tracking-widest text-indigo-900 mb-3 border-b border-slate-200 pb-2 flex items-center justify-between">
             <span>2. Paramètres du Sol & Facteurs CFEM</span>
-            <span className="text-[10px] text-slate-400 font-normal">CFEM 5e éd. Tableau 8.1</span>
+            <span className="text-[10px] text-slate-400 font-normal">CFEM 5e éd., tableau 6.2 (facteurs géotechniques)</span>
           </h2>
           <table className="w-full text-xs border-collapse">
             <tbody className="divide-y divide-slate-200">
@@ -189,8 +189,8 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                       </span>
                     </td>
                     <td className="p-2 text-center">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${!c.stabApplicable ? 'text-slate-400' : c.status_sliding === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                        {c.stabApplicable ? c.status_sliding : '— (sans objet)'}
+                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${c.status_sliding === 'NON VÉRIFIABLE' ? 'bg-amber-50 text-amber-700 border border-amber-300' : !c.stabApplicable ? 'text-slate-400' : c.status_sliding === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                        {c.status_sliding === 'NON VÉRIFIABLE' || c.stabApplicable ? c.status_sliding : '— (sans objet)'}
                       </span>
                     </td>
                   </tr>
@@ -248,8 +248,8 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                       </span>
                     </td>
                     <td className="p-2 text-center">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${!c.stabApplicable && c.status_overturning !== 'NON' ? 'text-slate-400' : c.status_overturning === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                        {c.stabApplicable || c.status_overturning === 'NON' ? c.status_overturning : '— (sans objet)'}
+                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${c.status_overturning === 'NON VÉRIFIABLE' ? 'bg-amber-50 text-amber-700 border border-amber-300' : !c.stabApplicable && c.status_overturning !== 'NON' ? 'text-slate-400' : c.status_overturning === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                        {c.stabApplicable || c.status_overturning === 'NON' || c.status_overturning === 'NON VÉRIFIABLE' ? c.status_overturning : '— (sans objet)'}
                       </span>
                     </td>
                   </tr>

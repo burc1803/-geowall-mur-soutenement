@@ -109,7 +109,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
-              CFEM §24 / CNB {result.cnbEdition}
+              CFEM 5e éd., § 20.7 / CNB {result.cnbEdition}
             </span>
             <span className="text-xs text-slate-300">Analyse de Contact & Excentricité</span>
           </div>
@@ -672,7 +672,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
       <div className="px-5 py-3.5 bg-blue-50/60 border-t border-blue-100 text-xs text-blue-900 flex items-start gap-2.5">
         <HelpCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
         <div className="space-y-1">
-          <strong>Règle de dimensionnement géotechnique (CFEM Chapitre 24 & CNB {result.cnbEdition}) :</strong>
+          <strong>Règle de dimensionnement géotechnique (CFEM 5e éd., § 20.7 & CNB {result.cnbEdition}) :</strong>
           <p className="text-blue-800 leading-relaxed text-[11px]">
             Le sol ne pouvant pas reprendre d'effort de traction, si l'excentricité <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">e = |B/2 - x1|</code> dépasse le tiers central (<code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">B/6 = {B_over_6.toFixed(3)} m</code>), la répartition devient triangulaire sur une largeur réduite effective <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">B' = 3·x1</code> avec une contrainte de crête <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">q1 = 2·Rv / (3·x1)</code>. Les normes canadiennes tolèrent un décollement partiel sous conditions d'états limites ultimes tant que la portance ultime pondérée <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">φgu·qu</code> n'est pas dépassée.
           </p>
