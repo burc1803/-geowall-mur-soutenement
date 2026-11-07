@@ -284,9 +284,9 @@ export function RebarManager({ rebarConfig, onChange, conc, result }: RebarManag
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-black text-indigo-600 uppercase">Étape 2 : Section d'Acier (As)</span>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          elem.design.As_provided >= elem.design.As_min ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          elem.design.As_ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}>
-                          {elem.design.As_provided >= elem.design.As_min ? 'As ≥ As,min OK' : 'As < As,min'}
+                          {elem.key.startsWith('mur_horizontal') ? (elem.design.As_ok ? 'Σ A3 + A4 ≥ 0,002Ag OK' : 'Σ A3 + A4 < 0,002Ag') : (elem.design.As_ok ? 'As ≥ As,min OK' : 'As < As,min')}
                         </span>
                       </div>
                       <div className="font-mono text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-slate-700">

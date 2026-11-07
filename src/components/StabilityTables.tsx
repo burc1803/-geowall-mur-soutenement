@@ -27,6 +27,10 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
 
   const minSliding = result.critical_sliding_ULS;
   const minOverturning = result.critical_overturning_ULS;
+  // MUR-02 §11 : df non saisie avec le choix « non vérifiable » -> glissement et renversement NON VÉRIFIABLES (ambre)
+  const slidingNV = result.combinations.some(c => c.status_sliding === 'NON VÉRIFIABLE');
+  const overturningNV = result.combinations.some(c => c.status_overturning === 'NON VÉRIFIABLE');
+  const nvBadge = <span className="inline-flex items-center gap-1 text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300 text-[11px]"><AlertTriangle size={12} /> NON VÉRIFIABLE</span>;
   const maxQ_ULS = result.critical_q_toe_ULS;
   const maxQ_SLS = result.critical_q_toe_SLS;
   // Résultante hors base : valeurs fictives non affichées
@@ -51,14 +55,14 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
         <div className="flex flex-wrap gap-2">
           <div className="bg-slate-800/80 backdrop-blur border border-slate-700 px-3 py-2 rounded-xl text-center">
             <span className="block text-[9px] uppercase font-bold text-slate-400">Glissement Min</span>
-            <span className={`text-base font-black ${minSliding >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {minSliding === Infinity ? '∞' : minSliding.toFixed(2)}
+            <span className={`text-base font-black ${slidingNV ? 'text-amber-400' : minSliding >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {slidingNV ? <>{minSliding === Infinity ? '∞' : minSliding.toFixed(2)} <span className="text-[10px] font-normal">(non vérifiable : df non saisie)</span></> : minSliding === Infinity ? '∞' : minSliding.toFixed(2)}
             </span>
           </div>
           <div className="bg-slate-800/80 backdrop-blur border border-slate-700 px-3 py-2 rounded-xl text-center">
             <span className="block text-[9px] uppercase font-bold text-slate-400">Renversement Min</span>
-            <span className={`text-base font-black ${!outsideULS && minOverturning >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {outsideULS ? 'hors base' : minOverturning === Infinity ? '∞' : minOverturning.toFixed(2)}
+            <span className={`text-base font-black ${overturningNV ? 'text-amber-400' : !outsideULS && minOverturning >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {outsideULS ? 'hors base' : overturningNV ? <>{minOverturning === Infinity ? '∞' : minOverturning.toFixed(2)} <span className="text-[10px] font-normal">(non vérifiable : df non saisie)</span></> : minOverturning === Infinity ? '∞' : minOverturning.toFixed(2)}
             </span>
           </div>
           <div className="bg-slate-800/80 backdrop-blur border border-slate-700 px-3 py-2 rounded-xl text-center">
@@ -209,12 +213,12 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                       <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.Fs.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-bold text-rose-700">{c.Fh_destab.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-black text-sm">
-                        <span className={c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
+                        <span className={c.status_sliding === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
                           {c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(2)}
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        {!c.stabApplicable ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_sliding === 'OK' ? (
+                        {c.status_sliding === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_sliding === 'OK' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                             <CheckCircle2 size={12} /> OK
                           </span>
@@ -287,12 +291,12 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                       <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.Ms.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-bold text-rose-700">{c.Mr.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-black text-sm">
-                        <span className={c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
+                        <span className={c.status_overturning === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
                           {c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(2)}
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        {!c.stabApplicable && c.status_overturning !== 'NON' ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_overturning === 'OK' ? (
+                        {c.status_overturning === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable && c.status_overturning !== 'NON' ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_overturning === 'OK' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                             <CheckCircle2 size={12} /> OK
                           </span>

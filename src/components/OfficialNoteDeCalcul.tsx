@@ -463,7 +463,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                   head={['Option', 'Pression', 'Cohérente avec', 'Vérifications', 'Retenu']}
                   rows={[
                     ['Largeur réduite B′', 'B′ = B − 2e, pression uniforme V/B′ (CFEM 5e, éq. 10.12, Meyerhof)', 'qu du rapport géotechnique calculée pour une charge excentrée', 'Renversement et e ≤ B/6 vérifiés aussi', moments ? 'non' : 'OUI'],
-                    ['Moments, pression linéaire', 'q = V/B·(1 ± 6e/B), ou triangulaire si e > B/6 (Paultre ch. 17)', 'Pression admissible au bord', 'Ms/Mr avec φ = 0,5', moments ? 'OUI' : 'non']
+                    ['Moments, pression linéaire', 'q = V/B·(1 ± 6e/B), ou triangulaire si e > B/6 (Paultre ch. 17)', 'Pression admissible au bord', `Ms/Mr avec φ_ov = ${fmt(result.geotech.phi_ov, 2)}`, moments ? 'OUI' : 'non']
                   ]}
                 />
                 <p className="text-slate-900 font-semibold">
@@ -723,7 +723,9 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                   <tr key={d.elementName} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
                     <td className="px-1.5 py-1 font-sans font-bold whitespace-nowrap">{d.elementName}</td>
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.bar_designation}</td>
-                    <td className="px-1.5 py-1 max-w-[16rem]">{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="font-sans text-slate-500">({d.As_min_basis})</span></td>
+                    <td className="px-1.5 py-1 max-w-[16rem]">{/horizontales (ext|int)\./.test(d.elementName)
+                      ? <>{d.As_provided.toFixed(0)} (face) ; Σ A3 + A4 = {result.concreteDesign.mur_horizontal.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="font-sans text-slate-500">(14.1.8.6)</span></>
+                      : <>{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="font-sans text-slate-500">({d.As_min_basis})</span></>}</td>
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.spacing.toFixed(0)} / {d.spacing_max.toFixed(0)} {d.spacing_ok ? '' : '(dépassé)'}{d.db_max !== undefined ? ` ; db ${d.db.toFixed(1)} / ${d.db_max.toFixed(0)}` : ''}</td>
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.Mr.toFixed(1)} / ${d.Mf.toFixed(1)}` : '—'}</td>
                     <td className="px-1.5 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.ductility_c_over_d.toFixed(3)} ≤ ${d.ductility_limit.toFixed(3)}` : '—'}</td>

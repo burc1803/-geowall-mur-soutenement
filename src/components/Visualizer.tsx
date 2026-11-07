@@ -676,9 +676,11 @@ export function Visualizer({
                 <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-black uppercase tracking-wider border ${
                   slidingStatus === 'OK' 
                     ? 'bg-emerald-950/80 text-emerald-400 border-emerald-700/60' 
+                    : slidingStatus === 'NON VÉRIFIABLE'
+                    ? 'bg-amber-950/80 text-amber-400 border-amber-700/60'
                     : 'bg-rose-950/80 text-rose-400 border-rose-700/60'
                 }`}>
-                  {slidingStatus === 'OK' ? 'CONFORME' : 'ÉCHEC'}
+                  {slidingStatus === 'OK' ? 'CONFORME' : slidingStatus === 'NON VÉRIFIABLE' ? 'NON VÉRIFIABLE' : 'ÉCHEC'}
                 </span>
               </div>
 
@@ -688,9 +690,11 @@ export function Visualizer({
                 <span className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-black uppercase tracking-wider border ${
                   overturningStatus === 'OK' 
                     ? 'bg-emerald-950/80 text-emerald-400 border-emerald-700/60' 
+                    : overturningStatus === 'NON VÉRIFIABLE'
+                    ? 'bg-amber-950/80 text-amber-400 border-amber-700/60'
                     : 'bg-rose-950/80 text-rose-400 border-rose-700/60'
                 }`}>
-                  {overturningStatus === 'OK' ? 'CONFORME' : 'ÉCHEC'}
+                  {overturningStatus === 'OK' ? 'CONFORME' : overturningStatus === 'NON VÉRIFIABLE' ? 'NON VÉRIFIABLE' : 'ÉCHEC'}
                 </span>
               </div>
 

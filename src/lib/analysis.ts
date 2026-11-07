@@ -1303,6 +1303,7 @@ export function analyzeRetainingWall(
       let q_design = Math.max(q_t, q_h);
       const q_lin = q_design; // lecture seule : q max de la pression linéaire (moments)
       const q_bp = Rv / B_eff; // lecture seule : V/B′ (largeur réduite)
+      const qt0 = q_t; const qh0 = q_h;
       let pAt: (x: number) => number;
       if (criterion === 'eccentricity') {
         // Meyerhof : B' = B - 2e, pression uniforme V/B' sur [s0, s0 + B'] (CFEM 5e : limite de e À CONFIRMER, non appliquée)
@@ -1319,7 +1320,13 @@ export function analyzeRetainingWall(
       } else {
         pAt = (x: number) => q_t + ((q_h - q_t) * x) / baseWidth;
       }
-      return { Rv, uplift, x1, ecc, B_eff, distributionCase, q_t, q_h, q_design, q_lin, q_bp, pAt, outside };
+      // MUR-02 §5 : efforts du talon et du patin TOUJOURS avec la distribution linéaire (triangulaire si e > B/6), quel que soit le critère
+      const pAtLin: (x: number) => number = distributionCase === 'Cas 4'
+        ? (toeSide
+          ? (x: number) => (x < Lc ? qt0 * (1 - x / Lc) : 0)
+          : (x: number) => (x > baseWidth - Lc ? qh0 * (1 - (baseWidth - x) / Lc) : 0))
+        : (x: number) => qt0 + ((qh0 - qt0) * x) / baseWidth;
+      return { Rv, uplift, x1, ecc, B_eff, distributionCase, q_t, q_h, q_design, q_lin, q_bp, pAt, pAtLin, outside };
     };
     const bZ = bearingOf(stab);
     const bF = bearingOf(full);
@@ -1399,17 +1406,17 @@ export function analyzeRetainingWall(
       }
       return { V: Math.abs(V), M: Math.abs(M) };
     };
-    const toeZ = slabEffort(bZ.pAt, 'toe', geo.ePiedAv);
-    const toeF = slabEffort(bF.pAt, 'toe', geo.ePiedAv);
-    const heelZ = slabEffort(bZ.pAt, 'heel', geo.ePiedAr);
-    const heelF = slabEffort(bF.pAt, 'heel', geo.ePiedAr);
-    const toeH = slabEffort(bH.pAt, 'toe', geo.ePiedAv);
-    const heelH = slabEffort(bH.pAt, 'heel', geo.ePiedAr);
+    const toeZ = slabEffort(bZ.pAtLin, 'toe', geo.ePiedAv);
+    const toeF = slabEffort(bF.pAtLin, 'toe', geo.ePiedAv);
+    const heelZ = slabEffort(bZ.pAtLin, 'heel', geo.ePiedAr);
+    const heelF = slabEffort(bF.pAtLin, 'heel', geo.ePiedAr);
+    const toeH = slabEffort(bH.pAtLin, 'toe', geo.ePiedAv);
+    const heelH = slabEffort(bH.pAtLin, 'heel', geo.ePiedAr);
     slabEnvFns.push((kind, x) => {
       const len = kind === 'toe' ? geo.ePiedAv : geo.ePiedAr;
-      const a = slabEffort(bZ.pAt, kind, Math.min(x, len));
-      const b = slabEffort(bF.pAt, kind, Math.min(x, len));
-      const h = slabEffort(bH.pAt, kind, Math.min(x, len));
+      const a = slabEffort(bZ.pAtLin, kind, Math.min(x, len));
+      const b = slabEffort(bF.pAtLin, kind, Math.min(x, len));
+      const h = slabEffort(bH.pAtLin, kind, Math.min(x, len));
       return [b, h].reduce((best, e) => (e.M > best.M ? e : best), a);
     });
     stemSectionsByComb.push(stemRes.sections);

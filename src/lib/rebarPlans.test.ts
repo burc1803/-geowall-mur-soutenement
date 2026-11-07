@@ -58,6 +58,20 @@ describe('As,req : inverse exact de Mr (10.1.7)', () => {
   });
 });
 
+describe('MUR-02 §5 : efforts du talon et du patin, distribution linéaire quel que soit le critère', () => {
+  it('G1 : critère B′ et critère moments donnent les mêmes Mf et Vf (talon, patin) et le même As,req', () => {
+    const a = analyzeRetainingWall(GEO, { ...SOIL, stabilityCriterion: 'eccentricity' }, LOADS, conc, REBAR);
+    const b = analyzeRetainingWall(GEO, { ...SOIL, stabilityCriterion: 'moments' }, LOADS, conc, REBAR);
+    for (const k of ['semelle_talon', 'semelle_orteil'] as const) {
+      expect(a.concreteDesign[k].Mf).toBeCloseTo(b.concreteDesign[k].Mf, 9);
+      expect(a.concreteDesign[k].Vf).toBeCloseTo(b.concreteDesign[k].Vf, 9);
+      expect(a.concreteDesign[k].As_req!).toBeCloseTo(b.concreteDesign[k].As_req!, 6);
+    }
+    console.log('G1 talon Mf =', a.concreteDesign.semelle_talon.Mf.toFixed(2), 'As,req =', a.concreteDesign.semelle_talon.As_req!.toFixed(1), '; patin Mf =', a.concreteDesign.semelle_orteil.Mf.toFixed(2));
+    expect(Math.abs(a.concreteDesign.semelle_talon.Mf - 34.05)).toBeLessThanOrEqual(34.05 * 0.005);
+  });
+});
+
 describe('Migration de mur_horizontal', () => {
   it('ancien format (sans clés de face) : les deux faces reprennent mur_horizontal', () => {
     const m = resolveRebarConfig(oldFormat());
