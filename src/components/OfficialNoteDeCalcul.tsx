@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnalysisResult, WallGeometry, SoilProperties, ConcreteProperties, LoadsConfig } from '../lib/types';
 import { BearingPressureDiagram } from './BearingPressureDiagram';
 import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
+import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass } from '../lib/rebarPlans';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
 interface OfficialNoteDeCalculProps {
@@ -860,6 +861,49 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             <li>Géométrie : remblai horizontal, voile sans fruit, sans clé de cisaillement.</li>
           </ul>
         </div>
+
+        {/* 6. ARMATURES (PLAN) : mêmes fonctions que l'onglet « Plans » */}
+        {(() => {
+          const zoneRows = buildZoneRows(result);
+          const schedule = buildBarSchedule(result, geo, conc);
+          const pair = zoneRows.find(r => r.pair)?.pair;
+          return (
+            <>
+              <SectionTitle n="6" title="Armatures (plan)" />
+              <div className="space-y-3">
+                <SubTitle n="6.1" title="Tableau général des armatures par zone" />
+                <DataTable
+                  head={['Zone', 'Élément', 'As,req (mm²/m)', 'As,min (mm²/m)', 'Barre', 'Esp. (mm)', 'As,fourni (mm²/m)', 'Esp. max (mm)', 'Statut']}
+                  rows={zoneRows.map(r => [
+                    r.zone.id,
+                    r.zone.label,
+                    r.As_req === null ? '—' : Number.isFinite(r.As_req) ? fmt(r.As_req, 0) : 'non atteignable',
+                    fmt(r.As_min, 0),
+                    r.barSize,
+                    String(r.spacing),
+                    fmt(r.As_provided, 0),
+                    fmt(r.spacing_max, 0),
+                    !result.verifiable ? 'NON VÉRIFIABLE' : r.ok ? 'OK' : `NON : ${r.reasons.join(' ; ')}`
+                  ])}
+                />
+                <p className="text-[11px] text-slate-600">
+                  As,min : {zoneRows.map(r => `${r.zone.id} ${r.As_min_basis}`).join(' ; ')}.
+                  {pair && ` Paire A3 + A4 : total requis ${fmt(pair.required, 0)} mm²/m, somme fournie ${fmt(pair.provided, 0)} mm²/m ; répartition entre faces : À CONFIRMER (décision de l'utilisateur en attente) ; statut : chaque face ≥ As,min.`}
+                  {' '}As,req = armature pour Mr = Mf (inverse exact de la formule de Mr, bloc rectangulaire 10.1.7) ; « — » : aucun effort de flexion. A7 : 2 lits. Statut : As,fourni ≥ max(As,req ; As,min) et espacement ≤ espacement maximal.
+                </p>
+                <SubTitle n="6.2" title="Nomenclature des barres (par mètre de mur)" />
+                <DataTable
+                  head={['Repère', 'Barre', 'Esp. (mm)', 'Forme', 'Longueur unitaire (m)', 'Nombre par m de mur', 'Masse (kg/m de mur)']}
+                  rows={[
+                    ...schedule.map(s => [s.id, s.barSize, String(s.spacing), s.shape, fmt(s.length, 2), fmt(s.countPerM, 2), fmt(s.massPerM, 1)]),
+                    ['Total', '', '', '', '', '', fmt(totalScheduleMass(schedule), 1)]
+                  ]}
+                />
+                <p className="text-[11px] text-slate-600">{SCHEDULE_DISCLAIMER} Prolongement des crochets 12db : valeur indicative, À CONFIRMER.</p>
+              </div>
+            </>
+          );
+        })()}
 
         {/* HIGHLIGHTED BLUE CALLOUT BOX (AS SEEN IN USER NOTE) */}
         {showToleranceBox && (

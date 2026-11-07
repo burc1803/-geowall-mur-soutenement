@@ -262,3 +262,19 @@ Le mur de référence ne résiste pas au séisme de G2. Ce n'est pas une erreur 
 - Aucun « CONFORME » écrit en dur. La limite d'excentricité, le glissement, la portance et le renversement (option a) ont chacun un statut calculé.
 - Si KAE est indéterminé (φ − β < ψ), le programme s'arrête avec un message ; il ne doit jamais renvoyer NaN.
 - La note indique l'édition de chaque norme (CNB 2025, CFEM 5e 2023, CSA A23.3-19) et la liste des points NON VÉRIFIÉS (stabilité d'ensemble, gel, drainage, tassement, liquéfaction, A23.1, Code de construction du Québec).
+
+## 10. Amendement M2-A1 — armature horizontale répartie du voile (2026-11-07)
+
+L'utilisateur a demandé de « valider selon le fichier PDF CSA14 ». Texte lu le 2026-11-07 dans `docs/methodes/CSA14.pdf` (CSA A23.3-14, p. 133) :
+- **14.1.8.6** : « L'aire minimale de l'armature horizontale répartie doit être de 0,002Ag. » L'exigence porte sur l'aire **totale** de la section brute du mur. Elle ne s'applique pas à chaque nappe.
+- **14.1.8.5** : armature verticale répartie : 0,002Ag remplacé par **0,0015Ag**, également en aire totale. Le moteur somme déjà les deux faces.
+- **14.1.8.4** : l'espacement de **chaque nappe** est ≤ min(3t ; 500 mm).
+- **14.1.8.2** : le diamètre des barres est ≤ t/10.
+- **14.1.8.3** : les murs de soutènement sont exemptés de l'obligation de deux nappes. Une seule nappe est donc permise.
+
+Règle retenue :
+- la somme des nappes horizontales (A3 + A4) doit être ≥ 0,002Ag ;
+- chaque nappe présente doit respecter l'espacement (14.1.8.4), db ≤ t/10 (14.1.8.2) et la fissuration (10.6.1) ;
+- la norme ne fixe aucune répartition entre les faces. La note l'indique et ne prescrit pas de répartition.
+
+Édition : la même règle figure dans l'édition -19 utilisée par le projet (§6 de cette fiche, p. 126). La correspondance mot à mot avec -19 reste À CONFIRMER.

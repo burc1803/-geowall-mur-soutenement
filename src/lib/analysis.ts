@@ -14,6 +14,7 @@ import {
   CanadianBarSize,
   CANADIAN_REBAR_CATALOG,
   RebarCustomConfig,
+  RebarElementSelection,
   FoundationSoilProperties,
   StabilityCriterion,
   CnbEdition,
@@ -54,8 +55,44 @@ export const DEFAULT_REBAR_CONFIG: RebarCustomConfig = {
   mur_exterieur: { barSize: '15M', spacing: 240 },
   mur_horizontal: { barSize: '15M', spacing: 250 },
   semelle_talon: { barSize: '15M', spacing: 200 },
-  semelle_orteil: { barSize: '15M', spacing: 200 }
+  semelle_orteil: { barSize: '15M', spacing: 200 },
+  mur_horizontal_ext: { barSize: '15M', spacing: 250 }, // migration : = mur_horizontal
+  mur_horizontal_int: { barSize: '15M', spacing: 250 },
+  semelle_longitudinale: { barSize: '15M', spacing: 250 }
 };
+
+/** Armature longitudinale de la semelle avant l'ajout de la clé `semelle_longitudinale` (valeur fixe du moteur : 15M @ 250, 2 lits). */
+export const DEFAULT_SEMELLE_LONGITUDINALE: RebarElementSelection = { barSize: '15M', spacing: 250 };
+
+export type ResolvedRebarConfig = Required<RebarCustomConfig>;
+
+/**
+ * Migration de la configuration d'armature : `mur_horizontal` (ancien champ) sert de valeur par défaut aux deux faces
+ * (`mur_horizontal_ext`, `mur_horizontal_int`) ; `semelle_longitudinale` absent = 15M @ 250. Idempotente, sans effet sur les autres clés.
+ */
+export function resolveRebarConfig(cfg: RebarCustomConfig): ResolvedRebarConfig {
+  return {
+    ...cfg,
+    mur_horizontal_ext: cfg.mur_horizontal_ext ?? cfg.mur_horizontal,
+    mur_horizontal_int: cfg.mur_horizontal_int ?? cfg.mur_horizontal,
+    semelle_longitudinale: cfg.semelle_longitudinale ?? DEFAULT_SEMELLE_LONGITUDINALE
+  };
+}
+
+/**
+ * Armature tendue requise As,req (mm2/m) pour que Mr = Mf — LECTURE SEULE, inverse exact de la formule de Mr du moteur
+ * (bloc rectangulaire 10.1.7) : Mf = φs·As·fy·(d − a/2), a = φs·As·fy/(α1·φc·f′c·b).
+ * Avec T = φs·As·fy et K = α1·φc·f′c·b : Mf = T·d − T²/(2K), d'où T = K·(d − √(d² − 2·Mf/K)) (racine la plus petite).
+ * Mf en kN·m/m, b et d en mm. Retourne 0 si Mf ≤ 0 et Infinity si d² < 2·Mf/K (section insuffisante).
+ */
+export function requiredAsForMf(p: { Mf: number; b: number; d: number; fc: number; fy: number; phi_s: number; phi_c: number; alpha1: number }): number {
+  if (!(p.Mf > 0)) return 0;
+  const K = p.alpha1 * p.phi_c * p.fc * p.b; // N
+  const disc = p.d * p.d - (2 * p.Mf * 1e6) / K;
+  if (disc < 0) return Infinity;
+  const T = K * (p.d - Math.sqrt(disc)); // N
+  return T / (p.phi_s * p.fy);
+}
 
 export const SOIL_PRESETS: Record<SoilPresetType, { 
   name: string; 
@@ -268,6 +305,8 @@ export function computeElementConcreteDesign(params: {
   const a = (params.phi_s * As_provided * params.fy) / (params.alpha1 * params.phi_c * params.fc * params.bw);
   const c = a / params.beta1;
   const Mr = (params.phi_s * As_provided * params.fy * (d - a / 2)) * 1e-6;
+  // As,req : inverse exact de la formule de Mr ci-dessus (mêmes φs, φc, α1, d) — lecture seule, n'intervient dans aucun statut
+  const As_req = requiredAsForMf({ Mf: params.Mf, b: params.bw, d, fc: params.fc, fy: params.fy, phi_s: params.phi_s, phi_c: params.phi_c, alpha1: params.alpha1 });
 
   // Armature minimale (MUR-02 §6, D20 : la plus exigeante des exigences applicables)
   const As_min_flexure = (0.2 * Math.sqrt(params.fc) / params.fy) * params.bw * params.h_mm; // 10.5.1.2 b)
@@ -352,6 +391,7 @@ export function computeElementConcreteDesign(params: {
     shear_ok,
     Vr_max,
     beta_rule,
+    As_req,
     As_min,
     As_min_basis,
     As_min_flexure,
@@ -419,7 +459,7 @@ export function analyzeRetainingWall(
     ...(soil.methodConfig || {})
   };
 
-  const rebarCfg: RebarCustomConfig = customRebar || DEFAULT_REBAR_CONFIG;
+  const rebarCfg: ResolvedRebarConfig = resolveRebarConfig(customRebar || DEFAULT_REBAR_CONFIG);
 
   // Earth pressure coefficients
   const Ka_rankine = Math.pow(Math.tan(Math_PI / 4 - phiRad / 2), 2);
@@ -1539,26 +1579,44 @@ export function analyzeRetainingWall(
     otherVerticalAs: designMurInterieur.As_provided
   });
 
-  // 3. Mur - Armature Horizontale (Répartition)
-  const designMurHorizontal = computeElementConcreteDesign({
+  // 3. Mur - Armature Horizontale (Répartition) : chaque face est vérifiée séparément (règle : chaque face ≥ As,min, 14.1.8.6) ;
+  //    `mur_horizontal` est l'enveloppe (pire des deux faces), compatible avec l'ancien format.
+  const horizontalParams = (face: 'ext' | 'int') => {
+    const sel = face === 'ext' ? rebarCfg.mur_horizontal_ext : rebarCfg.mur_horizontal_int;
+    return {
+      elementName: `Voile - Armature Horizontale (Face ${face === 'ext' ? 'Extérieure' : 'Intérieure'})`,
+      kind: 'wall_horizontal' as const,
+      bw,
+      h_mm: hm_mm,
+      cover: conc.cover_h,
+      fc: conc.fc_mur,
+      fy: conc.fy,
+      phi_c: conc.phi_c,
+      phi_s: conc.phi_s,
+      barSize: sel.barSize,
+      spacing: sel.spacing,
+      Mf: 0,
+      Vf: 0,
+      alpha1,
+      beta1,
+      Z_limit: 25000,
+      aggregate_size: agg
+    };
+  };
+  const designMurHorizontalExt = computeElementConcreteDesign(horizontalParams('ext'));
+  const designMurHorizontalInt = computeElementConcreteDesign(horizontalParams('int'));
+  const weakerH = designMurHorizontalExt.As_provided <= designMurHorizontalInt.As_provided ? designMurHorizontalExt : designMurHorizontalInt;
+  const worstH = !designMurHorizontalExt.checks_ok ? designMurHorizontalExt : !designMurHorizontalInt.checks_ok ? designMurHorizontalInt : weakerH;
+  const bothH = (f: (d: ConcreteElementDesign) => boolean | undefined) => (f(designMurHorizontalExt) ?? true) && (f(designMurHorizontalInt) ?? true);
+  const designMurHorizontal: ConcreteElementDesign = {
+    ...worstH,
     elementName: 'Voile - Armature Horizontale (Répartition)',
-    kind: 'wall_horizontal',
-    bw,
-    h_mm: hm_mm,
-    cover: conc.cover_h,
-    fc: conc.fc_mur,
-    fy: conc.fy,
-    phi_c: conc.phi_c,
-    phi_s: conc.phi_s,
-    barSize: rebarCfg.mur_horizontal.barSize,
-    spacing: rebarCfg.mur_horizontal.spacing,
-    Mf: 0,
-    Vf: 0,
-    alpha1,
-    beta1,
-    Z_limit: 25000,
-    aggregate_size: agg
-  });
+    As_ok: bothH(d => d.As_ok),
+    spacing_ok: bothH(d => d.spacing_ok),
+    db_ok: worstH.db_max === undefined ? undefined : bothH(d => d.db_ok),
+    Z_ok: bothH(d => d.Z_ok),
+    checks_ok: bothH(d => d.checks_ok)
+  };
 
   // 4. Semelle - Talon (Armature Supérieure en traction)
   const designTalon = computeElementConcreteDesign({
@@ -1605,9 +1663,10 @@ export function analyzeRetainingWall(
     distZeroShear_mm: geo.ePiedAv * 1000
   });
 
-  // 6. Semelle - Armature de Retrait et Température (2 lits longitudinaux 15M @ 250) : 7.8.1, 7.8.3
-  const retrait_s = 250;
-  const retrait_Ab = CANADIAN_REBAR_CATALOG['15M'].area;
+  // 6. Semelle - Armature de Retrait et Température (2 lits longitudinaux, 15M @ 250 par défaut) : 7.8.1, 7.8.3
+  const retrait_bar = rebarCfg.semelle_longitudinale.barSize;
+  const retrait_s = Math.max(rebarCfg.semelle_longitudinale.spacing, 50);
+  const retrait_Ab = CANADIAN_REBAR_CATALOG[retrait_bar].area;
   const retrait_As = 2 * retrait_Ab * (1000 / retrait_s);
   const retraitSpacingMax = Math.min(5 * hs_mm, 500);
   const designRetrait: ConcreteElementDesign = {
@@ -1621,11 +1680,12 @@ export function analyzeRetainingWall(
     spacing: retrait_s,
     spacing_max: retraitSpacingMax,
     spacing_ok: retrait_s <= retraitSpacingMax,
-    db: CANADIAN_REBAR_CATALOG['15M'].diameter,
+    db: CANADIAN_REBAR_CATALOG[retrait_bar].diameter,
     db_max: undefined,
     db_ok: undefined,
     checks_ok: retrait_As >= designOrteil.As_min && retrait_s <= retraitSpacingMax,
-    bar_designation: `15M @ ${retrait_s} mm (2 lits)`,
+    bar_designation: `${retrait_bar} @ ${retrait_s} mm (2 lits)`,
+    As_req: undefined,
     a_stress_block: 0,
     c_depth: 0,
     kr: 0,
@@ -1662,6 +1722,8 @@ export function analyzeRetainingWall(
     mur_interieur: designMurInterieur,
     mur_exterieur: designMurExterieur,
     mur_horizontal: designMurHorizontal,
+    mur_horizontal_ext: designMurHorizontalExt,
+    mur_horizontal_int: designMurHorizontalInt,
     semelle_talon: designTalon,
     semelle_orteil: designOrteil,
     semelle_retrait: designRetrait,

@@ -26,10 +26,11 @@ import { StabilityTables } from './components/StabilityTables';
 import { CalculationStepsTheory } from './components/CalculationStepsTheory';
 import { BearingPressureDiagram } from './components/BearingPressureDiagram';
 import { RebarManager } from './components/RebarManager';
+import { RebarPlans } from './components/RebarPlans';
 import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModal';
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
 
-type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'theory' | 'report';
+type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'plans' | 'theory' | 'report';
 
 const INITIAL_GEO: WallGeometry = {
   wallType: 'cantilever',
@@ -216,7 +217,7 @@ export default function App() {
              
             <div className="flex border-b border-slate-200">
                 <button 
-                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${['geom', 'efforts', 'report', 'rebar'].includes(activeTab) ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+                  className={`flex-1 text-[10px] font-black uppercase tracking-wider py-3 border-b-2 transition-all ${['geom', 'efforts', 'report', 'rebar', 'plans'].includes(activeTab) ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
                   onClick={() => setActiveTab('geom')}
                 >
                   <Ruler size={14} className="mx-auto mb-1" />
@@ -246,7 +247,7 @@ export default function App() {
             </div>
 
             <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-6">
-                {(activeTab === 'geom' || activeTab === 'efforts' || activeTab === 'report' || activeTab === 'rebar') && (
+                {(activeTab === 'geom' || activeTab === 'efforts' || activeTab === 'report' || activeTab === 'rebar' || activeTab === 'plans') && (
                     <section className="flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
                             <Ruler size={16} className="text-blue-600" />
@@ -837,6 +838,12 @@ export default function App() {
                     <span>Choix Barres & Mr (Omar Chaallal)</span>
                 </button>
                 <button 
+                    className={`pb-3 px-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap ${activeTab === 'plans' ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40 rounded-t-lg font-black' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                    onClick={() => setActiveTab('plans')}
+                >
+                    Plans
+                </button>
+                <button 
                     className={`pb-3 px-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'theory' ? 'border-amber-500 text-amber-800 bg-amber-50/50 rounded-t-lg font-black' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
                     onClick={() => setActiveTab('theory')}
                 >
@@ -934,6 +941,20 @@ export default function App() {
                     </div>
                 )}
                 
+                {activeTab === 'plans' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <RebarPlans
+                          geo={geo}
+                          soil={soil}
+                          loads={loads}
+                          conc={conc}
+                          result={result}
+                          rebarConfig={rebarConfig}
+                          onChange={setRebarConfig}
+                        />
+                    </div>
+                )}
+
                 {activeTab === 'theory' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <CalculationStepsTheory geo={geo} soil={soil} loads={loads} result={result} conc={conc} />

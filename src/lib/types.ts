@@ -65,9 +65,16 @@ export interface RebarCustomConfig {
   mode: 'auto' | 'manual';
   mur_interieur: RebarElementSelection;
   mur_exterieur: RebarElementSelection;
+  /** Ancien champ, conservé pour compatibilité : valeur par défaut des deux faces horizontales (voir `resolveRebarConfig`). */
   mur_horizontal: RebarElementSelection;
+  /** Plans : armature horizontale du voile, face extérieure (A3). Absent : `mur_horizontal`. */
+  mur_horizontal_ext?: RebarElementSelection;
+  /** Plans : armature horizontale du voile, face intérieure (A4). Absent : `mur_horizontal`. */
+  mur_horizontal_int?: RebarElementSelection;
   semelle_talon: RebarElementSelection;
   semelle_orteil: RebarElementSelection;
+  /** Plans : armature longitudinale de la semelle (A7), par lit (2 lits). Absent : 15M @ 250 (valeur antérieure du moteur). */
+  semelle_longitudinale?: RebarElementSelection;
 }
 
 export interface AppliedLoad {
@@ -295,6 +302,7 @@ export interface ConcreteElementDesign {
   Vr_max: number; // kN — 0,25·φc·f′c·bw·dv (11.3.3)
   beta_rule: string; // règle de β retenue (11.3.6.2 ou 11.3.6.3)
 
+  As_req?: number; // mm2/m — lecture seule : armature tendue requise pour Mr = Mf (inverse exact du bloc rectangulaire 10.1.7) ; Infinity si la section ne peut atteindre Mf
   As_min: number; // mm2/m
   As_min_basis: string; // article(s) qui fixent As,min
   As_min_flexure: number; // 10.5.1.2 b) — 0,2√f′c/fy·b·h (mm2/m), avant dispense
@@ -416,7 +424,9 @@ export interface SeismicSummary {
 export interface ConcreteDesignSummary {
   mur_interieur: ConcreteElementDesign;
   mur_exterieur: ConcreteElementDesign;
-  mur_horizontal: ConcreteElementDesign;
+  mur_horizontal: ConcreteElementDesign; // enveloppe : pire des deux faces
+  mur_horizontal_ext: ConcreteElementDesign;
+  mur_horizontal_int: ConcreteElementDesign;
   semelle_talon: ConcreteElementDesign;
   semelle_orteil: ConcreteElementDesign;
   semelle_retrait: ConcreteElementDesign;

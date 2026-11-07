@@ -7,6 +7,7 @@ import {
   AnalysisResult,
   ConcreteElementDesign
 } from '../lib/types';
+import { resolveRebarConfig } from '../lib/analysis';
 import { ShieldCheck, CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, Sparkles, BookOpen, Layers, Ruler } from 'lucide-react';
 
 interface RebarManagerProps {
@@ -26,13 +27,9 @@ export function RebarManager({ rebarConfig, onChange, conc, result }: RebarManag
     key: keyof Omit<RebarCustomConfig, 'mode'>,
     updates: { barSize?: CanadianBarSize; spacing?: number }
   ) => {
-    onChange({
-      ...rebarConfig,
-      [key]: {
-        ...rebarConfig[key],
-        ...updates
-      }
-    });
+    const base = resolveRebarConfig(rebarConfig);
+    const next = { ...base[key], ...updates } as { barSize: CanadianBarSize; spacing: number };
+    onChange({ ...base, [key]: next });
   };
 
   const handleSetAutoMode = () => {
@@ -42,6 +39,8 @@ export function RebarManager({ rebarConfig, onChange, conc, result }: RebarManag
       mur_interieur: { barSize: '15M', spacing: 125 },
       mur_exterieur: { barSize: '15M', spacing: 250 },
       mur_horizontal: { barSize: '15M', spacing: 250 },
+      mur_horizontal_ext: { barSize: '15M', spacing: 250 },
+      mur_horizontal_int: { barSize: '15M', spacing: 250 },
       semelle_talon: { barSize: '15M', spacing: 200 },
       semelle_orteil: { barSize: '15M', spacing: 200 }
     });
@@ -69,10 +68,17 @@ export function RebarManager({ rebarConfig, onChange, conc, result }: RebarManag
       role: 'Secondaire & Cisaillement-Friction'
     },
     {
-      key: 'mur_horizontal',
-      title: 'Voile - Armatures Horizontales',
-      description: 'Armatures longitudinales pour contrôle du retrait thermique et de dessiccation',
-      design: result.concreteDesign.mur_horizontal,
+      key: 'mur_horizontal_ext',
+      title: 'Voile - Horizontales, face extérieure (A3)',
+      description: 'Armatures horizontales de la face extérieure : retrait thermique et dessiccation',
+      design: result.concreteDesign.mur_horizontal_ext,
+      role: 'Retrait et Température CSA A23.3 §14.1'
+    },
+    {
+      key: 'mur_horizontal_int',
+      title: 'Voile - Horizontales, face intérieure (A4)',
+      description: 'Armatures horizontales de la face intérieure (côté remblai) : retrait thermique et dessiccation',
+      design: result.concreteDesign.mur_horizontal_int,
       role: 'Retrait et Température CSA A23.3 §14.1'
     },
     {
@@ -140,7 +146,7 @@ export function RebarManager({ rebarConfig, onChange, conc, result }: RebarManag
       {/* Elements Accordion and Dropdowns */}
       <div className="space-y-4">
         {elementsMeta.map((elem) => {
-          const cfg = rebarConfig[elem.key];
+          const cfg = resolveRebarConfig(rebarConfig)[elem.key];
           const barInfo = CANADIAN_REBAR_CATALOG[cfg.barSize];
           const isExpanded = expandedElement === elem.key;
           const isOk = elem.design.flexure_ok && elem.design.shear_ok && elem.design.Z_ok && elem.design.ductility_ok;
