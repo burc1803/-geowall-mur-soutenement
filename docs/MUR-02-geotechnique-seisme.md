@@ -290,3 +290,11 @@ Message de l'utilisateur : « laisse au choix d'utilisateur, mais laisser par d�
 
   La note indique le traitement retenu.
 - **D3, critère de portance et de renversement :** au choix de l'utilisateur, comme aujourd'hui. Le défaut est **« moments, pression linéaire »** (q = V/B·(1 ± 6e/B), triangulaire si e > B/6). Cette décision remplace la proposition « option b par défaut » du §2.2. La largeur réduite B′ reste offerte. La limite e ≤ B/6 et la vérification du renversement ne changent pas.
+
+## 12. Décision de l'utilisateur du 2026-11-07 : états limites des vérifications de stabilité
+
+Message de l'utilisateur : « le glissement et renversement doit être juste vérifié selon charges ultimes, et la capacité portante du sol se fait en service et l'ultime ».
+
+- **Glissement et renversement :** vérifiés **seulement à l'ÉLU**, avec les combinaisons pondérées du tableau 4.1.3.2.-A. Les combinaisons ÉLS ne portent pas de statut de glissement ni de renversement (« sans objet (ÉLS) »).
+- **Portance :** vérifiée à l'**ÉLU** (q ≤ Ψ·φgu·qu) **et** à l'**ÉLS** (q ≤ qadm, avec e ≤ B/6, tiers central).
+- Constat du code au 2026-11-07 : les statuts gouvernants de glissement et de renversement n'utilisent déjà que l'ÉLU (`ulsStab`). En revanche, les combinaisons ÉLS ont `stabApplicable = true` et affichent un glissement et un renversement dans les tableaux. Il faut passer `stabApplicable` à false pour l'ÉLS et vérifier l'affichage. Les statuts gouvernants ne changent pas.
