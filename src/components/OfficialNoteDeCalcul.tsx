@@ -526,6 +526,14 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               ['Tassement, déplacement (ÉLS)', 'φ', fmt(result.geotech.phi_settle, 1), 'CFEM 5e, tableau 6.2 (Retaining systems, Settlement)', 'Non appliqué : q_adm,ÉLS vient du rapport géotechnique — À CONFIRMER'],
               ['Facteur de H au cas 5', 'αH', fmt(FACTEUR_H_SISMIQUE, 1), 'CNB, note A-4.1.3.2.(4) ; tableau A-3, Commentaire A du CNB 2020', 'Lu (2020) ; Commentaire 2025 : À CONFIRMER'],
               ['Accélération horizontale du site', 'ah', seismicOn ? fmt(result.seismic.ah, 3) + ' g' : 'sans objet', seismicOn ? (result.seismic.ahSource.trim() || 'source non renseignée') : '—', seismicOn ? (result.seismic.ahSource.trim() ? 'Saisi par l\'utilisateur' : 'À CONFIRMER : source de ah non renseignée') : '—'],
+              ...(soil.siteSeismic && (soil.siteSeismic.locality.trim() || soil.siteSeismic.pga > 0 || soil.siteSeismic.sa02 > 0)
+                ? [[
+                    'Valeurs du site (calculateur d\'aléa de RNCan)', '—',
+                    `${soil.siteSeismic.locality.trim() || 'localité non renseignée'} ; classe ${soil.siteSeismic.siteClass.trim() || 'non renseignée'} ; Sa(0,2) = ${soil.siteSeismic.sa02 > 0 ? fmt(soil.siteSeismic.sa02, 3) + ' g' : 'non saisi'} ; PGA = ${soil.siteSeismic.pga > 0 ? fmt(soil.siteSeismic.pga, 3) + ' g' : 'non saisi'} ; PGV = ${soil.siteSeismic.pgv > 0 ? fmt(soil.siteSeismic.pgv, 3) + ' m/s' : 'non saisi'}`,
+                    'RNCan, calculateur d\'aléa sismique (CNB) ; CFEM 5e, p. 629 (PGA de la classe d\'emplacement sous la semelle)',
+                    'Enregistrées seulement : le moteur utilise ah (kh = ah) ; conversion F(PGA) non programmée : À CONFIRMER'
+                  ]]
+                : []),
               ['Coefficient sismique horizontal', 'kh', seismicOn ? fmt(result.seismic.kh, 3) : 'sans objet', 'CFEM 5e, éq. 18.22, p. 629 (kh = ah/g)', result.seismic.csaS6 ? 'Option avancée active : kh = 0,5·ah (CSA S6 citée par le CFEM p. 631, non du CNB) ; déplacement admis de 25 à 50 mm non vérifié par le logiciel' : 'Lu ; kh = ah (défaut)'],
               ['Coefficient sismique vertical', 'kv', seismicOn ? (result.seismic.csaS6 ? '0 (option CSA S6)' : result.seismic.scenarios.length > 1 ? `±${fmt(result.seismic.kvInput, 3)} (deux signes étudiés)` : fmt(result.seismic.kvInput, 3)) : 'sans objet', 'CFEM 5e, p. 629 (kv = 2/3·kh à défaut d\'étude du site)', 'Valeur saisie par l\'utilisateur'],
               ['Butée statique : profondeur de gel', 'df', result.frost.deduct ? fmt(result.frost.df, 2) + ' m (déduite)' : 'non déduite', 'CFEM 5e, 20.7.3.3, p. 698 ; fig. 20.10', result.frost.deduct ? (result.frost.df_entered ? 'Choix de l\'utilisateur ; zone de butée de df à hp' : 'À CONFIRMER : df non saisie') : 'Sol avant déclaré permanent et non gélif par l\'utilisateur'],

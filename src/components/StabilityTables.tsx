@@ -17,7 +17,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
   const filteredCombinations = result.combinations.filter(c => {
     if (filterType !== 'ALL' && c.type !== filterType) return false;
     if (onlyFailing) {
-      return (c.stabApplicable && c.status_sliding === 'NON') || c.status_overturning === 'NON' || c.status_bearing === 'NON';
+      return (c.stabApplicable && c.status_sliding === 'NON') || c.status_overturning === 'NON' || c.status_bearing === 'NON' || c.status_ecc === 'NON';
     }
     return true;
   });
@@ -213,12 +213,12 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                       <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.Fs.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-bold text-rose-700">{c.Fh_destab.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-black text-sm">
-                        <span className={c.status_sliding === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
-                          {c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(2)}
+                        <span className={c.type === 'SLS' ? 'text-slate-400' : c.status_sliding === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {c.type === 'SLS' ? '—' : c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(2)}
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        {c.status_sliding === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_sliding === 'OK' ? (
+                        {c.type === 'SLS' ? (<span className="text-slate-400 text-[11px]">sans objet (ÉLS)</span>) : c.status_sliding === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_sliding === 'OK' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                             <CheckCircle2 size={12} /> OK
                           </span>
@@ -291,12 +291,12 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                       <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.Ms.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-bold text-rose-700">{c.Mr.toFixed(2)}</td>
                       <td className="p-3 text-right font-mono font-black text-sm">
-                        <span className={c.status_overturning === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
-                          {c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(2)}
+                        <span className={c.type === 'SLS' ? 'text-slate-400' : c.status_overturning === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {c.type === 'SLS' ? '—' : c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(2)}
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        {c.status_overturning === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable && c.status_overturning !== 'NON' ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_overturning === 'OK' ? (
+                        {c.type === 'SLS' ? (<span className="text-slate-400 text-[11px]">sans objet (ÉLS)</span>) : c.status_overturning === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable && c.status_overturning !== 'NON' ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_overturning === 'OK' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                             <CheckCircle2 size={12} /> OK
                           </span>
@@ -388,13 +388,13 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                       </span>
                     </td>
                     <td className="p-3 text-center">
-                      {c.status_bearing === 'OK' ? (
+                      {c.status_bearing === 'OK' && c.status_ecc === 'OK' ? (
                         <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                           <CheckCircle2 size={12} /> OK
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 text-[11px]">
-                          <XCircle size={12} /> NON
+                          <XCircle size={12} /> NON{c.status_bearing === 'OK' ? ' (e > B/6)' : ''}
                         </span>
                       )}
                     </td>

@@ -184,13 +184,13 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                     <td className="p-2 text-right font-mono font-bold text-indigo-700">{c.Fs.toFixed(1)}</td>
                     <td className="p-2 text-right font-mono font-bold text-rose-700">{c.Fh_destab.toFixed(1)}</td>
                     <td className="p-2 text-right font-mono font-black">
-                      <span className={c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
-                        {c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(2)}
+                      <span className={c.type === 'SLS' ? 'text-slate-400' : c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
+                        {c.type === 'SLS' ? '—' : c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(2)}
                       </span>
                     </td>
                     <td className="p-2 text-center">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${c.status_sliding === 'NON VÉRIFIABLE' ? 'bg-amber-50 text-amber-700 border border-amber-300' : !c.stabApplicable ? 'text-slate-400' : c.status_sliding === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                        {c.status_sliding === 'NON VÉRIFIABLE' || c.stabApplicable ? c.status_sliding : '— (sans objet)'}
+                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${c.type === 'SLS' ? 'text-slate-400' : c.status_sliding === 'NON VÉRIFIABLE' ? 'bg-amber-50 text-amber-700 border border-amber-300' : !c.stabApplicable ? 'text-slate-400' : c.status_sliding === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                        {c.type === 'SLS' ? 'sans objet (ÉLS)' : c.status_sliding === 'NON VÉRIFIABLE' || c.stabApplicable ? c.status_sliding : '— (sans objet)'}
                       </span>
                     </td>
                   </tr>
@@ -243,13 +243,13 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                     <td className="p-2 text-right font-mono font-bold text-indigo-700">{c.Ms.toFixed(1)}</td>
                     <td className="p-2 text-right font-mono font-bold text-rose-700">{c.Mr.toFixed(1)}</td>
                     <td className="p-2 text-right font-mono font-black">
-                      <span className={c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
-                        {c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(2)}
+                      <span className={c.type === 'SLS' ? 'text-slate-400' : c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
+                        {c.type === 'SLS' ? '—' : c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(2)}
                       </span>
                     </td>
                     <td className="p-2 text-center">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${c.status_overturning === 'NON VÉRIFIABLE' ? 'bg-amber-50 text-amber-700 border border-amber-300' : !c.stabApplicable && c.status_overturning !== 'NON' ? 'text-slate-400' : c.status_overturning === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                        {c.stabApplicable || c.status_overturning === 'NON' || c.status_overturning === 'NON VÉRIFIABLE' ? c.status_overturning : '— (sans objet)'}
+                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${c.type === 'SLS' ? 'text-slate-400' : c.status_overturning === 'NON VÉRIFIABLE' ? 'bg-amber-50 text-amber-700 border border-amber-300' : !c.stabApplicable && c.status_overturning !== 'NON' ? 'text-slate-400' : c.status_overturning === 'OK' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                        {c.type === 'SLS' ? 'sans objet (ÉLS)' : c.stabApplicable || c.status_overturning === 'NON' || c.status_overturning === 'NON VÉRIFIABLE' ? c.status_overturning : '— (sans objet)'}
                       </span>
                     </td>
                   </tr>

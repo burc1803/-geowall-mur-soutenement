@@ -137,6 +137,14 @@ export interface FrostConfig {
 }
 export type FrostNoDfTreatment = 'zero' | 'not_verifiable' | 'full_with_notice';
 
+export interface SiteSeismicValues {
+  locality: string; // localité ou coordonnées
+  siteClass: string; // A à E, ou « Vs30 = … »
+  sa02: number; // Sa(0,2), g (0 = non saisi)
+  pga: number; // PGA du site pour la classe choisie, g (0 = non saisi)
+  pgv: number; // PGV, m/s (facultatif, 0 = non saisi)
+}
+
 export interface ConcreteProperties {
   fc_mur: number; // MPa (ex: 30 MPa)
   fc_semelle: number; // MPa (ex: 30 MPa)
@@ -178,6 +186,8 @@ export interface SoilProperties {
   geotechLevel?: GeotechLevel; // défaut : 'typical' (MUR-02 D2)
   psi?: number; // Ψ (0,9 / 1,0 / 1,15), défaut 1,0
   quFactored?: boolean; // qu déjà pondérée par le géotechnicien (φ_gu = 1) ; défaut : non pondérée
+  /** Valeurs du site (calculateur d'aléa sismique de RNCan) : enregistrées et affichées dans la note ; le moteur ne les utilise pas (kh = ah, D6). */
+  siteSeismic?: SiteSeismicValues;
   frost?: FrostConfig; // défaut : déduction cochée (df non saisie = 0 -> avis)
   // Nappe phréatique amont (Niveau d'eau)
   hasWaterTable?: boolean; // Option à cocher pour ajouter la nappe
@@ -257,7 +267,7 @@ export interface CombinationResult {
   Fs: number; // Force stabilisante totale (pondérée : Rf_friction + Rf_cohesion + Rf_passive)
   Fh_destab: number; // Sollicitation horizontale déstabilisante
   FOS_sliding: number; // Fs / Fh
-  status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE';
+  status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE' | 'SANS OBJET'; // 'SANS OBJET' : combinaison ÉLS (MUR-02 §12)
   
   // Stabilité au Renversement (CFEM 5e éd., fig. 20.10)
   Ms: number; // Moment stabilisant pondéré : Ψ·φ_ov·ΣM_stab (MUR-02 §2.3, E08)
@@ -265,7 +275,7 @@ export interface CombinationResult {
   Ms_passive: number; // part de la butée (sol + eau à l'avant) dans ΣM_stab, avant Ψ·φ_ov
   Mr: number; // Moment de renversement déstabilisant
   FOS_overturning: number; // Ms / Mr
-  status_overturning: 'OK' | 'NON' | 'NON VÉRIFIABLE';
+  status_overturning: 'OK' | 'NON' | 'NON VÉRIFIABLE' | 'SANS OBJET'; // 'SANS OBJET' : combinaison ÉLS (MUR-02 §12)
   
   // Capacité portante & Excentricité
   x1: number; // Distance résultante depuis point de renversement (orteil)

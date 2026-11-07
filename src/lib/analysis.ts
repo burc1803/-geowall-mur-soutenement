@@ -221,7 +221,8 @@ const SLS_COMBINATIONS: LoadCombination[] = [
   { name: 'Combinaison ELS 9 (1D + 0.5S + 1W + 1H)', formula: '1.0D + 0.5S + 1.0W + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 0.5, W: 1.0, E: 0, H: 1.0 } },
   { name: 'Combinaison ELS 10 (1D + 1S + 1W + 1H)', formula: '1.0D + 1.0S + 1.0W + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 1.0, W: 1.0, E: 0, H: 1.0 } },
   { name: 'Combinaison ELS 11 (1D + 1H)', formula: '1.0D + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 0, W: 0, E: 0, H: 1.0 } },
-].map(c => ({ ...c, type: 'SLS' as const, caseNo: 0, stabApplicable: true, soilRule: 'same' as const, Dunfav: 1.0 }));
+].map(c => ({ ...c, type: 'SLS' as const, caseNo: 0, stabApplicable: false, // MUR-02 §12 : glissement et renversement à l'ÉLU seulement
+     soilRule: 'same' as const, Dunfav: 1.0 }));
 
 export const CNB_2020_COMBINATIONS: LoadCombination[] = [...buildULSCombinations('2020'), ...SLS_COMBINATIONS];
 export const CNB_2025_COMBINATIONS: LoadCombination[] = [...buildULSCombinations('2025'), ...SLS_COMBINATIONS];
@@ -1349,14 +1350,14 @@ export function analyzeRetainingWall(
     const Fs = Rf_friction + Rf_cohesion + Rf_passive;
     const Fh_destab = Math.max(sumH, 0.01);
     const FOS_sl = sumH > 0 ? (Fs / Fh_destab) : Infinity;
-    const status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE' = frostUnverified ? 'NON VÉRIFIABLE' : FOS_sl >= 1.0 ? 'OK' : 'NON';
+    const status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE' | 'SANS OBJET' = !isULS ? 'SANS OBJET' : frostUnverified ? 'NON VÉRIFIABLE' : FOS_sl >= 1.0 ? 'OK' : 'NON';
 
     // --- MUR-02 §2.3 (E08) : renversement  Ψ·φ_ov·ΣM_stab ≥ ΣM_renv (forme d'application À CONFIRMER) ; la butée fait partie de ΣM_stab
     const Ms_nominal = stab.Mres + Mpass_c;
     const Ms = psiC * phi_overturning * Ms_nominal;
     const Mr = Math.max(stab.Mover, 0.01);
     const FOS_over = stab.Mover > 0 ? (Ms / Mr) : Infinity;
-    let status_overturning: 'OK' | 'NON' | 'NON VÉRIFIABLE' = frostUnverified ? 'NON VÉRIFIABLE' : FOS_over >= 1.0 ? 'OK' : 'NON';
+    let status_overturning: 'OK' | 'NON' | 'NON VÉRIFIABLE' | 'SANS OBJET' = !isULS ? 'SANS OBJET' : frostUnverified ? 'NON VÉRIFIABLE' : FOS_over >= 1.0 ? 'OK' : 'NON';
     const bear = [bF, bH].reduce((best, b) => (b.q_design > best.q_design ? b : best), bZ);
     // Résultante hors de la base : renversement (vers l'orteil) ou basculement vers le talon -> NON, avec message
     const outsideSide = bZ.outside ?? bF.outside ?? bH.outside;
@@ -1365,7 +1366,7 @@ export function analyzeRetainingWall(
         ? 'Résultante hors de la base côté orteil : renversement, portance non vérifiable'
         : 'Résultante hors de la base côté talon : basculement vers le talon, portance non vérifiable')
       : '';
-    if (outsideSide) status_overturning = 'NON';
+    if (outsideSide && isULS) status_overturning = 'NON'; // ÉLS : résultante hors base = portance / excentricité ÉLS (status_ecc, status_bearing), non un renversement
 
     // Portance : qf ≤ Ψ·φgu·qu (ELU) ; q_adm,ELS du rapport géotechnique à l'ELS (MUR-02 §1, §2.2)
     const qCap = isULS ? (psiC * phi_gu * soil.qUltimate_ULS) : soil.qAllowable_SLS;

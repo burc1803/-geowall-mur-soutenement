@@ -19,7 +19,7 @@ import {
   Droplets,
   Activity
 } from 'lucide-react';
-import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment } from './lib/types';
+import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment, SiteSeismicValues } from './lib/types';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
 import { Visualizer } from './components/Visualizer';
 import { ForceCharts } from './components/ForceCharts';
@@ -33,6 +33,8 @@ import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModa
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
 
 type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'plans' | 'eau' | 'seisme' | 'theory' | 'report';
+
+const DEFAULT_SITE: SiteSeismicValues = { locality: '', siteClass: '', sa02: 0, pga: 0, pgv: 0 };
 
 const INITIAL_GEO: WallGeometry = {
   wallType: 'cantilever',
@@ -427,7 +429,10 @@ export default function App() {
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* Sol arrière (remblai) : poussée sur le voile, poids sur le talon */}
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-300 flex flex-col gap-2 mt-1">
+                          <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider">Sol arrière (remblai) : poussée sur le voile, poids sur le talon</span>
+                          <div className="grid grid-cols-2 gap-3">
                              <label className="flex flex-col gap-1">
                                 <span className="text-[10px] font-bold text-slate-500 uppercase">Poids Vol. γ (kN/m³)</span>
                                 <input type="number" step="0.5" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.gamma} onChange={(e) => handleChangeSoil('gamma', parseFloat(e.target.value) || 0)} />
@@ -437,50 +442,22 @@ export default function App() {
                                 <input type="number" step="1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.phi} onChange={(e) => handleChangeSoil('phi', parseFloat(e.target.value) || 0)} />
                              </label>
                              <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Frottement Base μ</span>
-                                <input type="number" step="0.05" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.mu} onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value) || 0)} />
-                             </label>
-                             <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">H. Sol Avant (m)</span>
-                                <input type="number" step="0.1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.hSolAv} onChange={(e) => handleChangeSoil('hSolAv', parseFloat(e.target.value) || 0)} />
-                             </label>
-                             <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Cohésion C₂ (kPa)</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">c′ (kPa) — négligée dans la poussée active</span>
                                 <input type="number" step="1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.cohesion ?? 0} onChange={(e) => handleChangeSoil('cohesion', parseFloat(e.target.value) || 0)} />
                              </label>
-                             <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Preset μ (CFEM 5e éd., À CONFIRMER)</span>
-                                <select 
-                                  className="p-2 border rounded-lg text-xs bg-slate-50 font-semibold text-slate-700 truncate"
-                                  value={soil.mu}
-                                  onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value))}
-                                >
-                                  <option value={0.55}>Sable compact (0.55)</option>
-                                  <option value={0.60}>Gravier propre (0.60)</option>
-                                  <option value={0.45}>Sable silteux (0.45)</option>
-                                  <option value={0.70}>Rocher sain (0.70)</option>
-                                </select>
-                             </label>
-                             <label className="flex flex-col gap-1 col-span-2">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité Portante Adm. SLS (kPa)</span>
-                                <input type="number" step="10" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.qAllowable_SLS} onChange={(e) => handleChangeSoil('qAllowable_SLS', parseFloat(e.target.value) || 0)} />
-                             </label>
-                             <label className="flex flex-col gap-1 col-span-2">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité Portante Ult. ULS (kPa)</span>
-                                <input type="number" step="10" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.qUltimate_ULS} onChange={(e) => handleChangeSoil('qUltimate_ULS', parseFloat(e.target.value) || 0)} />
-                             </label>
+                          </div>
+                          <p className="text-[10px] text-slate-500">γ et φ′ alimentent Ka, K₀, la poussée sur le voile et le poids du sol sur le talon. c′ n'entre pas dans la poussée active ; elle ne sert que de valeur par défaut au c′ du sol de fondation tant que celui-ci est « identique au remblai ».</p>
                         </div>
 
-                        {/* Sol de fondation (portance, glissement) — distinct du remblai (poussée) */}
+                        {/* Sol avant et de fondation : butée, glissement, portance, poids sur le patin */}
                         <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Sol de fondation (butée, glissement)</span>
+                            <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Sol avant et de fondation : butée, glissement, portance, poids sur le patin</span>
                             <button
                               className="text-[10px] font-bold text-amber-800 underline"
                               onClick={() => setSoil(prev => ({ ...prev, foundation: undefined }))}
                             >Identique au remblai</button>
                           </div>
-                          <p className="text-[10px] text-slate-500">Le sol ci-dessus est le remblai (poussée sur le voile, poids sur le talon). Sa cohésion c′ est négligée dans la poussée.</p>
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <label className="flex flex-col">
                               <span className="text-[9px] text-slate-500 font-bold">γ fond. (kN/m³)</span>
@@ -495,6 +472,40 @@ export default function App() {
                               <input type="number" step="1" className="p-1.5 border rounded bg-white font-mono text-xs" value={foundationSoil.cohesion} onChange={e => handleChangeFoundation('cohesion', parseFloat(e.target.value) || 0)} />
                             </label>
                           </div>
+                          <div className="grid grid-cols-2 gap-3">
+                             <label className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">H. Sol Avant (m)</span>
+                                <input type="number" step="0.1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.hSolAv} onChange={(e) => handleChangeSoil('hSolAv', parseFloat(e.target.value) || 0)} />
+                             </label>
+                             <label className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Frottement Base μ</span>
+                                <input type="number" step="0.05" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.mu} onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value) || 0)} />
+                             </label>
+                             <label className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Preset μ (CFEM 5e éd., À CONFIRMER)</span>
+                                <select 
+                                  className="p-2 border rounded-lg text-xs bg-slate-50 font-semibold text-slate-700 truncate"
+                                  value={soil.mu}
+                                  onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value))}
+                                >
+                                  <option value={0.55}>Sable compact (0.55)</option>
+                                  <option value={0.60}>Gravier propre (0.60)</option>
+                                  <option value={0.45}>Sable silteux (0.45)</option>
+                                  <option value={0.70}>Rocher sain (0.70)</option>
+                                </select>
+                             </label>
+                          </div>
+                          <div className="grid grid-cols-1 gap-3">
+                             <label className="flex flex-col gap-1 col-span-2">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité Portante Adm. SLS (kPa)</span>
+                                <input type="number" step="10" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.qAllowable_SLS} onChange={(e) => handleChangeSoil('qAllowable_SLS', parseFloat(e.target.value) || 0)} />
+                             </label>
+                             <label className="flex flex-col gap-1 col-span-2">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité Portante Ult. ULS (kPa)</span>
+                                <input type="number" step="10" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.qUltimate_ULS} onChange={(e) => handleChangeSoil('qUltimate_ULS', parseFloat(e.target.value) || 0)} />
+                             </label>
+                          </div>
+                          <p className="text-[10px] text-slate-500">γ, φ′ et c′ de fondation : butée, poids du sol sur le patin et cohésion de glissement. H. sol avant : profondeur de butée et poids sur le patin. μ = tan δ<sub>b</sub> : glissement à la base (il fixe aussi le plafond de δ de Coulomb). Capacités : portance.</p>
                         </div>
 
                         {/* Béton et armature (CSA A23.3-19) */}
@@ -745,6 +756,56 @@ export default function App() {
 
                 {(activeTab === 'seisme') && (
                     <section className="flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200">
+                        {/* Valeurs du site (RNCan) : enregistrées et affichées dans la note ; le moteur ne les utilise pas autrement (kh = ah, kv = 2/3·kh) */}
+                        <div className="bg-orange-50/60 p-3.5 rounded-xl border border-orange-200 flex flex-col gap-2">
+                          <span className="text-[10px] font-black uppercase text-orange-900 tracking-wider">Valeurs du site (RNCan)</span>
+                          <a
+                            href="https://www.earthquakescanada.nrcan.gc.ca/hazard-alea/interpolat/nbc-cnb-fr.php"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-lg px-3 py-2 text-center"
+                          >
+                            Ouvrir le calculateur d'aléa sismique de RNCan (CNB)
+                          </a>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[9px] text-slate-500 font-bold">Localité ou coordonnées</span>
+                            <input type="text" className="p-1.5 border rounded bg-white text-xs" value={soil.siteSeismic?.locality ?? ''} onChange={e => setSoil(prev => ({ ...prev, siteSeismic: { ...DEFAULT_SITE, ...prev.siteSeismic, locality: e.target.value } }))} />
+                          </label>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[9px] text-slate-500 font-bold">Classe d'emplacement (A à E, ou Vs30 = …)</span>
+                              <input type="text" className="p-1.5 border rounded bg-white text-xs" value={soil.siteSeismic?.siteClass ?? ''} onChange={e => setSoil(prev => ({ ...prev, siteSeismic: { ...DEFAULT_SITE, ...prev.siteSeismic, siteClass: e.target.value } }))} />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[9px] text-slate-500 font-bold">Sa(0,2) (g)</span>
+                              <input type="number" step="0.001" min="0" className="p-1.5 border rounded bg-white font-mono text-xs" value={soil.siteSeismic?.sa02 ?? 0} onChange={e => setSoil(prev => ({ ...prev, siteSeismic: { ...DEFAULT_SITE, ...prev.siteSeismic, sa02: Math.max(parseFloat(e.target.value) || 0, 0) } }))} />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[9px] text-slate-500 font-bold">PGA du site, classe choisie (g)</span>
+                              <input type="number" step="0.001" min="0" className="p-1.5 border rounded bg-white font-mono text-xs" value={soil.siteSeismic?.pga ?? 0} onChange={e => setSoil(prev => ({ ...prev, siteSeismic: { ...DEFAULT_SITE, ...prev.siteSeismic, pga: Math.max(parseFloat(e.target.value) || 0, 0) } }))} />
+                            </label>
+                            <label className="flex flex-col gap-1">
+                              <span className="text-[9px] text-slate-500 font-bold">PGV (m/s, facultatif)</span>
+                              <input type="number" step="0.001" min="0" className="p-1.5 border rounded bg-white font-mono text-xs" value={soil.siteSeismic?.pgv ?? 0} onChange={e => setSoil(prev => ({ ...prev, siteSeismic: { ...DEFAULT_SITE, ...prev.siteSeismic, pgv: Math.max(parseFloat(e.target.value) || 0, 0) } }))} />
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!((soil.siteSeismic?.pga ?? 0) > 0)}
+                            className="text-[11px] font-bold text-orange-900 bg-white border border-orange-300 hover:bg-orange-100 rounded-lg px-3 py-1.5 disabled:opacity-40"
+                            onClick={() => setSoil(prev => {
+                              const site = { ...DEFAULT_SITE, ...prev.siteSeismic };
+                              const source = `RNCan, CNB ${result.cnbEdition}, ${site.locality.trim() || 'localité non renseignée'}, classe ${site.siteClass.trim() || 'non renseignée'}, PGA = ${site.pga.toFixed(3).replace('.', ',')} g`;
+                              return { ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), pga: site.pga, ahSource: source } };
+                            })}
+                          >
+                            Utiliser la PGA comme ah
+                          </button>
+                          <p className="text-[10px] text-slate-600 leading-snug">Saisir la PGA correspondant à la classe d'emplacement du site, sous la semelle (CFEM 5e éd., p. 629).</p>
+                          <p className="text-[10px] text-slate-600 leading-snug">Pour le CNB 2020, le calculateur donne les valeurs par classe d'emplacement ; la conversion par F(PGA) n'est pas programmée (À CONFIRMER).</p>
+                          <p className="text-[10px] text-slate-500 leading-snug">Ces valeurs sont enregistrées et affichées dans la note ; le moteur n'utilise que ah (kh = ah, kv = ⅔·kh par défaut).</p>
+                        </div>
+
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                 <div className="flex items-center gap-2">

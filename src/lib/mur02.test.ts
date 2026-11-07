@@ -307,7 +307,9 @@ describe('MUR-02 D9 - butée et profondeur de gel', () => {
     const r = rp({ deduct: true, df: 0, noDf: 'not_verifiable' });
     expect(r.earthPressures.P_passive_nominal).toBe(0);
     expect(r.verifiable).toBe(true); // via un statut, pas via warnings
-    expect(r.combinations.every(c => c.status_sliding === 'NON VÉRIFIABLE' && c.status_overturning === 'NON VÉRIFIABLE')).toBe(true);
+    // MUR-02 §12 : les combinaisons ÉLS n'ont pas de statut de glissement ni de renversement (SANS OBJET)
+    expect(r.combinations.filter(c => c.type === 'ULS').every(c => c.status_sliding === 'NON VÉRIFIABLE' && c.status_overturning === 'NON VÉRIFIABLE')).toBe(true);
+    expect(r.combinations.filter(c => c.type === 'SLS').every(c => c.status_sliding === 'SANS OBJET' && c.status_overturning === 'SANS OBJET')).toBe(true);
     expect(r.governingBearing.status_bearing === 'OK' || r.governingBearing.status_bearing === 'NON').toBe(true);
     // df saisie : statuts normaux
     const ok = rp({ deduct: true, df: 1.2, noDf: 'not_verifiable' });
