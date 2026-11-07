@@ -673,6 +673,8 @@ export function analyzeRetainingWall(
     E_base_nominal,
     K_active_used: K_active,
     K_passive_used: Kp,
+    delta_deg: (delta_rad * 180) / Math_PI,
+    delta_p_deg: (delta_p_rad * 180) / Math_PI,
     W_heelSoil_inertia: 0,
     E_heelSoil_nominal: 0,
     y_heelSoil: 0,

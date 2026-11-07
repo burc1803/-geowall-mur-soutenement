@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Eq, V, Frac, Sqrt, Tx } from './Eq';
+import { buildSlidingEq, buildOverturningEq, buildBearingEq, buildDeltaPaeEq, inertiaStrings, fr } from '../lib/theoryEquations';
 import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, ConcreteProperties } from '../lib/types';
 import { 
   BookOpen, 
@@ -33,10 +35,14 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
   const baseWidth = geo.ePiedAv + geo.epStem + geo.ePiedAr;
   const totalHeight = geo.hMur + geo.epBase;
 
-  // Find governing ULS & SLS combinations
-  const ulsSliding = [...result.combinations].filter(c => c.type === 'ULS').sort((a, b) => a.FOS_sliding - b.FOS_sliding)[0] || result.combinations[0];
-  const ulsOverturning = [...result.combinations].filter(c => c.type === 'ULS').sort((a, b) => a.FOS_overturning - b.FOS_overturning)[0] || result.combinations[0];
-  const ulsBearing = [...result.combinations].filter(c => c.type === 'ULS').sort((a, b) => a.FOS_bearing - b.FOS_bearing)[0] || result.combinations[0];
+  // Combinaisons gouvernantes choisies par le moteur (aucun tri local)
+  const ulsSliding = result.governingSliding;
+  const ulsOverturning = result.governingOverturning;
+  const ulsBearing = result.governingBearing;
+  const slidingEq = buildSlidingEq(ulsSliding, result, soil);
+  const overturningEq = buildOverturningEq(ulsOverturning);
+  const bearingEq = buildBearingEq(ulsBearing, baseWidth, result.stabilityCriterion);
+  const inertia = conc ? inertiaStrings(result, geo, conc) : { stem: ' = ', base: ' = ' };
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-6xl mx-auto pb-16">
@@ -84,23 +90,16 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
         </div>
       </div>
 
-      {/* SECTION 1: POUSSÉE & BUTÉE (Ka, Kp, K0, Kae) */}
+      {/* SECTION 1: POUSSÉE & BUTÉE (Ka, Kp, K0) */}
       {activeSection === 'poussee' && (
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
-          {/* Card Ka / K0 / Kp */}
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm">
-                  1
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm">1</div>
                 <div>
-                  <h2 className="text-base font-black text-slate-900">
-                    Coefficients de Poussée et Butée des Terres
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Théories de Rankine, Coulomb et Jaky (CFEM 5e éd., À CONFIRMER)
-                  </p>
+                  <h2 className="text-base font-black text-slate-900">Coefficients de poussée et de butée des terres</h2>
+                  <p className="text-xs text-slate-500">Rankine, Coulomb et Jaky (CFEM 5e éd., À CONFIRMER) ; butée intégrée par couches (CFEM 5e éd., § 20.7)</p>
                 </div>
               </div>
               <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 px-2.5 py-1 rounded border border-indigo-200">
@@ -110,571 +109,401 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Ka Rankine */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-black uppercase text-indigo-900">
-                    Poussée Active — Rankine ($K_a$)
-                  </h3>
-                  <span className="text-[10px] font-mono font-bold text-slate-500">Murs Autostables</span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  Ka = tan²(45° - φ / 2) = (1 - sin φ) / (1 + sin φ)
-                </div>
-                <p className="text-xs text-slate-600 mb-2">
-                  Hypothèse de rupture de Rankine sans frottement sol-parement (plan de glissement inclinant à 45° + φ/2).
-                </p>
-                <div className="bg-indigo-50/60 p-2.5 rounded-lg border border-indigo-100 text-xs font-mono flex justify-between items-center">
-                  <span className="text-slate-600">Calcul projet (φ = {soil.phi}°) :</span>
-                  <span className="font-bold text-indigo-900">Ka = {ep.Ka_rankine.toFixed(4)}</span>
-                </div>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-indigo-900">Poussée active — Rankine</h3>
+                <Eq
+                  general={<><V n="K" s="a" /> = tan²(45° − <V n="φ" />/2) = <Frac n={<>1 − sin <V n="φ" /></>} d={<>1 + sin <V n="φ" /></>} /></>}
+                  substituted={<>tan²(45° − {fr(soil.phi, 1)}°/2)</>}
+                  result={<><V n="K" s="a" /> = {fr(ep.Ka_rankine, 4)}</>}
+                />
+                <p className="text-[11px] text-slate-600">Sans frottement sol-parement (δ = 0). Valeur du moteur ; φ du remblai.</p>
               </div>
 
               {/* Ka Coulomb */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-black uppercase text-indigo-900">
-                    Poussée Active — Coulomb (Ka,coulomb)
-                  </h3>
-                  <span className="text-[10px] font-mono font-bold text-slate-500">Avec Frottement δ</span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  Ka = cos²(φ) / [cos(δ) · (1 + √[sin(φ+δ)·sin(φ) / cos(δ)])²]
-                </div>
-                <p className="text-xs text-slate-600 mb-2">
-                  Tient compte du frottement entre le dos du voile et le remblai granulaire (δ = 2/3·φ ou tan⁻¹(μ)).
-                </p>
-                <div className="bg-indigo-50/60 p-2.5 rounded-lg border border-indigo-100 text-xs font-mono flex justify-between items-center">
-                  <span className="text-slate-600">Coulomb avec δ={(soil.phi * 2 / 3).toFixed(1)}° :</span>
-                  <span className="font-bold text-indigo-900">Ka = {ep.Ka_coulomb.toFixed(4)}</span>
-                </div>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-indigo-900">Poussée active — Coulomb</h3>
+                <Eq
+                  general={<><V n="K" s="a" /> = <Frac n={<>cos²<V n="φ" /></>} d={<>cos <V n="δ" /> · [1 + <Sqrt><Frac n={<>sin(<V n="φ" />+<V n="δ" />) · sin <V n="φ" /></>} d={<>cos <V n="δ" /></>} /></Sqrt>]²</>} /></>}
+                  substituted={<>cos²({fr(soil.phi, 1)}°) / (cos({fr(ep.delta_deg, 2)}°) · [1 + √(sin({fr(soil.phi, 1)}° + {fr(ep.delta_deg, 2)}°) · sin({fr(soil.phi, 1)}°) / cos({fr(ep.delta_deg, 2)}°))]²)</>}
+                  result={<><V n="K" s="a" /> = {fr(ep.Ka_coulomb, 4)}</>}
+                  note={<>δ = min(atan μ ; {fr(result.soilMethodConfig.deltaFrictionRatio, 3)}·φ) = min({fr((Math.atan(soil.mu) * 180) / Math.PI, 2)}° ; {fr(result.soilMethodConfig.deltaFrictionRatio * soil.phi, 2)}°) = {fr(ep.delta_deg, 2)}°.</>}
+                />
               </div>
 
               {/* K0 Jaky */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-black uppercase text-amber-900">
-                    Poussée au Repos — Jaky ($K_0$)
-                  </h3>
-                  <span className="text-[10px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                    Murs de Sous-sol Bloqués
-                  </span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  K₀ = 1 - sin(φ)
-                </div>
-                <p className="text-xs text-slate-600 mb-2">
-                  À utiliser obligatoirement lorsque le haut du mur ne peut pas translater (appuyé par la dalle d'étage ou système rigide).
-                </p>
-                <div className="bg-amber-50/60 p-2.5 rounded-lg border border-amber-200 text-xs font-mono flex justify-between items-center">
-                  <span className="text-slate-600">Calcul projet (φ = {soil.phi}°) :</span>
-                  <span className="font-bold text-amber-900">K₀ = {ep.K0_jaky.toFixed(4)}</span>
-                </div>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-amber-900">Poussée au repos — Jaky</h3>
+                <Eq
+                  general={<><V n="K" s="0" /> = 1 − sin <V n="φ" /></>}
+                  substituted={<>1 − sin({fr(soil.phi, 1)}°)</>}
+                  result={<><V n="K" s="0" /> = {fr(ep.K0_jaky, 4)}</>}
+                />
+                <p className="text-[11px] text-slate-600">Mur de sous-sol (haut retenu) ou méthode « au repos » choisie.</p>
               </div>
 
-              {/* Kp Butée */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-black uppercase text-emerald-900">
-                    Butée Passive — ($K_p$)
-                  </h3>
-                  <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    Avant du Mur
-                  </span>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  Kp = tan²(45° + φ / 2) = (1 + sin φ) / (1 - sin φ)
-                </div>
-                <p className="text-xs text-slate-600 mb-2">
-                  Selon le CFEM 5e (tableau 6.2), la butée est pondérée avec Φ_p = {result.geotech.phi_p}, sans autre réduction de Kp. Zone de butée : de {result.frost.z_top.toFixed(2)} m à {ep.h_pass.toFixed(2)} m sous la surface avant ({result.frost.deduct ? `profondeur de gel df = ${result.frost.df.toFixed(2)} m déduite` : 'profondeur de gel non déduite : sol avant déclaré permanent et non gélif par l\'utilisateur'}).
-                </p>
-                <div className="bg-emerald-50/60 p-2.5 rounded-lg border border-emerald-200 text-xs font-mono flex justify-between items-center">
-                  <span className="text-slate-600">Kp Rankine = {ep.Kp_rankine.toFixed(4)}</span>
-                  <span className="font-bold text-emerald-900">
-                    {result.soilMethodConfig.passiveMethod === 'neglected'
-                      ? 'Butée négligée (Kp = 0)'
-                      : `Kp retenu (${({ rankine: 'Rankine', coulomb: 'Coulomb', neglected: '' } as Record<string, string>)[result.soilMethodConfig.passiveMethod]}) = ${ep.K_passive_used.toFixed(4)} ; Φ_p = ${result.geotech.phi_p}`}
-                  </span>
-                </div>
+              {/* Kp */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-emerald-900">Butée passive — Rankine (sol de fondation)</h3>
+                <Eq
+                  general={<><V n="K" s="p" /> = tan²(45° + <V n="φ" />/2) = <Frac n={<>1 + sin <V n="φ" /></>} d={<>1 − sin <V n="φ" /></>} /></>}
+                  substituted={<>tan²(45° + {fr(result.foundationSoil.phi, 1)}°/2)</>}
+                  result={<><V n="K" s="p" /> = {fr(ep.Kp_rankine, 4)} (Rankine) ; {fr(ep.Kp_coulomb, 4)} (Coulomb, δ = {fr(ep.delta_p_deg, 2)}°)</>}
+                  note={<>Kp utilise le φ du sol de fondation ({fr(result.foundationSoil.phi, 1)}°). Aucune réduction de Kp : seul φ<sub>p</sub> = {fr(result.geotech.phi_p, 2)} (tableau 6.2) réduit la butée.</>}
+                />
               </div>
             </div>
 
-            {/* Application numérique globale */}
-            <div className="mt-6 p-4 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div>
-                Coeff. actif retenu pour la modélisation : <strong className="text-amber-400">{ep.K_active_used.toFixed(4)}</strong> ({geo.wallType === 'cantilever' ? 'Cantilever = Ka' : 'Mur sous-sol = K0'})
-              </div>
-              <div>
-                Poussée unitaire à la base : <strong>{(ep.K_active_used * soil.gamma * totalHeight).toFixed(2)} kPa</strong>
-              </div>
-              <div>
-                Force totale $P_a$ = <strong>{ep.P_active_nominal.toFixed(1)} kN/m</strong> à $y = {(ep.y_Pa).toFixed(2)} m$
-              </div>
+            {/* Coefficients retenus */}
+            <div className="mt-6">
+              <Eq
+                general={<>Coefficient actif retenu : <V n="K" s="a,ret" /> ; coefficient passif retenu : <V n="K" s="p,ret" /></>}
+                substituted={<>{geo.wallType === 'basement' || result.soilMethodConfig.activeMethod === 'at_rest' ? 'mur de sous-sol ou méthode « au repos » : K₀' : result.soilMethodConfig.activeMethod === 'coulomb' ? 'méthode Coulomb : Ka (Coulomb)' : 'méthode Rankine : Ka (Rankine)'} ; passif : {result.soilMethodConfig.passiveMethod === 'neglected' ? 'butée négligée (Kp = 0)' : result.soilMethodConfig.passiveMethod === 'coulomb' ? 'Kp (Coulomb)' : 'Kp (Rankine)'}</>}
+                result={<><V n="K" s="a,ret" /> = {fr(ep.K_active_used, 4)} ; <V n="K" s="p,ret" /> = {fr(ep.K_passive_used, 4)}</>}
+              />
+            </div>
+
+            {/* Résultantes */}
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Eq
+                general={<><V n="P" s="a" /> = ½ · <V n="K" s="a,ret" /> · <V n="γ" /> · <V n="H" />² (nominale, sol seul)</>}
+                substituted={<>0,5 · {fr(ep.K_active_used, 4)} · {fr(soil.gamma, 1)} · {fr(totalHeight)}²</>}
+                result={<><V n="P" s="a" /> = {fr(ep.P_active_nominal, 1)} kN/m, à {fr(ep.y_Pa, 2)} m de la sous-face (<V n="H" />/3)</>}
+                note="La surcharge, l'eau et le séisme sont des composantes séparées (voir la note de calcul). Avec nappe, l'eau et le déjaugeage sont traités par le moteur à part."
+              />
+              <Eq
+                general={<><V n="P" s="p" prime /> = ∫<sub>z₀</sub><sup>h_pass</sup> <V n="K" s="p" /> · <V n="σ" s="v" prime /> d<V n="z" /> avec <V n="σ" s="v" prime /> = <V n="γ" /> <V n="z" /> (sec) puis <V n="γ" prime /> au-dessous de la nappe</>}
+                substituted={result.hydro.hasWater
+                  ? <>intégration par couches : K<sub>p</sub> = {fr(ep.K_passive_used, 4)} ; γ = {fr(result.foundationSoil.gamma, 1)} kN/m³ ; z₀ = {fr(ep.z_passive_top, 2)} m ; h_pass = {fr(ep.h_pass, 2)} m</>
+                  : <>0,5 · {fr(ep.K_passive_used, 4)} · {fr(result.foundationSoil.gamma, 1)} · ({fr(ep.h_pass, 2)}² − {fr(ep.z_passive_top, 2)}²)</>}
+                result={<><V n="P" s="p" prime /> = {fr(ep.P_passive_nominal, 1)} kN/m, à {fr(ep.y_Pp, 3)} m de la sous-face</>}
+                note={<>z₀ = df ({fr(result.frost.df, 2)} m) si la case gel est cochée{result.frost.df_missing ? ` ; df non saisie : traitement « ${result.frost.no_df_treatment === 'zero' ? 'butée nulle' : result.frost.no_df_treatment === 'not_verifiable' ? 'non vérifiable' : 'butée pleine avec avis'} » (MUR-02 §11)` : ''}. La zone gelée reste comptée comme surcharge sur la zone de butée.</>}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION 2: SÉISME SELON LE CFEM & MONONOBE-OKABE */}
+      {/* SECTION 2: SÉISME (CFEM 5e éd., § 18.7) */}
       {activeSection === 'seisme' && (
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-700 flex items-center justify-center font-black text-sm">
-                  2
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-700 flex items-center justify-center font-black text-sm">2</div>
                 <div>
-                  <h2 className="text-base font-black text-slate-900">
-                    Paramètres Sismiques & Poussée Dynamique selon le CFEM
-                  </h2>
+                  <h2 className="text-base font-black text-slate-900">Paramètres sismiques et poussée dynamique</h2>
                   <p className="text-xs text-slate-500">
-                    Méthode de Mononobe-Okabe (CFEM 5e éd., § 18.7) ; Seed & Whitman : méthode simplifiée hors fiche MUR-02
+                    Méthode retenue par le moteur : <strong>{result.seismic.method === 'wood' ? 'Wood (mur retenu)' : result.seismic.method === 'mononobe_okabe' ? 'Mononobe-Okabe (mur libre)' : result.seismic.method === 'seed_whitman' ? 'Seed & Whitman (hors fiche MUR-02)' : 'aucune (statique)'}</strong>
                   </p>
                 </div>
               </div>
               <span className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded border ${
-                soil.methodConfig?.seismicMethod === 'none'
-                  ? 'bg-slate-100 text-slate-700 border-slate-300'
-                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                soil.methodConfig?.seismicMethod === 'none' ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-rose-50 text-rose-800 border-rose-200'
               }`}>
-                {soil.methodConfig?.seismicMethod === 'none' ? 'Option : Aucun Séisme (Statique)' : 'CFEM 5e éd., § 18.7'}
+                {soil.methodConfig?.seismicMethod === 'none' ? 'Option : aucun séisme (statique)' : 'CFEM 5e éd., § 18.7'}
               </span>
             </div>
 
-            {/* Inactive Seismic Notice */}
             {soil.methodConfig?.seismicMethod === 'none' && (
-              <div className="bg-slate-100 border border-slate-300 rounded-xl p-4 mb-6 text-xs text-slate-700 leading-relaxed flex items-center justify-between">
-                <div>
-                  <strong className="text-slate-900 block font-black">Mode Statique Pur Sélectionné :</strong>
-                  <span>Le calcul sismique est désactivé (<code className="font-mono">k_h = 0.000</code>, <code className="font-mono">ΔPae = 0.0 kN/m</code>). Seules les combinaisons de charges statiques CNB {result.cnbEdition} sont évaluées.</span>
-                </div>
-                <span className="px-2.5 py-1 bg-slate-200 text-slate-800 text-[10.5px] font-bold rounded-lg whitespace-nowrap ml-3">
-                  E = 0 (Inactif)
-                </span>
+              <div className="bg-slate-100 border border-slate-300 rounded-xl p-4 mb-6 text-xs text-slate-700 leading-relaxed">
+                <strong className="text-slate-900 block font-black">Mode statique pur sélectionné.</strong>
+                Le calcul sismique est désactivé (kh = 0, ΔPAE = 0). Seules les combinaisons de charges statiques CNB {result.cnbEdition} sont évaluées.
               </div>
             )}
 
-            {/* Explanation box */}
             <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-4 mb-6 text-xs text-slate-700 leading-relaxed">
-              <div className="flex items-center gap-2 font-bold text-amber-900 mb-1">
-                <Info size={16} />
-                <span>Recommandations du Manuel Canadien d'Ingénierie des Fondations (CFEM) :</span>
-              </div>
-              <p>
-                En vertu du <strong>CFEM Section 6.7.3</strong> et de l'annexe du <strong>CNB {result.cnbEdition}</strong>, pour un mur de soutènement autostable sur semelle pouvant tolérer 
-                un déplacement permanent résiduel modéré (environ 25 à 50 mm sous séisme de calcul), le coefficient d'accélération horizontale de calcul peut être réduit :
-                <br />
-                <code className="font-mono font-bold text-amber-950">k_h = 0.50 · PGA</code> (ou <code>0.50 · Sa(0.2)</code>).
-                Pour un mur rigide non déplaçable (ex: sous-sol), il convient de retenir <code className="font-mono font-bold text-amber-950">k_h = 1.00 · PGA</code>.
-              </p>
+              <div className="flex items-center gap-2 font-bold text-amber-900 mb-1"><Info size={16} /><span>Accélération de calcul (MUR-02 §4.1, décision D6)</span></div>
+              <Eq
+                general={<><V n="k" s="h" /> = <V n="a" s="h" />/<V n="g" /> (CFEM 5e éd., éq. 18.22) ; <V n="k" s="v" /> = ⅔ · <V n="k" s="h" /> à défaut d'étude du site (CFEM 5e éd., p. 629), deux signes étudiés</>}
+                substituted={<><V n="k" s="h" /> = {fr(result.seismic.ah, 3)}{result.seismic.csaS6 ? ' × 0,5 (option CSA S6, remblais routiers : kv = 0)' : ''} ; |<V n="k" s="v" />| = {fr(result.seismic.kvInput, 3)}{result.seismic.kvIsDefault ? ' (= ⅔ · kh, défaut)' : ' (saisi)'}</>}
+                result={<><V n="k" s="h" /> = {fr(result.seismic.kh, 3)} ; |<V n="k" s="v" />| = {fr(result.seismic.kvInput, 3)}</>}
+                note={result.seismic.rigid ? 'Mur rigide ou retenu : kh = ah ; l\'option CSA S6 ne s\'y applique pas.' : 'L\'option kh = 0,5·ah (CSA S6) est désactivée par défaut ; elle vise les murs de remblais routiers pouvant se déplacer de 25 à 50 mm.'}
+              />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Formule de Mononobe-Okabe */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <h3 className="text-xs font-black uppercase text-slate-900 mb-2">
-                  1. Théorie de Mononobe-Okabe (Kae)
-                </h3>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-[11px] leading-relaxed mb-3">
-                  θ_eq = arctan( kh / (1 - kv) )<br />
-                  Kae = cos²(φ - θ_eq) / [ cos(θ_eq) · cos(δ + θ_eq) · (1 + √[sin(φ+δ)·sin(φ-θ_eq) / cos(δ+θ_eq)])² ]
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-600">kh appliqué :</span>
-                    <span className="font-mono font-bold">{result.seismic.kh.toFixed(3)}{result.seismic.csaS6 ? ' (0,5·ah, option CSA S6)' : ' (= ah)'}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-600">Angle d'inertie sismique θ_eq :</span>
-                    <span className="font-mono font-bold">{ep.theta_eq_deg.toFixed(2)}° ({ep.theta_eq_rad.toFixed(4)} rad)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Coeff. dynamique Kae (M-O) :</span>
-                    <span className="font-mono font-bold text-rose-700">{ep.Kae_mo.toFixed(4)}</span>
-                  </div>
-                </div>
+            {result.seismic.scenarios.length > 0 && (
+              <div className="space-y-4">
+                {result.seismic.scenarios.map((sc, i) => {
+                  const dp = buildDeltaPaeEq(result, soil, geo, i);
+                  return (
+                    <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                      <h3 className="text-xs font-black uppercase text-slate-900">
+                        Scénario {result.seismic.scenarios.length > 1 ? (sc.sign > 0 ? 'kv vers le haut (↑)' : 'kv vers le bas (↓)') : 'sans séisme vertical'}
+                      </h3>
+                      {result.seismic.method === 'mononobe_okabe' && (
+                        <>
+                          <Eq
+                            general={<><V n="ψ" /> = atan[ <Frac n={<V n="k" s="h" />} d={<>1 − <V n="k" s="v" /></>} /> ]</>}
+                            substituted={<>atan[ {fr(result.seismic.kh, 3)} / (1 − {fr(sc.kv, 3)}) ]</>}
+                            result={<><V n="ψ" /> = {fr(sc.psi_deg, 2)}° ({fr(sc.psi_rad, 4)} rad)</>}
+                          />
+                          <Eq
+                            general={<><V n="K" s="AE" /> = <Frac n={<>cos²(<V n="φ" /> − <V n="ψ" />)</>} d={<>cos <V n="ψ" /> · cos(<V n="δ" /> + <V n="ψ" />) · [1 + <Sqrt><Frac n={<>sin(<V n="φ" />+<V n="δ" />) · sin(<V n="φ" /> − <V n="ψ" />)</>} d={<>cos(<V n="δ" />+<V n="ψ" />)</>} /></Sqrt>]²</>} /></>}
+                            substituted={<>φ = {fr(soil.phi, 1)}° ; δ = {fr(soil.methodConfig?.activeMethod === 'coulomb' ? ep.delta_deg : 0, 2)}° ; ψ = {fr(sc.psi_deg, 2)}°</>}
+                            result={sc.indeterminate ? <>K<sub>AE</sub> indéterminé (φ − β &lt; ψ) : calcul sismique arrêté, NON VÉRIFIABLE</> : <><V n="K" s="AE" /> = {fr(sc.Kae, 4)}</>}
+                            note="δ = 0 sur le plan fictif (remblai horizontal, D11) sauf méthode Coulomb ; même δ pour K_A et K_AE."
+                          />
+                        </>
+                      )}
+                      {dp && (
+                        <Eq
+                          general={result.seismic.method === 'mononobe_okabe'
+                            ? <>Δ<V n="P" s="AE" /> = ½ · <V n="γ" /> · <V n="H" />² · [(1 − <V n="k" s="v" />) · <V n="K" s="AE" /> − <V n="K" s="A" />] ≥ 0 (<V n="P" s="AE" /> = <V n="P" s="A" /> + Δ<V n="P" s="AE" />, éq. 18.20-18.23), appliquée à 0,6<V n="H" /></>
+                            : result.seismic.method === 'wood'
+                            ? <>Δ<V n="P" s="0E" /> = <V n="k" s="h" /> · <V n="γ" /> · <V n="H" />² (Wood, CFEM 5e éd., éq. 18.39), appliquée à 0,58<V n="H" /></>
+                            : <>Δ<V n="P" s="AE" /> = 0,375 · <V n="k" s="h" /> · <V n="γ" /> · <V n="H" />² (Seed &amp; Whitman, hors fiche MUR-02), appliquée à 0,6<V n="H" /></>}
+                          substituted={<Tx>{dp.substituted}</Tx>}
+                          result={<Tx>{dp.result}</Tx>}
+                          note={result.seismic.method === 'seed_whitman' ? 'Hors fiche MUR-02 : méthode simplifiée, sans (1 − kv) ni contrôle d\'indétermination.' : undefined}
+                        />
+                      )}
+                      {result.seismic.westergaard && (
+                        <Eq
+                          general={<><V n="P" s="w,dyn" /> = <Frac n="7" d="12" /> · <V n="k" s="h" /> · <V n="γ" s="w" /> · <V n="h" s="w,av" />² (Westergaard, éq. 18.33)</>}
+                          substituted={<>(7/12) · {fr(result.seismic.kh, 3)} · {fr(soil.gamma_w ?? 9.81, 2)} · {fr(ep.hw_av, 2)}²</>}
+                          result={<><V n="P" s="w,dyn" /> = {fr(sc.Pw_dyn, 2)} kN/m</>}
+                        />
+                      )}
+                      {result.seismic.passiveMode === 'kpe' && (
+                        <Eq
+                          general={<><V n="P" s="PE" /> = <V n="P" s="P" /> × min[ <V n="K" s="PE" /> · (1 − <V n="k" s="v" />) / <V n="K" s="p" /> ; 1 ] (butée sismique réduite, éq. 18.27-18.31)</>}
+                          substituted={<>{fr(sc.Kpe, 4)} · (1 − {fr(sc.kv, 3)}) / {fr(ep.K_passive_used, 4)}</>}
+                          result={<><V n="P" s="PE" />/<V n="P" s="P" /> = {fr(sc.Pp_factor, 3)}</>}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-
-              {/* Formule simplifiée de Seed & Whitman */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <h3 className="text-xs font-black uppercase text-slate-900 mb-2">
-                  2. Méthode Seed & Whitman (1970) — hors fiche MUR-02
-                </h3>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-[11px] leading-relaxed mb-3">
-                  ΔKae ≈ 0.75 · kh<br />
-                  ΔPae = 0.375 · kh · γ · H²<br />
-                  Point d'application dynamique : y = 0.60 · Ht
-                </div>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-600">Incrément dynamique ΔKae :</span>
-                    <span className="font-mono font-bold">+{ep.delta_Kae_seed.toFixed(4)}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-200 pb-1">
-                    <span className="text-slate-600">Force dynamique du sol ΔPae :</span>
-                    <span className="font-mono font-bold text-rose-700">{ep.delta_Pae_seed.toFixed(2)} kN/m</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Bras de levier depuis la base (0.6·H) :</span>
-                    <span className="font-mono font-bold">{ep.y_Pae.toFixed(2)} m</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Forces d'inertie de structure */}
-            <div className="mt-6 p-4 bg-rose-50/50 rounded-xl border border-rose-200">
-              <h3 className="text-xs font-black uppercase text-rose-950 mb-2">
-                3. Forces d'Inertie de la Structure (Béton Armé)
-              </h3>
-              <p className="text-xs text-slate-600 mb-3">
-                Conformément au CNB et au CFEM, sous sollicitation sismique E, les masses propres du voile et de la semelle développent une force d'inertie horizontale déstabilisante :
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
-                <div className="bg-white p-3 rounded-lg border border-rose-100 flex justify-between">
-                  <span>Inertie Voile (E_stem) = W_stem · kh :</span>
-                  <strong className="text-rose-700">{ep.E_stem_nominal.toFixed(2)} kN/m</strong>
-                </div>
-                <div className="bg-white p-3 rounded-lg border border-rose-100 flex justify-between">
-                  <span>Inertie Semelle (E_base) = W_base · kh :</span>
-                  <strong className="text-rose-700">{ep.E_base_nominal.toFixed(2)} kN/m</strong>
+            {result.seismic.method !== 'none' && (
+              <div className="mt-6 p-4 bg-rose-50/50 rounded-xl border border-rose-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-rose-950">Forces d'inertie de la structure (béton armé)</h3>
+                <p className="text-xs text-slate-600">Sous l'action E, les masses du voile et de la semelle développent une force horizontale <V n="k" s="h" /> · <V n="W" /> appliquée à leur centre de gravité (poids W multiplié par 1 ∓ kv pour la composante verticale).</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Eq general={<><V n="E" s="voile" /> = <V n="γ" s="c" /> · <V n="h" s="mur" /> · <V n="t" s="v" /> · <V n="k" s="h" /></>} substituted={inertia.stem.split(' = ')[0]} result={inertia.stem.split(' = ')[1]} />
+                  <Eq general={<><V n="E" s="semelle" /> = <V n="γ" s="c" /> · <V n="B" /> · <V n="h" s="s" /> · <V n="k" s="h" /></>} substituted={inertia.base.split(' = ')[0]} result={inertia.base.split(' = ')[1]} />
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* SECTION 3: STABILITÉ GÉOTECHNIQUE (CFEM 5e éd., tableau 6.2 et fig. 20.10) */}
+      {/* SECTION 3: STABILITÉ GÉOTECHNIQUE (MUR-02 §1 à §2 ; CFEM 5e éd., tableau 6.2) */}
       {activeSection === 'stabilite' && (
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-black text-sm">
-                  3
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-black text-sm">3</div>
                 <div>
-                  <h2 className="text-base font-black text-slate-900">
-                    Formules de Vérification de la Stabilité Externe
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Glissement, Renversement & Portance selon le CFEM 5e éd. (tableau 6.2 et fig. 20.10)
-                  </p>
+                  <h2 className="text-base font-black text-slate-900">Formules de vérification de la stabilité externe</h2>
+                  <p className="text-xs text-slate-500">Glissement, renversement et portance (MUR-02 §1 à §2 ; CFEM 5e éd., tableau 6.2 et fig. 20.10). Combinaison gouvernante du moteur pour chaque vérification.</p>
                 </div>
               </div>
-              <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded border border-blue-200">
-                CFEM 5e éd., tableau 6.2
-              </span>
+              <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-800 px-2.5 py-1 rounded border border-blue-200">CFEM 5e éd., tableau 6.2</span>
             </div>
 
-            {/* 1. Glissement */}
-            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-black uppercase text-blue-900 flex items-center gap-1.5">
-                  <ArrowRightLeft size={16} />
-                  <span>A. Stabilité au Glissement (Sliding Stability)</span>
-                </h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsSliding.FOS_sliding >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  Ratio Min = {ulsSliding.FOS_sliding.toFixed(2)} ({ulsSliding.status_sliding})
+            {/* A. Glissement */}
+            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase text-blue-900 flex items-center gap-1.5"><ArrowRightLeft size={16} /><span>A. Glissement à la base</span></h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsSliding.status_sliding === 'NON VÉRIFIABLE' ? 'bg-amber-100 text-amber-800' : ulsSliding.FOS_sliding >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                  {ulsSliding.status_sliding === 'NON VÉRIFIABLE' ? 'Rapport min : non vérifiable (df non saisie)' : <>Rapport min = {fr(ulsSliding.FOS_sliding)} ({ulsSliding.status_sliding})</>}
                 </span>
               </div>
-              <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                Fs = C₂ · B · Φ_coh + P_p · Φ_p + (∑V_min) · μ · Φ_gs
-                <br />
-                Critère de conformité : Ratio = Fs / (∑Fh_déstabilisant) ≥ 1.00
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-700">
-                <div className="bg-white p-2.5 rounded border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">Frottement Sol-Béton :</span>
-                  <strong className="font-mono">μ = {soil.mu.toFixed(2)}</strong> (Φ_gs = {result.geotech.phi_gs} ; Ψ = {result.geotech.psi})
-                </div>
-                <div className="bg-white p-2.5 rounded border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">Butée Passive Mobilisée :</span>
-                  <strong className="font-mono">Ψ · Φ_p · (Pp′ + Pw,a) = {result.geotech.psi} · {result.geotech.phi_p} · ({ep.P_passive_nominal.toFixed(1)} + {ep.P_water_front.toFixed(1)}) = {(result.geotech.psi * result.geotech.phi_p * (ep.P_passive_nominal + ep.P_water_front)).toFixed(1)} kN/m (statique)</strong>
-                </div>
-                <div className="bg-white p-2.5 rounded border border-slate-200">
-                  <span className="text-slate-500 block text-[10px]">Combinaison critique ÉLU :</span>
-                  <strong className="font-mono text-indigo-700 truncate block">{ulsSliding.combName}</strong>
-                </div>
-              </div>
+              <Eq
+                general={<><V n="Ψ" /> · [ <V n="φ" s="gs" /> · Σ<V n="V" prime /> · tan <V n="δ" s="b" /> + <V n="φ" s="coh" /> · <V n="c" prime /> · <V n="B" prime /> + <V n="φ" s="p" /> · (<V n="P" s="p" prime /> + <V n="P" s="w,a" />) ] ≥ Σ<V n="H" s="f" /></>}
+                substituted={<>{slidingEq.substituted} ≥ {fr(slidingEq.sumHf, 1)}</>}
+                result={<Tx>{slidingEq.result}</Tx>}
+                note={<>Σ<i>V</i>′ : force verticale effective (sous-pression déduite), variables stabilisantes à 0 (CNB 4.1.3.2.(3)). <i>B</i>′ = <i>B</i> − 2<i>e</i> (largeur comprimée) pour le terme cohésif : À CONFIRMER (D13). Σ<i>H</i><sub>f</sub> inclut l'inertie, la poussée dynamique et, au séisme, Westergaard. tan δ<sub>b</sub> = μ = {fr(soil.mu)}. Combinaison : {ulsSliding.combName} ({ulsSliding.formula}).</>}
+              />
             </div>
 
-            {/* 2. Renversement */}
-            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-black uppercase text-amber-900 flex items-center gap-1.5">
-                  <Scale size={16} />
-                  <span>B. Stabilité au Renversement (Overturning Stability)</span>
-                </h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsOverturning.FOS_overturning >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  Ratio Min = {ulsOverturning.FOS_overturning.toFixed(2)} ({ulsOverturning.status_overturning})
+            {/* B. Renversement */}
+            <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase text-amber-900 flex items-center gap-1.5"><Scale size={16} /><span>B. Renversement autour de l'orteil</span></h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsOverturning.outside_base || ulsOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'bg-amber-100 text-amber-800' : ulsOverturning.FOS_overturning >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                  {ulsOverturning.outside_base ? 'Rapport min : non vérifiable (hors base)' : ulsOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'Rapport min : non vérifiable (df non saisie)' : <>Rapport min = {fr(ulsOverturning.FOS_overturning)} ({ulsOverturning.status_overturning})</>}
                 </span>
               </div>
-              <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                Ms = ∑(V_min · x) + M_hp · Φ_renv
-                <br />
-                Mr = ∑(F_h · y)
-                <br />
-                Critère de conformité : Ratio = Ms / Mr ≥ 1.00 (calculé par rapport à l'orteil avant)
+              <Eq
+                general={<><V n="Ψ" /> · <V n="φ" s="ov" /> · Σ<V n="M" s="stab" /> ≥ Σ<V n="M" s="renv" />, Σ<V n="M" s="stab" /> = Σ<V n="M" s="rés" /> (poids et charges stabilisantes) + <V n="M" s="butée" /> (butée et eau à l'avant)</>}
+                substituted={<Tx>{overturningEq.substituted}</Tx>}
+                result={ulsOverturning.outside_base ? <>Non vérifiable : résultante hors base</> : <Tx>{overturningEq.result}</Tx>}
+                note={<>Facteurs de D : 0,9D aux cas 2 à 4 (stabilisant), 1,0D au cas 5, et D<sub>unfav</sub> pour les actions D défavorables (CNB 4.1.3.2.(5)) ; variables stabilisantes à 0. La butée fait partie de Σ<i>M</i><sub>stab</sub> (MUR-02 §2.3, E08 ; forme d'application À CONFIRMER). Combinaison : {ulsOverturning.combName} ({ulsOverturning.formula}).</>}
+              />
+            </div>
+
+            {/* C. Portance */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase text-emerald-900 flex items-center gap-1.5"><Layers size={16} /><span>C. Capacité portante et répartition des pressions</span></h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsBearing.outside_base ? 'bg-amber-100 text-amber-800' : ulsBearing.status_bearing === 'OK' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                  {ulsBearing.outside_base ? <><i>q</i>/<i>q</i><sub>cap</sub> : non vérifiable (hors base)</> : <><i>q</i>/<i>q</i><sub>cap</sub> = {fr(ulsBearing.q_capacity > 0 ? ulsBearing.q_design / ulsBearing.q_capacity : Infinity)} ({ulsBearing.status_bearing})</>}
+                </span>
               </div>
               <p className="text-xs text-slate-600">
-                Le pivot de renversement est le point extrême avant de la semelle. Les charges de gravité permanentes sont pondérées avec leur facteur minimal (0.9D) pour maximiser le risque de basculement.
+                Critère retenu : <strong>{result.stabilityCriterion === 'eccentricity' ? 'largeur réduite B′ (Meyerhof, CFEM 5e éd., éq. 10.12)' : 'moments, pression linéaire (Paultre ch. 17)'}</strong>. Combinaison gouvernante : {ulsBearing.combName}.
               </p>
-            </div>
-
-            {/* 3. Portance & Excentricité (Les 4 cas) */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-black uppercase text-emerald-900 flex items-center gap-1.5">
-                  <Layers size={16} />
-                  <span>C. Capacité Portante & Diagnostic des 4 Cas de Répartition</span>
-                </h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ulsBearing.FOS_bearing >= 1.0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                  Ratio Min = {ulsBearing.FOS_bearing.toFixed(2)} ({ulsBearing.status_bearing})
-                </span>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <Eq general={<><V n="R" s="v" /> = Σ<V n="V" /></>} result={<><V n="R" s="v" /> = {fr(bearingEq.Rv, 1)} kN/m</>} />
+                <Eq general={<><V n="x" s="1" /> = <Frac n={<>Σ<V n="M" s="stab" /> − Σ<V n="M" s="renv" /></>} d={<V n="R" s="v" />} /> (butée exclue)</>} result={<><V n="x" s="1" /> = {fr(bearingEq.x1, 3)} m</>} />
+                <Eq general={<><V n="e" /> = |<V n="B" />/2 − <V n="x" s="1" />| ; <V n="B" />/6</>} substituted={<>|{fr(baseWidth / 2, 3)} − {fr(bearingEq.x1, 3)}|</>} result={<><V n="e" /> = {fr(bearingEq.e, 3)} m ; <V n="B" />/6 = {fr(baseWidth / 6, 3)} m {bearingEq.e <= baseWidth / 6 + 1e-9 ? '(e ≤ B/6)' : '(e > B/6)'}</>} />
               </div>
-
-              {/* Calcul détaillé de me et étapes précédentes */}
-              <div className="mt-4 p-4 bg-indigo-50/70 rounded-xl border border-indigo-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-black uppercase text-indigo-950 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                    Détail du Calcul de me (Moment d'Excentricité) et Étapes Précédentes
-                  </h4>
-                  <span className="text-[10px] font-mono font-bold bg-white text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
-                    CFEM 5e éd., § 20.7.3.4 & équation de Navier
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 mb-3">
-                  Le calcul de la contrainte sous la semelle découle directement du moment de flexion d'excentricité <strong className="text-indigo-900 font-mono">me = Rv · e</strong> généré par le décalage de la résultante par rapport au centre de gravité de la base.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-3">
-                  <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
-                    <span className="text-[10px] font-bold text-slate-500 block uppercase">1. Charge Normale Rv</span>
-                    <span className="font-mono font-black text-indigo-700">Rv = ∑ V = {ulsBearing.sumV_max.toFixed(1)} kN/m</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
-                    <span className="text-[10px] font-bold text-slate-500 block uppercase">2. Bras de Levier x1</span>
-                    <span className="font-mono font-black text-indigo-700">x1 = (Ms - Mr) / Rv = {ulsBearing.x1.toFixed(3)} m</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
-                    <span className="text-[10px] font-bold text-slate-500 block uppercase">3. Excentricité e</span>
-                    <span className="font-mono font-black text-indigo-700">e = |B/2 - x1| = {Math.abs(ulsBearing.ecc).toFixed(3)} m</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-indigo-100">
-                    <span className="text-[10px] font-bold text-slate-500 block uppercase">4. Moment me</span>
-                    <span className="font-mono font-black text-indigo-700">me = Rv · e = {(ulsBearing.sumV_max * Math.abs(ulsBearing.ecc)).toFixed(1)} kNm/m</span>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white rounded-lg border border-indigo-200 font-mono text-[11px] text-slate-800 leading-relaxed">
-                  <strong>Formule de Navier appliquée à la semelle (b = 1.0 m, h = B) :</strong><br />
-                  W = (1.0 · B²) / 6 = (1.0 · {baseWidth.toFixed(2)}²) / 6 = <strong>{(Math.pow(baseWidth, 2) / 6).toFixed(3)} m³/m</strong><br />
-                  q = (Rv / B) ± (me / W) = ({ulsBearing.sumV_max.toFixed(1)} / {baseWidth.toFixed(2)}) ± ({(ulsBearing.sumV_max * Math.abs(ulsBearing.ecc)).toFixed(1)} / {(Math.pow(baseWidth, 2) / 6).toFixed(3)})<br />
-                  &rArr; q_orteil = <strong className="text-emerald-700">{ulsBearing.q_toe.toFixed(1)} kPa</strong> | q_talon = <strong className="text-indigo-700">{ulsBearing.q_heel.toFixed(1)} kPa</strong>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mt-4">
-                <div className="bg-white p-3 rounded-lg border border-slate-200">
-                  <h4 className="font-bold text-slate-800 mb-1">Position de la Résultante & Excentricité :</h4>
-                  <p className="font-mono text-indigo-700 font-bold mb-1">
-                    x₁ = (Ms - Mr) / Rv
-                  </p>
-                  <p className="font-mono text-slate-600 mb-1">
-                    e = | B/2 - x₁ |
-                  </p>
-                  <p className="font-mono text-slate-500">
-                    Limite du tiers central (noyau central) : B/6 = {(baseWidth / 6).toFixed(3)} m
-                  </p>
-                </div>
-
-                <div className="bg-white p-3 rounded-lg border border-slate-200">
-                  <h4 className="font-bold text-slate-800 mb-1">Formules des Pressions de Contact :</h4>
-                  <ul className="space-y-1 font-mono text-[11px] text-slate-700">
-                    <li>• <strong>Cas 2 (e &le; B/6)</strong> : q₁,₂ = (Rv / B) · [1 ± 6e / B]</li>
-                    <li>• <strong>Cas 3 (e = B/6)</strong> : q₁ = 2·Rv / B, q₂ = 0</li>
-                    <li>• <strong>Cas 4 (e &gt; B/6)</strong> : q₁ = 2·Rv / (3·x₁), q₂ = 0 (décollement)</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-3 p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-xs flex flex-col sm:flex-row justify-between items-center gap-2">
-                <span>Résistance ultime ÉLU : <strong>Ψ · Φ_gu · q_u = {(result.geotech.psi * result.geotech.phi_gu * soil.qUltimate_ULS).toFixed(1)} kPa</strong> (Ψ={result.geotech.psi}, Φ_gu={result.geotech.phi_gu}{result.geotech.quFactored ? ' ; qu déclarée déjà pondérée' : ' ; qu non pondérée'})</span>
-                <span>Contrainte admissible ÉLTS : <strong>q_adm = {soil.qAllowable_SLS.toFixed(1)} kPa</strong></span>
-              </div>
+              <Eq
+                general={
+                  bearingEq.kind === 'outside' ? <>Résultante hors de la base : aucune pression n'est définie</>
+                  : bearingEq.kind === 'uniform_Beff' ? <><V n="q" /> = <Frac n={<V n="R" s="v" />} d={<V n="B" prime />} />, <V n="B" prime /> = <V n="B" /> − 2<V n="e" /></>
+                  : bearingEq.kind === 'cas1' ? <><V n="q" /> = <V n="R" s="v" />/<V n="B" /> (e ≈ 0)</>
+                  : bearingEq.kind === 'cas2' ? <><V n="q" s="1,2" /> = <Frac n={<V n="R" s="v" />} d={<V n="B" />} /> · (1 ± <Frac n={<>6<V n="e" /></>} d={<V n="B" />} />) (e ≤ B/6 : trapèze)</>
+                  : bearingEq.kind === 'cas3' ? <><V n="q" s="1" /> = 2<V n="R" s="v" />/<V n="B" />, <V n="q" s="2" /> = 0 (e = B/6)</>
+                  : <><V n="q" s="1" /> = <Frac n={<>2<V n="R" s="v" /></>} d={<>3<V n="x" s="1" /></>} />, <V n="q" s="2" /> = 0 (e &gt; B/6 : triangle, décollement)</>
+                }
+                substituted={ulsBearing.outside_base ? undefined : <Tx>{bearingEq.substituted}</Tx>}
+                result={ulsBearing.outside_base ? <>Non vérifiable : résultante hors base</> : <Tx>{bearingEq.result}</Tx>}
+                note={<>Les efforts du talon et du patin (armature) utilisent toujours la pression linéaire (MUR-02 §5), quel que soit le critère.{ulsBearing.outside_base ? '' : <> Valeurs : {fr(ulsBearing.q_linear_max, 1)} kPa (pression linéaire, maximum) et {fr(ulsBearing.q_Beff, 1)} kPa (<i>R</i><sub>v</sub>/<i>B</i>′).</>}</>}
+              />
+              <Eq
+                general={<><V n="q" /> ≤ <V n="Ψ" /> · <V n="φ" s="gu" /> · <V n="q" s="u" /> (ÉLU) ; <V n="q" /> ≤ <V n="q" s="adm,ÉLS" /> (ÉLS)</>}
+                substituted={ulsBearing.outside_base ? undefined : <>{fr(ulsBearing.q_design, 1)} ≤ {fr(result.geotech.psi)} · {fr(result.geotech.phi_gu)} · {fr(soil.qUltimate_ULS, 1)}</>}
+                result={ulsBearing.outside_base
+                  ? <>Non vérifiable : résultante hors base</>
+                  : <>{fr(ulsBearing.q_design, 1)} kPa {ulsBearing.q_design <= ulsBearing.q_capacity ? '≤' : '>'} {fr(ulsBearing.q_capacity, 1)} kPa (ÉLU) ; <V n="q" s="adm,ÉLS" /> = {fr(soil.qAllowable_SLS, 1)} kPa</>}
+                note={result.geotech.quFactored ? 'qu saisie déjà pondérée (φgu = 1,0).' : 'qu non pondérée : φgu du tableau 6.2.'}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION 4: CONCEPTION BÉTON SELON LE LIVRE D'OMAR CHAALLAL */}
-      {activeSection === 'conception_omar' && (
+      {/* SECTION 4: CONCEPTION BÉTON (CSA A23.3-19 ; méthode d'Omar Chaallal) — valeurs du moteur, face intérieure du voile */}
+      {activeSection === 'conception_omar' && conc && (
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm">
-                  4
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-black text-sm">4</div>
                 <div>
-                  <h2 className="text-base font-black text-slate-900">
-                    Conception du Béton Armé — Méthodologie Omar Chaallal
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Conforme à la norme canadienne CSA A23.3-19 et aux chapitres 4, 5, 7 et 12 du livre d'Omar Chaallal
-                  </p>
+                  <h2 className="text-base font-black text-slate-900">Conception du béton armé — méthode d'Omar Chaallal</h2>
+                  <p className="text-xs text-slate-500">CSA A23.3-19 et chapitres 4, 5, 7 et 12 du livre d'Omar Chaallal ; exemple détaillé : {cd.mur_interieur.elementName}</p>
                 </div>
               </div>
-              <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 px-2.5 py-1 rounded border border-indigo-200">
-                Omar Chaallal Ch. 4 & 5
-              </span>
+              <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-800 px-2.5 py-1 rounded border border-indigo-200">Omar Chaallal Ch. 4 &amp; 5</span>
             </div>
 
-            {/* Step by step verification card for Mur / Voile */}
             <div className="border border-slate-200 rounded-xl overflow-hidden mb-6">
               <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-                <span className="font-bold text-xs uppercase text-slate-800">
-                  Procédure Pas-à-Pas de Dimensionnement en Flexion (Voile / Mur)
-                </span>
-                <span className="text-[10px] font-mono text-slate-500">Tableau 4.5 & 4.6 (Omar Chaallal)</span>
+                <span className="font-bold text-xs uppercase text-slate-800">Procédure pas à pas : flexion du voile</span>
+                <span className="text-[10px] font-mono text-slate-500">Tableaux 4.5 et 4.6 (Omar Chaallal)</span>
               </div>
               <div className="p-4 sm:p-5 space-y-4 text-xs">
-                {/* Étape 1 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Calcul de la Hauteur Utile $d$ :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      d = h - enrobage - d_b/2 = {cd.mur_interieur.section_h} - 60 - 8 = <strong className="text-indigo-700">{cd.mur_interieur.d} mm</strong>
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">1. Hauteur utile <i>d</i></div>
+                  <Eq
+                    general={<><V n="d" /> = <V n="h" /> − enrobage − <V n="d" s="b" />/2</>}
+                    substituted={<>{fr(cd.mur_interieur.section_h, 0)} − {fr(conc.cover_h, 0)} − {fr(cd.mur_interieur.db, 1)}/2</>}
+                    result={<><V n="d" /> = {fr(cd.mur_interieur.d, 1)} mm</>}
+                  />
                 </div>
 
-                {/* Étape 2 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Vérification de l'Armature Minimale As,min :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      As,min = <strong className="text-indigo-700">{cd.mur_interieur.As_min.toFixed(0)} mm²/m</strong> [{cd.mur_interieur.As_min_basis}] ; 10.5.1.2 b) : {cd.mur_interieur.As_min_flexure.toFixed(0)} mm²/m{cd.mur_interieur.flexure_min_waived ? ' (dispensée)' : ''} (CSA A23.3-19)
-                    </p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">
-                      Armature fournie : {cd.mur_interieur.bar_designation} &rarr; <strong className={`font-mono ${cd.mur_interieur.As_ok ? 'text-emerald-600' : 'text-rose-600'}`}>{cd.mur_interieur.As_provided} mm²/m {cd.mur_interieur.As_ok ? '≥' : '<'} As,min ({cd.mur_interieur.As_ok ? 'CONFORME' : 'NON CONFORME'})</strong>
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">2. Armature minimale <i>A</i><sub>s,min</sub></div>
+                  <Eq
+                    general={<><V n="A" s="s,min" /> = max(0,0015 <V n="A" s="g" /> ; 0,2 √<V n="f" prime s="c" /> / <V n="f" s="y" /> · <V n="b" /> · <V n="h" />) (14.1.8.5 ; 10.5.1.2 b), sauf dispense 10.5.1.3)</>}
+                    substituted={<>0,0015 · {fr(1000 * cd.mur_interieur.section_h, 0)} = {fr(0.0015 * 1000 * cd.mur_interieur.section_h, 0)} ; 10.5.1.2 b) : {fr(cd.mur_interieur.As_min_flexure, 0)}{cd.mur_interieur.flexure_min_waived ? ' (dispensée)' : ''}</>}
+                    result={<><V n="A" s="s,min" /> = {fr(cd.mur_interieur.As_min, 0)} mm²/m ; fourni : {cd.mur_interieur.bar_designation} → {fr(cd.mur_interieur.As_provided, 0)} {cd.mur_interieur.As_ok ? '≥' : '<'} {fr(cd.mur_interieur.As_min, 0)} ({cd.mur_interieur.As_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    note={cd.mur_interieur.As_min_basis}
+                  />
                 </div>
 
-                {/* Étape 3 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Facteurs du Bloc Équivalent Rectangulaire ($\alpha_1, \beta_1$) :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      α₁ = 0.85 - 0.0015 · f'c = 0.85 - 0.0015 · 30 = <strong className="text-indigo-700">{cd.mur_interieur.alpha1.toFixed(3)}</strong> (&ge; 0.67) [Éq. 3.9]
-                      <br />
-                      β₁ = 0.97 - 0.0025 · f'c = 0.97 - 0.0025 · 30 = <strong className="text-indigo-700">{cd.mur_interieur.beta1.toFixed(3)}</strong> (&ge; 0.67) [Éq. 3.10]
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">3. Facteurs du bloc rectangulaire <i>α</i><sub>1</sub> et <i>β</i><sub>1</sub> (10.1.7)</div>
+                  <Eq
+                    general={<><V n="α" s="1" /> = max(0,85 − 0,0015 <V n="f" prime s="c" /> ; 0,67) ; <V n="β" s="1" /> = max(0,97 − 0,0025 <V n="f" prime s="c" /> ; 0,67)</>}
+                    substituted={<>0,85 − 0,0015 · {fr(conc.fc_mur, 0)} ; 0,97 − 0,0025 · {fr(conc.fc_mur, 0)}</>}
+                    result={<><V n="α" s="1" /> = {fr(cd.mur_interieur.alpha1, 3)} ; <V n="β" s="1" /> = {fr(cd.mur_interieur.beta1, 3)}</>}
+                  />
                 </div>
 
-                {/* Étape 4 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">4</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Profondeur du Bloc Comprimé $a$ et de l'Axe Neutre $c$ :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      a = (Φs · As · fy) / (α₁ · Φc · f'c · b) = (0.85 · {cd.mur_interieur.As_provided} · 400) / ({cd.mur_interieur.alpha1.toFixed(3)} · 0.65 · 30 · 1000) = <strong className="text-indigo-700">{cd.mur_interieur.a_stress_block.toFixed(1)} mm</strong> [Éq. 4.11]
-                      <br />
-                      c = a / β₁ = {cd.mur_interieur.a_stress_block.toFixed(1)} / {cd.mur_interieur.beta1.toFixed(3)} = <strong className="text-indigo-700">{cd.mur_interieur.c_depth.toFixed(1)} mm</strong>
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">4. Bloc comprimé <i>a</i> et axe neutre <i>c</i></div>
+                  <Eq
+                    general={<><V n="a" /> = <Frac n={<><V n="φ" s="s" /> <V n="A" s="s" /> <V n="f" s="y" /></>} d={<><V n="α" s="1" /> <V n="φ" s="c" /> <V n="f" prime s="c" /> <V n="b" /></>} /> ; <V n="c" /> = <V n="a" />/<V n="β" s="1" /></>}
+                    substituted={<>({fr(conc.phi_s)} · {fr(cd.mur_interieur.As_provided, 0)} · {fr(conc.fy, 0)}) / ({fr(cd.mur_interieur.alpha1, 3)} · {fr(conc.phi_c)} · {fr(conc.fc_mur, 0)} · 1000) ; {fr(cd.mur_interieur.a_stress_block, 1)} / {fr(cd.mur_interieur.beta1, 3)}</>}
+                    result={<><V n="a" /> = {fr(cd.mur_interieur.a_stress_block, 1)} mm ; <V n="c" /> = {fr(cd.mur_interieur.c_depth, 1)} mm</>}
+                  />
                 </div>
 
-                {/* Étape 5 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">5</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Calcul du Moment Résistant $M_r$ :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      Mr = Φs · As · fy · (d - a / 2) · 10⁻⁶ = 0.85 · {cd.mur_interieur.As_provided} · 400 · ({cd.mur_interieur.d} - {cd.mur_interieur.a_stress_block.toFixed(1)} / 2) · 10⁻⁶
-                      <br />
-                      <strong className="text-indigo-800 text-sm">Mr = {cd.mur_interieur.Mr.toFixed(1)} kNm/m &ge; Mf = {cd.mur_interieur.Mf.toFixed(1)} kNm/m</strong> [Éq. 4.12a]
-                    </p>
-                    <p className="text-slate-500 font-mono text-[11px] mt-0.5">
-                      Facteur de moment kr = Mf / (b·d²) = {cd.mur_interieur.kr.toFixed(2)} MPa (Tableau 4.4)
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">5. Moment résistant <i>M</i><sub>r</sub></div>
+                  <Eq
+                    general={<><V n="M" s="r" /> = <V n="φ" s="s" /> <V n="A" s="s" /> <V n="f" s="y" /> (<V n="d" /> − <V n="a" />/2) · 10⁻⁶ ≥ <V n="M" s="f" /></>}
+                    substituted={<>{fr(conc.phi_s)} · {fr(cd.mur_interieur.As_provided, 0)} · {fr(conc.fy, 0)} · ({fr(cd.mur_interieur.d, 1)} − {fr(cd.mur_interieur.a_stress_block, 1)}/2) · 10⁻⁶</>}
+                    result={<><V n="M" s="r" /> = {fr(cd.mur_interieur.Mr, 1)} kN·m/m {cd.mur_interieur.Mr >= cd.mur_interieur.Mf ? '≥' : '<'} <V n="M" s="f" /> = {fr(cd.mur_interieur.Mf, 1)} kN·m/m</>}
+                    note={<>kr = <i>M</i><sub>f</sub>/(<i>b</i>·<i>d</i>²) = {fr(cd.mur_interieur.kr, 2)} MPa.</>}
+                  />
                 </div>
 
-                {/* Étape 6 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">6</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Vérification de la Ductilité (Section Sous-Armée) :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      (c / d) = {cd.mur_interieur.c_depth.toFixed(1)} / {cd.mur_interieur.d} = <strong className="text-indigo-700">{(cd.mur_interieur.ductility_c_over_d).toFixed(3)}</strong> &le; (c/d)max = 0,8 · 700 / (700 + fy) = <strong className="text-indigo-700">{cd.mur_interieur.ductility_limit.toFixed(3)}</strong> [A23.3-19, 10.5.2]
-                    </p>
-                    <p className="text-emerald-600 font-bold text-[11px] mt-0.5">
-                      &check; Rupture ductile garantie avec écoulement plastique préalable des armatures tendues.
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">6. Ductilité (10.5.2)</div>
+                  <Eq
+                    general={<><V n="c" />/<V n="d" /> ≤ 0,8 · <Frac n="700" d={<>700 + <V n="f" s="y" /></>} /></>}
+                    substituted={<>{fr(cd.mur_interieur.c_depth, 1)} / {fr(cd.mur_interieur.d, 1)} ≤ 0,8 · 700 / (700 + {fr(conc.fy, 0)})</>}
+                    result={<>{fr(cd.mur_interieur.ductility_c_over_d, 3)} {cd.mur_interieur.ductility_ok ? '≤' : '>'} {fr(cd.mur_interieur.ductility_limit, 3)} ({cd.mur_interieur.ductility_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                  />
                 </div>
 
-                {/* Étape 7 */}
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">7</span>
-                  <div className="flex-1">
-                    <div className="font-bold text-slate-900">Contrôle de la Fissuration — Facteur Z (Omar Chaallal p. 31) :</div>
-                    <p className="text-slate-600 font-mono mt-0.5">
-                      Z = fs · ∛(dc · A) avec fs = 0.6 · fy = {(0.6 * conc.fy).toFixed(0)} MPa [Éq. 3.15]
-                      <br />
-                      dc = enrobage + db/2 = {cd.mur_interieur.crack_dc} mm, A = 2 · dc · s = {cd.mur_interieur.crack_A} mm²
-                      <br />
-                      <strong className="text-indigo-800 font-bold">Z = {cd.mur_interieur.Z_factor?.toFixed(0)} N/mm {cd.mur_interieur.Z_ok ? '≤' : '>'} {cd.mur_interieur.Z_limit} N/mm ({cd.mur_interieur.Z_ok ? 'CONFORME' : 'NON CONFORME'})</strong>
-                    </p>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">7. Contrôle de la fissuration (10.6.1)</div>
+                  <Eq
+                    general={<><V n="z" /> = <V n="f" s="s" /> · ∛(<V n="d" s="c" /> · <V n="A" />) ≤ <V n="z" s="lim" />, <V n="f" s="s" /> = 0,6 <V n="f" s="y" />, <V n="A" /> = 2 <V n="d" s="c" /> <V n="s" /></>}
+                    substituted={<>{fr(0.6 * conc.fy, 0)} · ∛({fr(cd.mur_interieur.crack_dc ?? 0, 1)} · {fr(cd.mur_interieur.crack_A ?? 0, 0)})</>}
+                    result={<><V n="z" /> = {fr(cd.mur_interieur.Z_factor ?? NaN, 0)} N/mm {cd.mur_interieur.Z_ok ? '≤' : '>'} {fr(cd.mur_interieur.Z_limit ?? NaN, 0)} N/mm ({cd.mur_interieur.Z_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    note="Enrobage pris au plus 50 mm pour d_c et A."
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Verification card for Cisaillement & Cisaillement-Friction */}
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="bg-slate-100 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-                <span className="font-bold text-xs uppercase text-slate-800">
-                  Procédure Pas-à-Pas à l'Effort Tranchant & Cisaillement-Friction (Omar Chaallal Chapitre 5)
-                </span>
-                <span className="text-[10px] font-mono text-slate-500">Tableau 5.1 & 5.6</span>
+                <span className="font-bold text-xs uppercase text-slate-800">Procédure pas à pas : effort tranchant et cisaillement-friction</span>
+                <span className="text-[10px] font-mono text-slate-500">CSA A23.3-19, 11.3 et 11.5</span>
               </div>
               <div className="p-4 sm:p-5 space-y-4 text-xs">
-                {/* Cisaillement Voile */}
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="font-bold text-slate-900 mb-1">A. Effort Tranchant du Béton Sans Armatures Transversales ($V_c$) :</div>
-                  <p className="text-slate-600 font-mono">
-                    dv = max(0.9·d, 0.72·h) = max(0.9·{cd.mur_interieur.d}, 0.72·{cd.mur_interieur.section_h}) = <strong className="text-indigo-700">{cd.mur_interieur.dv} mm</strong> [Éq. 5.4]
-                    <br />
-                    β = <strong className="text-indigo-700">{cd.mur_interieur.beta.toFixed(4)}</strong> [{cd.mur_interieur.beta_rule}] ; Vr,max = 0,25·Φc·f'c·bw·dv = <strong className="text-indigo-700">{cd.mur_interieur.Vr_max.toFixed(0)} kN/m</strong> [11.3.3]
-                    <br />
-                    Vc = Φc · λ · β · √f'c · bw · dv · 10⁻³ = {conc.phi_c} · 1.0 · {cd.mur_interieur.beta.toFixed(4)} · √{conc.fc_mur} · 1000 · {cd.mur_interieur.dv} · 10⁻³
-                    <br />
-                    <strong className="text-indigo-800 text-sm">Vc = {cd.mur_interieur.Vc.toFixed(1)} kN/m {cd.mur_interieur.shear_ok ? '≥' : '<'} Vf = {cd.mur_interieur.Vf.toFixed(1)} kN/m ({cd.mur_interieur.shear_ok ? 'CONFORME' : 'NON CONFORME'})</strong>
-                  </p>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">A. Résistance du béton sans armature d'effort tranchant (11.3)</div>
+                  <Eq
+                    general={<><V n="d" s="v" /> = max(0,9 <V n="d" /> ; 0,72 <V n="h" />) ; <V n="V" s="c" /> = <V n="φ" s="c" /> <V n="λ" /> <V n="β" /> √<V n="f" prime s="c" /> <V n="b" s="w" /> <V n="d" s="v" /> · 10⁻³ ≥ <V n="V" s="f" /></>}
+                    substituted={<>{fr(cd.mur_interieur.dv, 1)} ; {fr(conc.phi_c)} · 1,0 · {fr(cd.mur_interieur.beta, 4)} · √{fr(Math.min(conc.fc_mur, 64), 0)} (≤ 8 MPa) · 1000 · {fr(cd.mur_interieur.dv, 1)} · 10⁻³</>}
+                    result={<><V n="V" s="c" /> = {fr(cd.mur_interieur.Vc, 1)} kN/m {cd.mur_interieur.shear_ok ? '≥' : '<'} <V n="V" s="f" /> = {fr(cd.mur_interieur.Vf, 1)} kN/m ({cd.mur_interieur.shear_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    note={<>β : {cd.mur_interieur.beta_rule}. <i>V</i><sub>r,max</sub> = 0,25 <i>φ</i><sub>c</sub> <i>f</i>′<sub>c</sub> <i>b</i><sub>w</sub> <i>d</i><sub>v</sub> = {fr(cd.mur_interieur.Vr_max, 0)} kN/m (11.3.3). Définition de <i>d</i><sub>v</sub> : À CONFIRMER.</>}
+                  />
                 </div>
 
-                {/* Cisaillement-Friction */}
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="font-bold text-slate-900 mb-1">B. Cisaillement-Friction à l'Interface Voile / Semelle (CSA A23.3 Art. 11.5 & Chaallal p. 187) :</div>
-                  <p className="text-slate-600 font-mono mb-2">
-                    Vr = λ · Φc · (c + μ · σ) · Acv + Φs · ρv · fy · cos(αf) · Acv [Éq. 5.21]
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700 font-mono text-[11px]">
-                    <div>• Reprise de bétonnage : propre non intentionnellement rugueuse (c = 0.25 MPa, μ = 0.60)</div>
-                    <div>• Contrainte normale min : σ = {(cd.cisaillement_friction.sigma).toFixed(2)} MPa</div>
-                    <div>• Effort tranchant sollicitant Vf : <strong>{cd.cisaillement_friction.Vf.toFixed(1)} kN/m</strong></div>
-                    <div>• Résistance Vr = <strong>{cd.cisaillement_friction.Vr.toFixed(1)} kN/m {cd.cisaillement_friction.status_ok ? '≥' : '<'} Vf ({cd.cisaillement_friction.status_ok ? 'OK' : 'NON'})</strong></div>
-                  </div>
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">B. Cisaillement-friction à l'interface voile / semelle (11.5)</div>
+                  <Eq
+                    general={<><V n="v" s="r" /> = min[ <V n="λ" /> <V n="φ" s="c" /> (<V n="c" /> + <V n="μ" /> <V n="σ" />) ; 0,25 <V n="φ" s="c" /> <V n="f" prime s="c" /> ] + <V n="φ" s="s" /> <V n="ρ" s="v" /> <V n="f" s="y" /> cos <V n="α" s="f" /> ; <V n="V" s="r" /> = <V n="v" s="r" /> <V n="A" s="cv" /></>}
+                    substituted={<>c = {fr(cd.cisaillement_friction.c)} MPa ; μ = {fr(cd.cisaillement_friction.mu)} ; σ = {fr(cd.cisaillement_friction.sigma, 3)} MPa ; limite 0,25 φc f′c = {fr(cd.cisaillement_friction.vr_cap, 2)} MPa{cd.cisaillement_friction.capped ? ' (atteinte)' : ''} ; ρv = {fr(cd.cisaillement_friction.rho_v, 5)} ; αf = 90° (cos αf = 0)</>}
+                    result={<><V n="V" s="r" /> = {fr(cd.cisaillement_friction.Vr, 1)} kN/m {cd.cisaillement_friction.status_ok ? '≥' : '<'} <V n="V" s="f" /> = {fr(cd.cisaillement_friction.Vf, 1)} kN/m ({cd.cisaillement_friction.status_ok ? 'OK' : 'NON'})</>}
+                    note={<>{cd.cisaillement_friction.surface}. σ = ρ<sub>v</sub> <i>f</i><sub>y</sub> sin α<sub>f</sub> + N/A<sub>g</sub>, N = {fr(cd.cisaillement_friction.N, 1)} kN/m non pondéré (11.5.4). Cumul avec l'armature de flexion : À CONFIRMER.</>}
+                  />
+                </div>
+
+                <div>
+                  <div className="font-bold text-slate-900 mb-1">C. Armature horizontale du voile (14.1.8.4 à 14.1.8.6 ; MUR-02 M2-A1)</div>
+                  <Eq
+                    general={<>Σ<V n="A" s="s,hor" /> (A3 + A4) ≥ 0,002 <V n="A" s="g" /> ; espacement ≤ min(3<V n="t" /> ; 500) et <V n="d" s="b" /> ≤ <V n="t" />/10 par nappe</>}
+                    substituted={<>{fr(cd.mur_horizontal_ext.As_provided, 0)} + {fr(cd.mur_horizontal_int.As_provided, 0)} ≥ 0,002 · {fr(1000 * cd.mur_interieur.section_h, 0)}</>}
+                    result={<>Σ = {fr(cd.mur_horizontal.As_provided, 0)} {cd.mur_horizontal.As_ok ? '≥' : '<'} {fr(cd.mur_horizontal.As_min, 0)} mm²/m ({cd.mur_horizontal.As_ok ? 'CONFORME' : 'NON CONFORME'})</>}
+                    note="14.1.8.6 : aire totale ; répartition entre faces non prescrite par la norme."
+                  />
                 </div>
               </div>
             </div>
@@ -683,65 +512,39 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc }: Calcu
       )}
 
       {/* SECTION 5: ANCRAGE & CROCHETS */}
-      {activeSection === 'ancrage' && (
+      {activeSection === 'ancrage' && conc && (
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
           <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-sm">
-                  5
-                </div>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-black text-sm">5</div>
                 <div>
-                  <h2 className="text-base font-black text-slate-900">
-                    Longueurs d'Ancrage & Crochets Standard selon le Chapitre 7
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Développement des armatures de flexion et goujons de reprise (CSA A23.3-19 Art. 12.2 & 12.5)
-                  </p>
+                  <h2 className="text-base font-black text-slate-900">Longueurs d'ancrage et crochets standard</h2>
+                  <p className="text-xs text-slate-500">Développement des armatures de flexion et goujons de reprise (CSA A23.3-19, 12.2 et 12.5)</p>
                 </div>
               </div>
-              <span className="text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded border border-emerald-200">
-                Omar Chaallal Ch. 7
-              </span>
+              <span className="text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded border border-emerald-200">Omar Chaallal Ch. 7</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Longueur de développement droite */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <h3 className="text-xs font-black uppercase text-slate-900 mb-2">
-                  1. Barre Droite en Tension ($l_d$)
-                </h3>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  ld = {cd.mur_interieur.ld_coeff?.toFixed(2)} · k₁ · k₂ · k₃ · k₄ · (fy / √f'c) · db &ge; 300 mm [Éq. 7.6]
-                </div>
-                <div className="space-y-1 text-xs text-slate-600 font-mono">
-                  <div>k₁ = {cd.mur_interieur.ld_k1} (1.3 barres supérieures ; talon : {cd.semelle_talon.ld_k1}), k₂ = 1.0 (non époxy)</div>
-                  <div>k₃ = 1.0 (béton normal), k₄ = {cd.mur_interieur.ld_k4} (0.8 si &le; 20M ; 1.0 si &ge; 25M)</div>
-                  <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-indigo-900">
-                    <span>Longueur ld requise ({cd.mur_interieur.bar_designation.split(' ')[0]}) :</span>
-                    <span>{cd.mur_interieur.ld.toFixed(0)} mm</span>
-                  </div>
-                </div>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-slate-900">1. Barre droite en traction (<i>l</i><sub>d</sub>)</h3>
+                <Eq
+                  general={<><V n="l" s="d" /> = max[ coef. · <V n="k" s="1" /> <V n="k" s="2" /> <V n="k" s="3" /> <V n="k" s="4" /> · <Frac n={<V n="f" s="y" />} d={<>√<V n="f" prime s="c" /></>} /> · <V n="d" s="b" /> ; 300 mm ] (12.2)</>}
+                  substituted={<>{fr(cd.mur_interieur.ld_coeff ?? NaN, 2)} · {fr(cd.mur_interieur.ld_k1 ?? NaN, 1)} · 1,0 · 1,0 · {fr(cd.mur_interieur.ld_k4 ?? NaN, 1)} · ({fr(conc.fy, 0)} / √{fr(conc.fc_mur, 0)}) · {fr(cd.mur_interieur.db, 1)}</>}
+                  result={<><V n="l" s="d" /> = {fr(cd.mur_interieur.ld, 0)} mm ({cd.mur_interieur.bar_designation})</>}
+                  note={<>k₁ = 1,3 pour les barres supérieures avec plus de 300 mm de béton frais dessous (talon : {cd.semelle_talon.ld_k1}) ; k₄ = 0,8 jusqu'à 20M, 1,0 dès 25M. Tableau 12.1 : {cd.mur_interieur.ld_eq12_1_required ? 'conditions non remplies, éq. 12.1 requise, À CONFIRMER' : 'conditions remplies'}.</>}
+                />
               </div>
 
-              {/* Crochet standard à 90° */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <h3 className="text-xs font-black uppercase text-slate-900 mb-2">
-                  2. Crochet Standard à 90° dans la Semelle (ldh)
-                </h3>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 text-center font-mono text-xs mb-3">
-                  lhb = (100 · db) / √f'c [Éq. 7.12]<br />
-                  ldh = lhb · fy/400 · 0,7 (si enrobage latéral ≥ 60 mm et du prolongement ≥ 50 mm) ≥ max(8db ; 150 mm) [12.5]
-                </div>
-                <div className="space-y-1 text-xs text-slate-600 font-mono">
-                  <div>lhb de base (15M) = {cd.mur_interieur.lhb?.toFixed(1)} mm</div>
-                  <div>ldh = <strong className="text-indigo-700">{cd.mur_interieur.ldh_required?.toFixed(1)} mm</strong> ({cd.mur_interieur.ldh_factors})</div>
-                  <div>Épaisseur disponible semelle hs = {geo.epBase * 1000} mm</div>
-                  <div className="pt-2 border-t border-slate-200 flex justify-between font-bold text-emerald-700">
-                    <span>Hauteur disponible semelle ({cd.mur_interieur.ldh_available} mm) :</span>
-                    <span>{cd.mur_interieur.anchorage_ok ? 'ANCRAGE VALIDE &check;' : 'NON SUFFISANT'}</span>
-                  </div>
-                </div>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <h3 className="text-xs font-black uppercase text-slate-900">2. Crochet standard à 90° dans la semelle (<i>l</i><sub>dh</sub>)</h3>
+                <Eq
+                  general={<><V n="l" s="hb" /> = 100 <V n="d" s="b" /> / √<V n="f" prime s="c" /> ; <V n="l" s="dh" /> = max[ <V n="l" s="hb" /> · <V n="f" s="y" />/400 · (0,7 si 12.5.3) ; 8<V n="d" s="b" /> ; 150 mm ]</>}
+                  substituted={<>100 · {fr(cd.mur_interieur.db, 1)} / √{fr(conc.fc_mur, 0)} = {fr(cd.mur_interieur.lhb ?? NaN, 1)} ; {fr(cd.mur_interieur.lhb ?? NaN, 1)} · {fr(conc.fy, 0)}/400</>}
+                  result={<><V n="l" s="dh" /> = {fr(cd.mur_interieur.ldh_required ?? NaN, 1)} mm {cd.mur_interieur.anchorage_ok ? '≤' : '>'} {fr(cd.mur_interieur.ldh_available ?? NaN, 0)} mm disponibles ({cd.mur_interieur.anchorage_ok ? 'ANCRAGE VALIDE' : 'NON SUFFISANT'})</>}
+                  note={<>{cd.mur_interieur.ldh_factors}. Épaisseur de la semelle <i>h</i><sub>s</sub> = {fr(geo.epBase * 1000, 0)} mm.</>}
+                />
               </div>
             </div>
 

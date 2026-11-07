@@ -137,6 +137,8 @@ export default function App() {
         onUpdateSoil={setSoil}
         onUpdateLoads={setLoads}
         seismic={result.seismic}
+        result={result}
+        edition={result.cnbEdition}
       />
 
       {/* Header */}

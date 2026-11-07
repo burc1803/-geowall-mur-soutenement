@@ -7,8 +7,11 @@ import {
   SoilPresetType, 
   ActivePressureMethod, 
   PassivePressureMethod, 
-  SeismicMethod 
+  SeismicMethod,
+  AnalysisResult 
 } from '../lib/types';
+import { Eq, V, Frac, Sqrt } from './Eq';
+import { fr } from '../lib/theoryEquations';
 import { SOIL_PRESETS, DEFAULT_SOIL_METHOD_CONFIG } from '../lib/analysis';
 import { X, Sparkles, Activity, ShieldAlert, Sliders, CheckCircle2, Info } from 'lucide-react';
 
@@ -20,6 +23,8 @@ interface SoilAndSeismicMethodModalProps {
   onUpdateSoil: (soil: SoilProperties) => void;
   onUpdateLoads: (loads: LoadsConfig) => void;
   seismic: SeismicSummary; // valeurs du moteur (kh, méthode) : jamais recalculées ici
+  result?: AnalysisResult; // valeurs actuelles du moteur affichées sous les formules
+  edition?: string; // édition du CNB (dynamique)
 }
 
 export function SoilAndSeismicMethodModal({
@@ -29,7 +34,9 @@ export function SoilAndSeismicMethodModal({
   loads,
   onUpdateSoil,
   onUpdateLoads,
-  seismic
+  seismic,
+  result,
+  edition
 }: SoilAndSeismicMethodModalProps) {
   if (!isOpen) return null;
 
@@ -68,7 +75,7 @@ export function SoilAndSeismicMethodModal({
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
-                Manuel Canadien sur les Fondations & CNB {loads.cnbEdition ?? '2020'}
+                Manuel Canadien sur les Fondations & CNB {edition ?? loads.cnbEdition ?? '2020'}
               </span>
               <span className="text-xs text-slate-300">Paramétrage Avancé</span>
             </div>
@@ -151,12 +158,12 @@ export function SoilAndSeismicMethodModal({
                   {
                     value: 'coulomb',
                     label: 'Coulomb (Avec Frottement δ)',
-                    sub: 'Prend en compte le frottement sol-béton δ = 2/3 φ. Réduit la poussée active.'
+                    sub: 'Prend en compte le frottement sol-béton δ = min(atan μ ; r·φ), r = rapport δ/φ de la saisie. Réduit la poussée active.'
                   },
                   {
                     value: 'at_rest',
                     label: 'Pression Au Repos (K0 de Jaky)',
-                    sub: 'K0 = 1 - sin(φ). Requis pour murs de sous-sol bloqués sans rotation.'
+                    sub: 'K₀ = 1 − sin φ. Requis pour murs de sous-sol bloqués sans rotation.'
                   }
                 ].map((opt) => (
                   <label
@@ -238,6 +245,62 @@ export function SoilAndSeismicMethodModal({
             </div>
           </div>
 
+          {/* Formules et valeurs actuelles du moteur (CFEM 5e éd.) */}
+          {result && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-black uppercase text-slate-500 tracking-wider">Formules et valeurs actuelles du moteur</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Eq
+                  general={<><V n="K" s="a" /> = tan²(45° − <V n="φ" />/2) (Rankine)</>}
+                  substituted={<>tan²(45° − {fr(soil.phi, 1)}°/2)</>}
+                  result={<>Valeur actuelle : <V n="K" s="a" /> = {fr(result.earthPressures.Ka_rankine, 4)}</>}
+                  note="CFEM 5e éd., § 20.7 (À CONFIRMER)"
+                />
+                <Eq
+                  general={<><V n="K" s="a" /> = <Frac n={<>cos²<V n="φ" /></>} d={<>cos <V n="δ" /> [1 + <Sqrt><Frac n={<>sin(<V n="φ" />+<V n="δ" />) sin <V n="φ" /></>} d={<>cos <V n="δ" /></>} /></Sqrt>]²</>} /> (Coulomb)</>}
+                  substituted={<>φ = {fr(soil.phi, 1)}° ; δ = {fr(result.earthPressures.delta_deg, 2)}°</>}
+                  result={<>Valeur actuelle : <V n="K" s="a" /> = {fr(result.earthPressures.Ka_coulomb, 4)}</>}
+                  note="CFEM 5e éd., § 20.7 (À CONFIRMER)"
+                />
+                <Eq
+                  general={<><V n="K" s="0" /> = 1 − sin <V n="φ" /> (Jaky)</>}
+                  substituted={<>1 − sin({fr(soil.phi, 1)}°)</>}
+                  result={<>Valeur actuelle : <V n="K" s="0" /> = {fr(result.earthPressures.K0_jaky, 4)}</>}
+                  note="CFEM 5e éd., § 20.7 (À CONFIRMER)"
+                />
+                <Eq
+                  general={<><V n="K" s="p" /> = tan²(45° + <V n="φ" />/2) ; <V n="P" s="p" prime /> = ∫ <V n="K" s="p" /> <V n="σ" s="v" prime /> d<V n="z" /> (par couches, de df à h_pass)</>}
+                  substituted={<>φ de fondation = {fr(result.foundationSoil.phi, 1)}° ; z₀ = {fr(result.earthPressures.z_passive_top, 2)} m ; h_pass = {fr(result.earthPressures.h_pass, 2)} m</>}
+                  result={<>Valeur actuelle : <V n="K" s="p" /> = {fr(result.earthPressures.K_passive_used, 4)} ; <V n="P" s="p" prime /> = {fr(result.earthPressures.P_passive_nominal, 1)} kN/m</>}
+                  note="CFEM 5e éd., § 20.7"
+                />
+                <Eq
+                  general={<><V n="k" s="h" /> = <V n="a" s="h" />/<V n="g" /> ; <V n="ψ" /> = atan[<V n="k" s="h" />/(1 − <V n="k" s="v" />)]</>}
+                  substituted={<>{fr(seismic.ah, 3)} ; kv = {fr(seismic.kvInput, 3)}</>}
+                  result={<>Valeur actuelle : <V n="k" s="h" /> = {fr(seismic.kh, 3)}{seismic.scenarios[0] ? <> ; <V n="ψ" /> = {fr(seismic.scenarios[0].psi_deg, 2)}°</> : null}</>}
+                  note="CFEM 5e éd., éq. 18.21-18.22"
+                />
+                <Eq
+                  general={<><V n="K" s="AE" /> = <Frac n={<>cos²(<V n="φ" />−<V n="ψ" />)</>} d={<>cos <V n="ψ" /> cos(<V n="δ" />+<V n="ψ" />) [1 + <Sqrt><Frac n={<>sin(<V n="φ" />+<V n="δ" />) sin(<V n="φ" />−<V n="ψ" />)</>} d={<>cos(<V n="δ" />+<V n="ψ" />)</>} /></Sqrt>]²</>} /> (Mononobe-Okabe)</>}
+                  substituted={seismic.scenarios[0] ? <>φ = {fr(soil.phi, 1)}° ; ψ = {fr(seismic.scenarios[0].psi_deg, 2)}°</> : undefined}
+                  result={<>Valeur actuelle : {seismic.method === 'mononobe_okabe' && seismic.scenarios[0] ? (seismic.scenarios[0].indeterminate ? 'K_AE indéterminé (NON VÉRIFIABLE)' : <><V n="K" s="AE" /> = {fr(seismic.scenarios[0].Kae, 4)}</>) : 'méthode non retenue'}</>}
+                  note="CFEM 5e éd., éq. 18.20-18.21"
+                />
+                <Eq
+                  general={<>Wood : Δ<V n="P" s="0E" /> = <V n="k" s="h" /> <V n="γ" /> <V n="H" />² à 0,58<V n="H" /></>}
+                  substituted={seismic.method === 'wood' && seismic.scenarios[0] ? <>{fr(seismic.kh, 3)} · {fr(soil.gamma, 1)} · {fr(result.totalHeight)}²</> : undefined}
+                  result={<>Valeur actuelle : {seismic.method === 'wood' && seismic.scenarios[0] ? <>Δ<V n="P" s="0E" /> = {fr(seismic.scenarios[0].dPae, 2)} kN/m</> : 'méthode non retenue'}</>}
+                  note="CFEM 5e éd., éq. 18.36 à 18.39 (mur retenu)"
+                />
+                <Eq
+                  general={<>Portance : <V n="q" /> = <V n="R" s="v" />/<V n="B" prime /> (critère B′) ou <V n="q" /> = <V n="R" s="v" />/<V n="B" /> · (1 ± 6<V n="e" />/<V n="B" />) (moments)</>}
+                  result={<>Valeur actuelle : {fr(result.governingBearing.q_Beff, 1)} kPa (B′) ; {fr(result.governingBearing.q_linear_max, 1)} kPa (linéaire)</>}
+                  note="CFEM 5e éd., éq. 10.12 (Meyerhof) ; Paultre ch. 17"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Section 3: Façon de Calcul du Séisme (CFEM 5e éd., § 18.7) */}
           <div className="p-5 bg-gradient-to-br from-amber-50/40 via-white to-slate-50 rounded-2xl border border-amber-200/80 space-y-4">
             <div className="flex items-center justify-between">
@@ -266,7 +329,7 @@ export function SoilAndSeismicMethodModal({
                 {
                   value: 'mononobe_okabe',
                   label: 'Mononobe-Okabe (1926)',
-                  sub: 'Mur libre : PAE = ½·KAE·γ·H²·(1 − kv), ψ = atan[kh/(1 − kv)] (CFEM éq. 18.20-18.21). Mur retenu (sous-sol) : Wood, ΔP0E = kh·γ·H² à 0,58H.'
+                  sub: 'Mur libre : PAE = ½·KAE·γ·H²·(1 − kv), ψ = atan[kh/(1 − kv)] (CFEM 5e éd., éq. 18.20-18.21). Mur retenu (sous-sol) : Wood, ΔP0E = kh·γ·H² à 0,58H (CFEM 5e éd., éq. 18.36 à 18.39).'
                 },
                 {
                   value: 'none',
@@ -355,7 +418,7 @@ export function SoilAndSeismicMethodModal({
         <div className="p-5 bg-slate-100 border-t border-slate-200 flex items-center justify-between sticky bottom-0">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Info size={16} className="text-slate-400" />
-            <span>Toutes les combinaisons CNB {loads.cnbEdition ?? '2020'} sont recalculées automatiquement.</span>
+            <span>Toutes les combinaisons CNB {edition ?? loads.cnbEdition ?? '2020'} sont recalculées automatiquement.</span>
           </div>
           <button
             onClick={onClose}

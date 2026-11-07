@@ -390,6 +390,8 @@ export interface EarthPressureCalculations {
   E_base_nominal: number; // kN/m
   K_active_used: number;
   K_passive_used: number;
+  delta_deg: number; // lecture seule : δ = min(atan μ ; rapport·φ), côté actif (Coulomb)
+  delta_p_deg: number; // lecture seule : δ côté passif (sol de fondation)
   // Séisme (MUR-02 §4) — valeurs du scénario de référence (premier signe de kv)
   W_heelSoil_inertia: number; // kN/m — poids du sol au-dessus du talon (masse d'inertie)
   E_heelSoil_nominal: number; // kN/m — kh·W du sol du talon
