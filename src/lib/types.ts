@@ -143,6 +143,10 @@ export interface SiteSeismicValues {
   sa02: number; // Sa(0,2), g (0 = non saisi)
   pga: number; // PGA du site pour la classe choisie, g (0 = non saisi)
   pgv: number; // PGV, m/s (facultatif, 0 = non saisi)
+  // MUR-03 : sélection CNRC SHD-VAS 2020 (absents dans un projet ancien)
+  province?: string; // code AB..YT
+  siteId?: string; // nom brut du fichier CNRC (identifiant)
+  source?: string; // source complète appliquée
 }
 
 export interface ConcreteProperties {

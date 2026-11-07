@@ -169,6 +169,11 @@ export const FACTEUR_H = 1.5; // 4.1.3.2.(4)
 // Facteur de H au cas 5 (amendement A1, décision D16 option A) : 1,0 dans les deux éditions.
 // Sources : note A-4.1.3.2.(4) du CNB 2020 (même texte en 2025) : « 1,5H doit être ajouté aux combinaisons 2, 3 et 4 » ;
 // tableau A-3 du Commentaire A du CNB 2020 : 1,0 pour D, H, T et P avec E. Commentaire de 2025 : À CONFIRMER.
+/** États retenus pour les efforts du patin et du talon : ni résultante hors base, ni soulèvement (ΣV ≤ 0). */
+export function selectSlabStates<T extends { outside: unknown; uplift: boolean }>(states: T[]): T[] {
+  return states.filter(st => !st.outside && !st.uplift);
+}
+
 export const FACTEUR_H_SISMIQUE = 1.0;
 
 export interface LoadCombination {
@@ -1422,7 +1427,8 @@ export function analyzeRetainingWall(
       return { V: Math.abs(V), M: Math.abs(M) };
     };
     // Les états dont la résultante est hors de la base (pic fictif de pression) sont exclus des efforts de dimensionnement.
-    const slabStates = [bZ, bF, bH].filter(st => !st.outside);
+    // Les états en soulèvement (ΣV ≤ 0) sont aussi exclus : leur pression est fictive.
+    const slabStates = selectSlabStates([bZ, bF, bH]);
     const slabOk = slabStates.length > 0;
     const lenOf = (kind: 'toe' | 'heel') => (kind === 'toe' ? geo.ePiedAv : geo.ePiedAr);
     const evalStates = (kind: 'toe' | 'heel') => slabStates.map(st => ({ st, e: slabEffort(st.seg, kind, lenOf(kind)) }));

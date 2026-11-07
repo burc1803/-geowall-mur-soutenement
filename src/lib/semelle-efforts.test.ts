@@ -24,7 +24,7 @@ const run = (geo: WallGeometry, soil: SoilProperties, loads: LoadsConfig) => ana
 const close = (a: number, b: number, tol: number, label = '') => expect(Math.abs(a - b), `${label} obtenu ${a}, attendu ${b}`).toBeLessThanOrEqual(Math.abs(b) * tol);
 
 describe('Efforts du patin et du talon : états hors base exclus', () => {
-  it('projet par défaut : combinaisons tracées valides, aucune valeur fictive', () => {
+  it("cas D (3,8 m, nappe, surcharge 12 kPa ; ce n'est pas le défaut de l'application) : combinaisons tracées valides, aucune valeur fictive", () => {
     const r = run(GEO_D, SOIL_D, LOADS_D);
     expect(r.combinations.some(c => c.type === 'ULS' && c.outside_base)).toBe(true); // le cas fictif existe bien
     expect(r.governingToe.slab_ok).toBe(true);

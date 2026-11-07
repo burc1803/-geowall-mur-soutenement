@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AnalysisResult, WallGeometry, SoilProperties, ConcreteProperties, LoadsConfig } from '../lib/types';
 import { BearingPressureDiagram } from './BearingPressureDiagram';
 import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
+import { directionOfComponent, type LoadDirection } from '../lib/loadDirection';
 import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass } from '../lib/rebarPlans';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
@@ -183,23 +184,23 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
   const wn = result.weights_nominal;
   const xStem = geo.ePiedAv + geo.epStem / 2;
   const xHeel = geo.ePiedAv + geo.epStem + geo.ePiedAr / 2;
-  type LoadRow = { desc: string; type: string; value: string; unit: string; pos: string };
+  type LoadRow = { desc: string; type: string; dir: LoadDirection; value: string; unit: string; pos: string };
   const loadRows: LoadRow[] = [];
   if (loads) {
-    if (loads.surcharge > 0) loadRows.push({ desc: 'Surcharge amont', type: loads.surchargeType, value: fmt(loads.surcharge, 2), unit: 'kPa', pos: 'Surface du remblai amont (sur le talon)' });
-    if ((loads.surchargeAval ?? 0) > 0) loadRows.push({ desc: 'Surcharge aval', type: loads.surchargeAvalType ?? 'L', value: fmt(loads.surchargeAval ?? 0, 2), unit: 'kPa', pos: 'Surface du sol à l\'avant (sur le patin)' });
+    if (loads.surcharge > 0) loadRows.push({ desc: 'Surcharge amont', type: loads.surchargeType, dir: directionOfComponent({ Fy: loads.surcharge }), value: fmt(loads.surcharge, 2), unit: 'kPa', pos: 'Surface du remblai amont (sur le talon)' });
+    if ((loads.surchargeAval ?? 0) > 0) loadRows.push({ desc: 'Surcharge aval', type: loads.surchargeAvalType ?? 'L', dir: directionOfComponent({ Fy: loads.surchargeAval }), value: fmt(loads.surchargeAval ?? 0, 2), unit: 'kPa', pos: 'Surface du sol à l\'avant (sur le patin)' });
     const pt = loads.pointLoadTop;
     if (pt?.enabled) {
       const ty = pt.loadType ?? 'L';
       const pos = `Tête du voile : x = ${fmt(xStem, 2)} m, y = ${fmt(result.totalHeight, 2)} m`;
-      if (pt.Fy) loadRows.push({ desc: `Charge en tête Fy${pt.name ? ' (' + pt.name + ')' : ''}`, type: ty, value: fmt(pt.Fy, 2), unit: 'kN/m', pos });
-      if (pt.Fx) loadRows.push({ desc: 'Charge en tête Fx', type: ty, value: fmt(pt.Fx, 2), unit: 'kN/m', pos });
-      if (pt.Mz) loadRows.push({ desc: 'Moment en tête Mz', type: ty, value: fmt(pt.Mz, 2), unit: 'kN·m/m', pos });
+      if (pt.Fy) loadRows.push({ desc: `Charge en tête Fy${pt.name ? ' (' + pt.name + ')' : ''}`, type: ty, dir: directionOfComponent({ Fy: pt.Fy }), value: fmt(pt.Fy, 2), unit: 'kN/m', pos });
+      if (pt.Fx) loadRows.push({ desc: 'Charge en tête Fx', type: ty, dir: directionOfComponent({ Fx: pt.Fx }), value: fmt(pt.Fx, 2), unit: 'kN/m', pos });
+      if (pt.Mz) loadRows.push({ desc: 'Moment en tête Mz', type: ty, dir: directionOfComponent({ Mz: pt.Mz }), value: fmt(pt.Mz, 2), unit: 'kN·m/m', pos });
     }
     for (const al of loads.additionalLoads ?? []) {
       const dist = al.isDistributed && al.length;
       loadRows.push({
-        desc: `${al.name} (${al.nature})`, type: al.caseType, value: fmt(al.magnitude, 2),
+        desc: `${al.name} (${al.nature})`, type: al.caseType, dir: directionOfComponent({ [al.nature]: al.magnitude }), value: fmt(al.magnitude, 2),
         unit: al.nature === 'Mz' ? 'kN·m/m' : dist ? 'kN/m par m' : 'kN/m',
         pos: `x = ${fmt(al.x, 2)} m, y = ${fmt(al.y, 2)} m${dist ? `, longueur ${fmt(al.length ?? 0, 2)} m` : ''}`
       });
@@ -208,15 +209,15 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
       for (const k of Object.keys(loads.reactionsTop) as (keyof typeof loads.reactionsTop)[]) {
         const r = loads.reactionsTop[k];
         const pos = `Tête du voile : y = ${fmt(result.totalHeight, 2)} m`;
-        if (r?.Rx) loadRows.push({ desc: 'Réaction en tête Rx', type: k, value: fmt(r.Rx, 2), unit: 'kN/m', pos });
-        if (r?.Ry) loadRows.push({ desc: 'Réaction en tête Ry', type: k, value: fmt(r.Ry, 2), unit: 'kN/m', pos });
-        if (r?.M) loadRows.push({ desc: 'Réaction en tête M', type: k, value: fmt(r.M, 2), unit: 'kN·m/m', pos });
+        if (r?.Rx) loadRows.push({ desc: 'Réaction en tête Rx', type: k, dir: directionOfComponent({ Fx: r.Rx }), value: fmt(r.Rx, 2), unit: 'kN/m', pos });
+        if (r?.Ry) loadRows.push({ desc: 'Réaction en tête Ry', type: k, dir: directionOfComponent({ Fy: r.Ry }), value: fmt(r.Ry, 2), unit: 'kN/m', pos });
+        if (r?.M) loadRows.push({ desc: 'Réaction en tête M', type: k, dir: directionOfComponent({ Mz: r.M }), value: fmt(r.M, 2), unit: 'kN·m/m', pos });
       }
     }
   } else {
-    loadRows.push({ desc: 'Charges saisies (surcharges, charges de tête, charges supplémentaires)', type: '—', value: 'non disponible', unit: '—', pos: '—' });
+    loadRows.push({ desc: 'Charges saisies (surcharges, charges de tête, charges supplémentaires)', type: '—', dir: directionOfComponent({}), value: 'non disponible', unit: '—', pos: '—' });
   }
-  if (result.hydro.hasWater) loadRows.push({ desc: 'Nappe phréatique : niveau', type: 'H', value: fmt(result.hydro.hw, 2), unit: 'm', pos: 'Au-dessus de la sous-face de la semelle' });
+  if (result.hydro.hasWater) loadRows.push({ desc: 'Nappe phréatique : niveau', type: 'H', dir: directionOfComponent({}), value: fmt(result.hydro.hw, 2), unit: 'm', pos: 'Au-dessus de la sous-face de la semelle' });
   // Composantes horizontales non pondérées réellement utilisées par le moteur (celles qui entrent dans ΣH)
   const latLabel = (n: string): string => {
     if (n === 'Pa_sol') return 'Poussée active des terres (γ)';
@@ -232,19 +233,19 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
     return n;
   };
   for (const c of result.lateral_nominal.filter(c => !c.applied)) {
-    loadRows.push({ desc: latLabel(c.name), type: c.type, value: fmt(c.Fx, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(c.y, 2)} m` });
+    loadRows.push({ desc: latLabel(c.name), type: c.type, dir: directionOfComponent({ Fx: c.Fx }), value: fmt(c.Fx, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(c.y, 2)} m` });
   }
   if (result.hydro.hasWater) {
-    loadRows.push({ desc: 'Sous-pression sous la semelle (uniforme sur B)', type: 'H', value: fmt(result.hydro.uplift_nominal, 2), unit: 'kN/m', pos: `Vers le haut, x = ${fmt(B / 2, 2)} m` });
+    loadRows.push({ desc: 'Sous-pression sous la semelle (uniforme sur B)', type: 'H', dir: directionOfComponent({ Fy: -result.hydro.uplift_nominal }), value: fmt(result.hydro.uplift_nominal, 2), unit: 'kN/m', pos: `Vers le haut, x = ${fmt(B / 2, 2)} m` });
   }
-  if (ep.P_passive_nominal > 0) loadRows.push({ desc: 'Butée du sol Pp′ (résistance ; γ au-dessus de la nappe, γ′ en dessous)', type: '—', value: fmt(ep.P_passive_nominal, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(ep.y_Pp, 2)} m (profondeur de butée hp = ${fmt(ep.h_pass, 2)} m)` });
-  if (ep.frontWaterScenario === 'B') loadRows.push({ desc: 'Eau à l\'avant Pw,a = ½·γw·hw,av² (résistance, composante séparée)', type: 'H', value: fmt(ep.P_water_front, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(ep.y_Pw_front, 2)} m (hw,av = ${fmt(ep.hw_av, 2)} m)` });
-  loadRows.push({ desc: 'Poids propre du voile', type: 'D', value: fmt(wn.stem, 2), unit: 'kN/m', pos: `x = ${fmt(xStem, 2)} m` });
-  loadRows.push({ desc: 'Poids propre de la semelle', type: 'D', value: fmt(wn.base, 2), unit: 'kN/m', pos: `x = ${fmt(B / 2, 2)} m` });
-  loadRows.push({ desc: 'Poids du sol sur le talon (γ′ sous la nappe)', type: 'D', value: fmt(wn.heelSoil, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
-  if (soil.hSolAv > 0) loadRows.push({ desc: 'Poids du sol sur le patin (γ′ sous la nappe)', type: 'D', value: fmt(wn.toeSoil, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
-  if (wn.waterHeel > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du talon', type: 'H', value: fmt(wn.waterHeel, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
-  if (wn.waterToe > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du patin', type: 'H', value: fmt(wn.waterToe, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
+  if (ep.P_passive_nominal > 0) loadRows.push({ desc: 'Butée du sol Pp′ (résistance ; γ au-dessus de la nappe, γ′ en dessous)', type: '—', dir: directionOfComponent({ Fx: ep.P_passive_nominal }), value: fmt(ep.P_passive_nominal, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(ep.y_Pp, 2)} m (profondeur de butée hp = ${fmt(ep.h_pass, 2)} m)` });
+  if (ep.frontWaterScenario === 'B') loadRows.push({ desc: 'Eau à l\'avant Pw,a = ½·γw·hw,av² (résistance, composante séparée)', type: 'H', dir: directionOfComponent({ Fx: ep.P_water_front }), value: fmt(ep.P_water_front, 2), unit: 'kN/m', pos: `Résultante à y = ${fmt(ep.y_Pw_front, 2)} m (hw,av = ${fmt(ep.hw_av, 2)} m)` });
+  loadRows.push({ desc: 'Poids propre du voile', type: 'D', dir: directionOfComponent({ Fy: wn.stem }), value: fmt(wn.stem, 2), unit: 'kN/m', pos: `x = ${fmt(xStem, 2)} m` });
+  loadRows.push({ desc: 'Poids propre de la semelle', type: 'D', dir: directionOfComponent({ Fy: wn.base }), value: fmt(wn.base, 2), unit: 'kN/m', pos: `x = ${fmt(B / 2, 2)} m` });
+  loadRows.push({ desc: 'Poids du sol sur le talon (γ′ sous la nappe)', type: 'D', dir: directionOfComponent({ Fy: wn.heelSoil }), value: fmt(wn.heelSoil, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
+  if (soil.hSolAv > 0) loadRows.push({ desc: 'Poids du sol sur le patin (γ′ sous la nappe)', type: 'D', dir: directionOfComponent({ Fy: wn.toeSoil }), value: fmt(wn.toeSoil, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
+  if (wn.waterHeel > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du talon', type: 'H', dir: directionOfComponent({ Fy: wn.waterHeel }), value: fmt(wn.waterHeel, 2), unit: 'kN/m', pos: `x = ${fmt(xHeel, 2)} m` });
+  if (wn.waterToe > 0) loadRows.push({ desc: 'Poids de l\'eau au-dessus du patin', type: 'H', dir: directionOfComponent({ Fy: wn.waterToe }), value: fmt(wn.waterToe, 2), unit: 'kN/m', pos: `x = ${fmt(geo.ePiedAv / 2, 2)} m` });
 
   return (
     <div id="note-officielle" className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-2 md:p-6 print:p-0 print:max-w-none text-slate-800">
@@ -381,9 +382,10 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             Valeurs caractéristiques, non pondérées. Les facteurs de la section 3 s'appliquent ensuite. Positions mesurées depuis l'orteil (x) et la sous-face de la semelle (y).
           </p>
           <DataTable
-            head={['N°', 'Description', 'Type CNB', 'Valeur', 'Unité', 'Point d\'application ou position']}
-            rows={loadRows.map((r, i) => [String(i + 1), r.desc, r.type, r.value, r.unit, r.pos])}
+            head={['N°', 'Description', 'Type CNB', 'Dir.', 'Valeur', 'Unité', 'Point d\'application ou position']}
+            rows={loadRows.map((r, i) => [String(i + 1), r.desc, r.type, r.dir, r.value, r.unit, r.pos])}
           />
+          <p className="text-[10px] text-slate-500">Dir. : H = horizontale, V = verticale, M = moment. Ne pas confondre avec le type CNB H (poussée latérale des terres).</p>
         </div>
 
         {/* 3. COMBINAISONS DE CHARGES */}
@@ -526,6 +528,15 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               ['Tassement, déplacement (ÉLS)', 'φ', fmt(result.geotech.phi_settle, 1), 'CFEM 5e, tableau 6.2 (Retaining systems, Settlement)', 'Non appliqué : q_adm,ÉLS vient du rapport géotechnique — À CONFIRMER'],
               ['Facteur de H au cas 5', 'αH', fmt(FACTEUR_H_SISMIQUE, 1), 'CNB, note A-4.1.3.2.(4) ; tableau A-3, Commentaire A du CNB 2020', 'Lu (2020) ; Commentaire 2025 : À CONFIRMER'],
               ['Accélération horizontale du site', 'ah', seismicOn ? fmt(result.seismic.ah, 3) + ' g' : 'sans objet', seismicOn ? (result.seismic.ahSource.trim() || 'source non renseignée') : '—', seismicOn ? (result.seismic.ahSource.trim() ? 'Saisi par l\'utilisateur' : 'À CONFIRMER : source de ah non renseignée') : '—'],
+              ...(soil.siteSeismic?.source
+                ? [[
+                    'Site (données CNRC SHD-VAS 2020)', 'PGA(X)',
+                    `${soil.siteSeismic.locality} ; ${soil.siteSeismic.province ?? 'province non renseignée'} ; classe ${soil.siteSeismic.siteClass || 'non renseignée'} ; PGA(${soil.siteSeismic.siteClass}) = ${fmt(soil.siteSeismic.pga, 3)} g ; ah = ${fmt(result.seismic.ah, 3)} g ; kh = ${fmt(result.seismic.kh, 3)} ; kv = ${result.seismic.csaS6 ? '0' : fmt(result.seismic.kvInput, 3)}`,
+                    `${soil.siteSeismic.source} ; CNB 2020, 4.1.8.4 ; CFEM 5e, p. 629 (classe du sol sous la semelle, remblai exclu)`,
+                    result.seismic.ahSource.startsWith('CNRC SHD-VAS') ? 'Lu dans les tables du CNRC ; aucun F(PGA)' : `ah modifié : source de ah « ${result.seismic.ahSource || 'non renseignée'} »`
+                  ]]
+                : []),
+              ...(result.cnbEdition === '2025' ? [['Données sismiques, édition CNB 2025', '—', 'Données CNRC du CNB 2020 ; données CNB 2025 : À CONFIRMER', 'CNB 2025, annexe C, p. C-48', 'À CONFIRMER']] : []),
               ...(soil.siteSeismic && (soil.siteSeismic.locality.trim() || soil.siteSeismic.pga > 0 || soil.siteSeismic.sa02 > 0)
                 ? [[
                     'Valeurs du site (calculateur d\'aléa de RNCan)', '—',

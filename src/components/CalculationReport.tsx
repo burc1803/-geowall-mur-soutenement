@@ -150,6 +150,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
         <p className="text-[11px] text-slate-600 mb-2">
           Résistance au glissement : <strong className="font-mono">Fs = C₂·B·Φ₅ + P_p·Φ₄ + (∑V_min)·μ·Φ₂</strong> avec coefficient de frottement sol-béton <strong className="font-mono">μ = {soil.mu}</strong>. Critère de sécurité : <strong className="font-mono">Ratio (Fs / ∑Fh) ≥ 1.00</strong>.
         </p>
+        <p className="text-[10px] text-slate-500 mb-2">Glissement et renversement : ÉLU seulement (MUR-02 §12)</p>
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
@@ -166,7 +167,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {result.combinations.map((c, i) => {
+              {result.combinations.filter(c => c.type === 'ULS').map((c, i) => {
                 // valeurs du moteur (MUR-02 §2.1)
                 const frictionPart = c.Rf_friction + c.Rf_cohesion;
                 const passivePart = c.Rf_passive;
@@ -212,6 +213,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
         <p className="text-[11px] text-slate-600 mb-2">
           Calcul par rapport au point d'orteil avant. Moment stabilisant : <strong className="font-mono">Ms = ∑Mv_min + M_hp·Φ₃</strong>. Critère de sécurité : <strong className="font-mono">Ratio (Ms / Mr) ≥ 1.00</strong>.
         </p>
+        <p className="text-[10px] text-slate-500 mb-2">Glissement et renversement : ÉLU seulement (MUR-02 §12)</p>
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
@@ -227,7 +229,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {result.combinations.map((c, i) => {
+              {result.combinations.filter(c => c.type === 'ULS').map((c, i) => {
                 const passiveMomentPart = c.psi * c.phi_ov * c.Ms_passive; // valeurs du moteur
                 const vertMomPart = c.Ms - passiveMomentPart;
                 return (

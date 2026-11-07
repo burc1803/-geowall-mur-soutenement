@@ -31,6 +31,8 @@ import { RebarManager } from './components/RebarManager';
 import { RebarPlans } from './components/RebarPlans';
 import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModal';
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
+import { SiteSeismicCard } from './components/SiteSeismicCard';
+import { sourceAfterManualAh } from './lib/siteSeismic';
 
 type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'plans' | 'eau' | 'seisme' | 'theory' | 'report';
 
@@ -757,6 +759,14 @@ export default function App() {
 
                 {(activeTab === 'seisme') && (
                     <section className="flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200">
+                        {/* MUR-03 : données CNRC SHD-VAS 2020 ; ah = PGA(X) */}
+                        <SiteSeismicCard
+                          edition={result.cnbEdition}
+                          saved={soil.siteSeismic}
+                          currentAh={soil.methodConfig?.pga ?? DEFAULT_SOIL_METHOD_CONFIG.pga}
+                          onApply={r => setSoil(prev => ({ ...prev, siteSeismic: r.site, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), pga: r.ah, ahSource: r.source } }))}
+                        />
+
                         {/* Valeurs du site (RNCan) : enregistrées et affichées dans la note ; le moteur ne les utilise pas autrement (kh = ah, kv = 2/3·kh) */}
                         <div className="bg-orange-50/60 p-3.5 rounded-xl border border-orange-200 flex flex-col gap-2">
                           <span className="text-[10px] font-black uppercase text-orange-900 tracking-wider">Valeurs du site (RNCan)</span>
@@ -846,7 +856,7 @@ export default function App() {
                                 <div className="grid grid-cols-2 gap-4">
                                    <label className="flex flex-col gap-1.5">
                                       <span className="text-[10px] font-bold text-slate-500 uppercase">ah (g) : accélération du site</span>
-                                      <input type="number" step="0.01" min="0" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.methodConfig?.pga ?? DEFAULT_SOIL_METHOD_CONFIG.pga} onChange={(e) => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), pga: Math.max(parseFloat(e.target.value) || 0, 0) } }))} />
+                                      <input type="number" step="0.01" min="0" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.methodConfig?.pga ?? DEFAULT_SOIL_METHOD_CONFIG.pga} onChange={(e) => setSoil(prev => { const v = Math.max(parseFloat(e.target.value) || 0, 0); const mc = { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}) }; return { ...prev, methodConfig: { ...mc, pga: v, ahSource: sourceAfterManualAh(mc.ahSource, mc.pga, v) } }; })} />
                                    </label>
                                    <label className="flex flex-col gap-1.5">
                                       <span className="text-[10px] font-bold text-slate-500 uppercase">|kv| saisi (deux signes étudiés)</span>

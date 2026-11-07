@@ -1,4 +1,5 @@
 import React from 'react';
+import { sourceAfterManualAh } from '../lib/siteSeismic';
 import { 
   SoilProperties, 
   LoadsConfig, 
@@ -376,7 +377,7 @@ export function SoilAndSeismicMethodModal({
                       min="0"
                       max="2"
                       value={currentMethod.pga}
-                      onChange={(e) => handleUpdateMethod({ pga: Math.max(parseFloat(e.target.value) || 0, 0) })}
+                      onChange={(e) => { const v = Math.max(parseFloat(e.target.value) || 0, 0); handleUpdateMethod({ pga: v, ahSource: sourceAfterManualAh(currentMethod.ahSource, currentMethod.pga, v) }); }}
                       className="w-32 p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-800 bg-slate-50"
                     />
                     <span className="text-xs text-slate-500 font-bold">g</span>

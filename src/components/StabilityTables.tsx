@@ -22,6 +22,8 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
     return true;
   });
 
+  // Glissement et renversement : ÉLU seulement (MUR-02 §12)
+  const stabCombinations = filteredCombinations.filter(c => c.type === 'ULS');
   const totalULS = result.combinations.filter(c => c.type === 'ULS').length;
   const totalSLS = result.combinations.filter(c => c.type === 'SLS').length;
 
@@ -177,6 +179,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
           </div>
 
           <div className="overflow-x-auto">
+            <p className="text-[10px] text-slate-500 px-1 pt-1">Glissement et renversement : ÉLU seulement (MUR-02 §12)</p>
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
@@ -192,7 +195,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredCombinations.map((c, i) => {
+                {stabCombinations.map((c, i) => {
                   // valeurs du moteur (MUR-02 §2.1) : Ψ·φ appliqués par le calcul, jamais recalculés ici
                   const frictionPart = c.Rf_friction + c.Rf_cohesion;
                   const passivePart = c.Rf_passive;
@@ -258,6 +261,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
           </div>
 
           <div className="overflow-x-auto">
+            <p className="text-[10px] text-slate-500 px-1 pt-1">Glissement et renversement : ÉLU seulement (MUR-02 §12)</p>
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
@@ -272,7 +276,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredCombinations.map((c, i) => {
+                {stabCombinations.map((c, i) => {
                   const passiveMomentPart = c.psi * c.phi_ov * c.Ms_passive; // Ψ·φ_ov · moment de la butée (valeurs du moteur)
                   const vertMomPart = c.Ms - passiveMomentPart;
                   return (
