@@ -323,7 +323,7 @@ export function RebarPlans({ geo, soil, loads, conc, result, rebarConfig, onChan
               })}
             </div>
             <div className="text-[11px] text-amber-900">
-              A3 et A4 reçoivent la même sélection (répartition entre faces : À CONFIRMER). La proposition exige le statut de zone et les vérifications du moteur (ductilité, fissuration, ld, db ≤ t/10, cisaillement) ; vérifiez-les dans leurs onglets.
+              A3 puis A4 : la somme A3 + A4 est comparée à 0,002Ag (14.1.8.6) ; A4 est allégée tant que la somme et les vérifications par nappe passent. La proposition exige le statut de zone et les vérifications du moteur (ductilité, fissuration, ld, db ≤ t/10, cisaillement) ; vérifiez-les dans leurs onglets.
               {proposal.engineChecksFailing.length > 0 && <strong className="block text-rose-700">Zones où le statut de zone est satisfait mais pas toutes les vérifications du moteur (meilleure proposition) : {proposal.engineChecksFailing.join(', ')}.</strong>}
             </div>
             <div className="flex gap-2">
@@ -400,9 +400,8 @@ export function RebarPlans({ geo, soil, loads, conc, result, rebarConfig, onChan
 
         {pair && (
           <div className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-2">
-            <strong>Paire A3 + A4 (horizontales du voile) :</strong> total de 0,002Ag = {nf(pair.required, 0)} mm²/m ; somme fournie {nf(pair.provided, 0)} mm²/m (information).
-            {' '}<strong>Répartition entre faces : À CONFIRMER (décision de l'utilisateur en attente).</strong>{' '}
-            Statut appliqué, comme dans le moteur : chaque face doit fournir au moins As,min ; la somme ne rend pas une zone OK.
+            <strong>Paire A3 + A4 (horizontales du voile) :</strong> Σ As = {nf(pair.provided, 0)} mm²/m {pair.provided >= pair.required ? '≥' : '<'} 0,002Ag = {nf(pair.required, 0)} mm²/m
+            {' '}({pair.provided >= pair.required ? 'OK' : 'NON'}). 14.1.8.6 : aire totale ; répartition entre faces non prescrite par la norme. Espacement, db ≤ t/10 et fissuration : vérifiés par nappe.
           </div>
         )}
         <p className="text-[11px] text-slate-500">

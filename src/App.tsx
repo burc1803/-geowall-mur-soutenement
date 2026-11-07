@@ -17,7 +17,7 @@ import {
   Sliders,
   Sparkles
 } from 'lucide-react';
-import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel } from './lib/types';
+import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment } from './lib/types';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
 import { Visualizer } from './components/Visualizer';
 import { ForceCharts } from './components/ForceCharts';
@@ -59,8 +59,8 @@ const INITIAL_SOIL: SoilProperties = {
   geotechLevel: 'typical',
   psi: 1.0,
   quFactored: false,
-  // MUR-02 D9 : case « déduire la profondeur de gel » cochée par défaut ; df à saisir (0 = non saisie -> avis)
-  frost: { deduct: true, df: 0 }
+  // MUR-02 D9 / §11 : case « déduire la profondeur de gel » cochée ; df à saisir ; df non saisie -> butée nulle (défaut)
+  frost: { deduct: true, df: 0, noDf: 'zero' }
 };
 
 const INITIAL_LOADS: LoadsConfig = {
@@ -638,7 +638,7 @@ export default function App() {
                               type="checkbox"
                               className="mt-0.5"
                               checked={soil.frost?.deduct ?? true}
-                              onChange={e => setSoil(prev => ({ ...prev, frost: { deduct: e.target.checked, df: prev.frost?.df ?? 0 } }))}
+                              onChange={e => setSoil(prev => ({ ...prev, frost: { ...prev.frost, deduct: e.target.checked, df: prev.frost?.df ?? 0 } }))}
                             />
                             <span>Déduire la profondeur de gel (cochée par défaut). La butée statique va alors de df à h_pass. Décochée, la butée porte sur toute la hauteur : <strong>sol avant déclaré permanent et non gélif par l'utilisateur</strong>.</span>
                           </label>
@@ -649,8 +649,21 @@ export default function App() {
                               className="p-1.5 border rounded bg-white font-mono text-xs disabled:opacity-40"
                               value={soil.frost?.df ?? 0}
                               disabled={!(soil.frost?.deduct ?? true)}
-                              onChange={e => setSoil(prev => ({ ...prev, frost: { deduct: prev.frost?.deduct ?? true, df: Math.max(parseFloat(e.target.value) || 0, 0) } }))}
+                              onChange={e => setSoil(prev => ({ ...prev, frost: { ...prev.frost, deduct: prev.frost?.deduct ?? true, df: Math.max(parseFloat(e.target.value) || 0, 0) } }))}
                             />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[9px] text-slate-500 font-bold">Si df n'est pas saisie (case cochée)</span>
+                            <select
+                              className="p-1.5 border rounded bg-white text-xs disabled:opacity-40"
+                              value={soil.frost?.noDf ?? 'zero'}
+                              disabled={!(soil.frost?.deduct ?? true)}
+                              onChange={e => setSoil(prev => ({ ...prev, frost: { deduct: prev.frost?.deduct ?? true, df: prev.frost?.df ?? 0, noDf: e.target.value as FrostNoDfTreatment } }))}
+                            >
+                              <option value="zero">Butée nulle (défaut)</option>
+                              <option value="not_verifiable">Non vérifiable (glissement et renversement)</option>
+                              <option value="full_with_notice">Butée pleine avec avis</option>
+                            </select>
                           </label>
                           <p className="text-[10px] font-mono text-sky-900">h_pass = {result.earthPressures.h_pass.toFixed(2)} m ; zone de butée : de {result.frost.z_top.toFixed(2)} m à {result.earthPressures.h_pass.toFixed(2)} m ; Pp′ = {result.earthPressures.P_passive_nominal.toFixed(1)} kN/m</p>
                         </div>
@@ -778,8 +791,8 @@ export default function App() {
             
             {/* Dashboard Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-2 print:hidden">
-                <StatBox label="Crit. Glissement ELU" nonVerifiable={!result.verifiable} value={result.critical_sliding_ULS === Infinity ? '∞' : result.critical_sliding_ULS.toFixed(2)} unit="FS (Req > 1.0)" status={result.critical_sliding_ULS >= 1.0 ? 'ok' : 'error'} />
-                <StatBox label="Crit. Renvers. ELU" nonVerifiable={!result.verifiable} value={result.governingOverturning.outside_base ? 'hors base' : result.critical_overturning_ULS === Infinity ? '∞' : result.critical_overturning_ULS.toFixed(2)} unit={result.governingOverturning.outside_base ? '(résultante hors base)' : 'FS (Req > 1.0)'} status={result.critical_overturning_ULS >= 1.0 && result.governingOverturning.status_overturning === 'OK' ? 'ok' : 'error'} />
+                <StatBox label="Crit. Glissement ELU" nonVerifiable={!result.verifiable || result.governingSliding.status_sliding === 'NON VÉRIFIABLE'} value={result.critical_sliding_ULS === Infinity ? '∞' : result.critical_sliding_ULS.toFixed(2)} unit="FS (Req > 1.0)" status={result.critical_sliding_ULS >= 1.0 ? 'ok' : 'error'} />
+                <StatBox label="Crit. Renvers. ELU" nonVerifiable={!result.verifiable || result.governingOverturning.status_overturning === 'NON VÉRIFIABLE'} value={result.governingOverturning.outside_base ? 'hors base' : result.critical_overturning_ULS === Infinity ? '∞' : result.critical_overturning_ULS.toFixed(2)} unit={result.governingOverturning.outside_base ? '(résultante hors base)' : 'FS (Req > 1.0)'} status={result.critical_overturning_ULS >= 1.0 && result.governingOverturning.status_overturning === 'OK' ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELS)' : 'Pression Max (ELS)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_SLS.toFixed(0)} unit={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.critical_q_toe_SLS <= soil.qAllowable_SLS ? 'ok' : 'error'} />
                 <StatBox label="Excentricité e ≤ B/6 (ELU+ELS)" nonVerifiable={!result.verifiable} value={result.eccentricity_ok_ULS && result.eccentricity_ok_SLS ? 'respectée' : `non respectée (${[!result.eccentricity_ok_ULS ? 'ÉLU' : '', !result.eccentricity_ok_SLS ? 'ÉLS' : ''].filter(Boolean).join(', ')})`} unit="" status={result.eccentricity_ok_ULS && result.eccentricity_ok_SLS ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELU)' : 'Pression Max (ELU)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_ULS.toFixed(0)} unit={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.governingBearing.status_bearing === 'OK' ? 'ok' : 'error'} />

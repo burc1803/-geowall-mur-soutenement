@@ -128,7 +128,14 @@ export interface GeotechResolved {
 export interface FrostConfig {
   deduct: boolean; // défaut : true
   df: number; // profondeur de gel (m), mesurée depuis la surface du sol avant
+  /**
+   * MUR-02 §11 (D9, décision de l'utilisateur) : traitement lorsque la case est cochée et df n'est pas saisie (df = 0).
+   * 'zero' (défaut, absent = 'zero') : butée nulle ; 'not_verifiable' : butée nulle et glissement / renversement NON VÉRIFIABLES ;
+   * 'full_with_notice' : butée pleine avec avis (comportement antérieur).
+   */
+  noDf?: FrostNoDfTreatment;
 }
+export type FrostNoDfTreatment = 'zero' | 'not_verifiable' | 'full_with_notice';
 
 export interface ConcreteProperties {
   fc_mur: number; // MPa (ex: 30 MPa)
@@ -250,7 +257,7 @@ export interface CombinationResult {
   Fs: number; // Force stabilisante totale (pondérée : Rf_friction + Rf_cohesion + Rf_passive)
   Fh_destab: number; // Sollicitation horizontale déstabilisante
   FOS_sliding: number; // Fs / Fh
-  status_sliding: 'OK' | 'NON';
+  status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE';
   
   // Stabilité au Renversement (CFEM Fig 24.12)
   Ms: number; // Moment stabilisant pondéré : Ψ·φ_ov·ΣM_stab (MUR-02 §2.3, E08)
@@ -258,7 +265,7 @@ export interface CombinationResult {
   Ms_passive: number; // part de la butée (sol + eau à l'avant) dans ΣM_stab, avant Ψ·φ_ov
   Mr: number; // Moment de renversement déstabilisant
   FOS_overturning: number; // Ms / Mr
-  status_overturning: 'OK' | 'NON';
+  status_overturning: 'OK' | 'NON' | 'NON VÉRIFIABLE';
   
   // Capacité portante & Excentricité
   x1: number; // Distance résultante depuis point de renversement (orteil)
@@ -273,6 +280,8 @@ export interface CombinationResult {
   ecc_max: number; // e maximal sur les états étudiés (stabilité, portance, basculement vers le talon)
   status_ecc: 'OK' | 'NON'; // e ≤ B/6, ELU et ELS (MUR-02 §2.2, D3)
   B_eff: number; // B′ = B − 2e (m) — critère « eccentricity »
+  q_linear_max: number; // kPa — lecture seule : q max de la pression linéaire q = V/B·(1 ± 6e/B), quel que soit le critère
+  q_Beff: number; // kPa — lecture seule : V/B′ avec B′ = B − 2e, quel que soit le critère
   q_design: number; // pression comparée à la capacité : q_toe (moments) ou V/B′ (eccentricity)
   outside_base: 'toe' | 'heel' | null; // résultante hors de la base (côté orteil ou talon) : renversement / portance NON
   stability_message: string; // message d'erreur de stabilité ('' si aucun)
@@ -463,7 +472,7 @@ export interface AnalysisResult {
   cnbEdition: CnbEdition;
   geotech: GeotechResolved;
   seismic: SeismicSummary;
-  frost: { deduct: boolean; df: number; df_entered: boolean; z_top: number };
+  frost: { deduct: boolean; df: number; df_entered: boolean; z_top: number; no_df_treatment: FrostNoDfTreatment; df_missing: boolean };
   eccentricity_ok_ULS: boolean; // e ≤ B/6 pour toutes les combinaisons ELU applicables
   eccentricity_ok_SLS: boolean; // e ≤ B/6 pour toutes les combinaisons ELS
   // Poids propres NON pondérés (kN/m), lecture seule : exposés pour la note de calcul

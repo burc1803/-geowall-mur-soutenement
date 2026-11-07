@@ -21,7 +21,7 @@ describe('Rendu de l\'onglet Plans et de la section 6 de la note', () => {
     for (const id of ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7']) expect(html).toContain(id);
     expect(html).toContain('<svg');
     expect(html).toContain('Longueurs indicatives');
-    expect(html).toContain('Répartition entre faces');
+    expect(html).toContain('répartition entre faces non prescrite par la norme');
     expect(html).not.toContain('NaN');
   });
   it('Note : section 6 présente', () => {

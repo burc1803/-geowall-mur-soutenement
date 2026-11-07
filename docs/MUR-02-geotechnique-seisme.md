@@ -278,3 +278,15 @@ Règle retenue :
 - la norme ne fixe aucune répartition entre les faces. La note l'indique et ne prescrit pas de répartition.
 
 Édition : la même règle figure dans l'édition -19 utilisée par le projet (§6 de cette fiche, p. 126). La correspondance mot à mot avec -19 reste À CONFIRMER.
+
+## 11. Décisions de l'utilisateur du 2026-11-07 (D9 complétée, D3)
+
+Message de l'utilisateur : « laisse au choix d'utilisateur, mais laisser par défaut : butée nulle et Critère de portance : laisser le diagramme pression linéaire ».
+
+- **D9, df non saisie alors que la case gel est cochée :** le traitement est au choix de l'utilisateur dans l'onglet Critères :
+  - **« butée nulle » (défaut)** ;
+  - « non vérifiable » (glissement et renversement NON VÉRIFIABLE) ;
+  - « butée pleine avec avis ».
+
+  La note indique le traitement retenu.
+- **D3, critère de portance et de renversement :** au choix de l'utilisateur, comme aujourd'hui. Le défaut est **« moments, pression linéaire »** (q = V/B·(1 ± 6e/B), triangulaire si e > B/6). Cette décision remplace la proposition « option b par défaut » du §2.2. La largeur réduite B′ reste offerte. La limite e ≤ B/6 et la vérification du renversement ne changent pas.

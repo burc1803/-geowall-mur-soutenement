@@ -102,7 +102,7 @@ export function buildZoneRows(result: AnalysisResult): ZoneRow[] {
   const cfg = resolveRebarConfig(result.rebarConfig);
   const asExt = asPerMetre(cfg.mur_horizontal_ext);
   const asInt = asPerMetre(cfg.mur_horizontal_int);
-  const pairRequired = result.concreteDesign.mur_horizontal.As_min; // 14.1.8.6 : 0,002Ag (information : somme des deux faces)
+  const pairRequired = result.concreteDesign.mur_horizontal.As_min; // 14.1.8.6 : 0,002Ag, aire totale (A3 + A4)
   const pairProvided = asExt + asInt;
 
   return ZONES.map(zone => {
@@ -112,11 +112,16 @@ export function buildZoneRows(result: AnalysisResult): ZoneRow[] {
     const isLong = zone.id === 'A7';
     const noMoment = isHorizontal || isLong;
     const As_provided = isHorizontal ? asPerMetre(sel) : isLong ? 2 * asPerMetre(sel) : d.As_provided;
-    const As_req = noMoment || d.As_req === undefined ? null : d.As_req;
+    const As_req = noMoment || d.As_req === undefined || !(d.Mf > 0) ? null : d.As_req; // Mf = 0 (ex. A2) : « — »
     const As_min = d.As_min;
 
-    // A3 / A4 : règle actuelle du moteur, chaque face ≥ As,min (la somme n'est qu'informative : répartition À CONFIRMER)
-    const status = zoneStatus({ As_provided, As_req, As_min, spacing: sel.spacing, spacing_max: d.spacing_max });
+    // A3 / A4 (M2-A1, 14.1.8.6) : la somme A3 + A4 est comparée à 0,002Ag ; l'espacement (14.1.8.4) est vérifié par nappe
+    const status = isHorizontal
+      ? (() => {
+          const z = zoneStatus({ As_provided: pairProvided, As_req: null, As_min: pairRequired, spacing: sel.spacing, spacing_max: d.spacing_max });
+          return { ok: z.ok, reasons: z.reasons.map(t => t.replace('As,fourni', 'Σ As (A3 + A4)')) };
+        })()
+      : zoneStatus({ As_provided, As_req, As_min, spacing: sel.spacing, spacing_max: d.spacing_max });
     return {
       zone,
       barSize: sel.barSize,
@@ -124,7 +129,7 @@ export function buildZoneRows(result: AnalysisResult): ZoneRow[] {
       As_req,
       As_req_unreachable: As_req !== null && !Number.isFinite(As_req),
       As_min,
-      As_min_basis: isHorizontal ? `${d.As_min_basis} — chaque face (règle actuelle du moteur)` : d.As_min_basis,
+      As_min_basis: isHorizontal ? '0,002Ag au total (A3 + A4) — 14.1.8.6 : aire totale ; répartition entre faces non prescrite par la norme' : d.As_min_basis,
       As_provided,
       spacing_max: d.spacing_max,
       ok: status.ok,
@@ -153,7 +158,7 @@ export interface AutoProposal {
 /**
  * Bouton « Auto » : pour chaque zone, la plus petite barre puis le plus grand espacement standard qui satisfont le statut.
  * Ne modifie rien : retourne une proposition. Une proposition exige le statut de zone ET `checks_ok` du moteur ; sinon la meilleure (statut de zone seul) est proposée et signalée. Zones traitées dans l'ordre A1, A2, A3 + A4, A5, A6, A7 (As,min de A2 dépend de A1).
- * A3 et A4 reçoivent la même sélection (hypothèse de proposition ; répartition entre faces : À CONFIRMER).
+ * A3 et A4 reçoivent la même sélection (simplification de la proposition ; la norme ne prescrit pas de répartition).
  */
 export function proposeAutoConfig(
   geo: WallGeometry, soil: SoilProperties, loads: LoadsConfig, conc: ConcreteProperties, current: RebarCustomConfig
@@ -179,6 +184,19 @@ export function proposeAutoConfig(
     }
     const pick = found ?? fallback;
     if (pick) for (const def of defs) cfg = setZoneSelection(cfg, def.key, pick);
+    // M2-A1 : seule la somme A3 + A4 est contrainte (14.1.8.6) ; on allège A4 tant que la somme et les vérifications par nappe passent
+    if (found && group.length === 2) {
+      refine: for (const bar of BAR_SIZES) {
+        for (const sp of spacingsDesc) {
+          const trial = setZoneSelection(cfg, defs[1].key, { barSize: bar, spacing: sp });
+          const rows = buildZoneRows(analyzeRetainingWall(geo, soil, loads, conc, trial));
+          if (group.every(id => { const r = rows.find(x => x.zone.id === id)!; return r.ok && r.checks_ok; })) {
+            if (asPerMetre({ barSize: bar, spacing: sp }) < asPerMetre(found)) cfg = trial;
+            break refine;
+          }
+        }
+      }
+    }
     if (!found) (fallback ? engineChecksFailing : unsatisfied).push(...group);
   }
   return { config: cfg, unsatisfied, engineChecksFailing };

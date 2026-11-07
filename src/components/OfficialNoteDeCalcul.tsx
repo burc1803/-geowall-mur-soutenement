@@ -420,6 +420,63 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
         {/* 4. VÉRIFICATIONS */}
         <SectionTitle n="4" title="Vérifications" />
+
+        {/* Explications des choix de calcul (texte seulement : aucune valeur n'est recalculée ici) */}
+        {(() => {
+          const fr = result.frost;
+          const hPass = result.earthPressures.h_pass;
+          const gb = result.governingBearing;
+          const moments = result.stabilityCriterion === 'moments';
+          const dfApplies = fr.df_missing;
+          const treat = (k: typeof fr.no_df_treatment) => (!dfApplies ? 'sans objet' : fr.no_df_treatment === k ? 'APPLIQUÉ ACTUELLEMENT' : 'non');
+          let example: string;
+          if (hPass <= 0) example = "Aucun sol à l'avant : la butée est nulle.";
+          else if (!fr.deduct) example = `La butée agit sur h_pass = ${fmt(hPass, 2)} m. Case « profondeur de gel » décochée : butée comptée sur toute la hauteur (sol avant déclaré permanent et non gélif).`;
+          else if (fr.df_entered) example = `La butée agit sur h_pass = ${fmt(hPass, 2)} m. Avec df = ${fmt(fr.df, 2)} m, il reste h_pass − df = ${fmt(Math.max(hPass - fr.df, 0), 2)} m de butée.`;
+          else example = `La butée agit sur h_pass = ${fmt(hPass, 2)} m. Sans df, la butée est comptée sur toute la hauteur.`;
+          const seisPassive = result.soilMethodConfig.seismicPassive === 'kpe' ? 'butée réduite KPE (CFEM 5e, éq. 18.27 à 18.31)' : 'butée nulle (aucune butée sismique)';
+          return (
+            <div className="text-xs bg-slate-50 p-4 rounded-2xl border border-slate-300 space-y-3 break-inside-avoid print:break-inside-avoid">
+              <SubTitle n="4.0" title="Explications des choix de calcul" />
+              <div className="space-y-2">
+                <div className="font-bold text-slate-900">A. Butée et profondeur de gel</div>
+                <p className="text-slate-700">
+                  Le sol avant qui gèle ou qui peut être excavé ne retient pas le mur. Le CFEM 5e (fig. 20.10) ne compte la butée que sous la profondeur de gel df.
+                  Au Québec, df vaut souvent environ 1,2 à 1,8 m selon la région ; c'est une valeur indicative, à prendre dans le rapport géotechnique.
+                </p>
+                <p className="text-slate-900 font-semibold">{example}</p>
+                <p className="text-slate-700">Traitement possible lorsque la case gel est cochée et que df n'est pas saisie :</p>
+                <DataTable
+                  head={['Traitement', 'Effet', 'Appliqué']}
+                  rows={[
+                    ['Butée nulle', 'Prudent ; le résultat reste vérifiable', treat('zero')],
+                    ['Non vérifiable', "Bloque le résultat tant que df n'est pas saisie", treat('not_verifiable')],
+                    ['Butée pleine avec avis', 'Pas prudent ; un avis est affiché', treat('full_with_notice')]
+                  ]}
+                />
+                <p className="text-slate-700">Choix courant lorsque df n'est pas saisie : <strong>{fr.no_df_treatment === 'zero' ? 'butée nulle (défaut)' : fr.no_df_treatment === 'not_verifiable' ? 'non vérifiable' : 'butée pleine avec avis'}</strong> (MUR-02 §11){dfApplies ? '' : " ; sans effet ici : df saisie, case décochée ou aucune butée"}.</p>
+                <p className="text-slate-700">Butée au séisme : choix courant = <strong>{seisPassive}</strong> (choix possibles : butée nulle ou réduite KPE).</p>
+              </div>
+              <div className="space-y-2">
+                <div className="font-bold text-slate-900">B. Critère de portance et de renversement</div>
+                <DataTable
+                  head={['Option', 'Pression', 'Cohérente avec', 'Vérifications', 'Retenu']}
+                  rows={[
+                    ['Largeur réduite B′', 'B′ = B − 2e, pression uniforme V/B′ (CFEM 5e, éq. 10.12, Meyerhof)', 'qu du rapport géotechnique calculée pour une charge excentrée', 'Renversement et e ≤ B/6 vérifiés aussi', moments ? 'non' : 'OUI'],
+                    ['Moments, pression linéaire', 'q = V/B·(1 ± 6e/B), ou triangulaire si e > B/6 (Paultre ch. 17)', 'Pression admissible au bord', 'Ms/Mr avec φ = 0,5', moments ? 'OUI' : 'non']
+                  ]}
+                />
+                <p className="text-slate-900 font-semibold">
+                  {gb.outside_base
+                    ? `Combinaison de portance gouvernante (${gb.combName}) : résultante hors de la base, les deux pressions sont sans objet.`
+                    : `Exemple, combinaison de portance gouvernante (${gb.combName}) : q selon B′ = V/B′ = ${fmt(gb.q_Beff, 1)} kPa (B′ = ${fmt(gb.B_eff, 2)} m) ; q max selon la pression linéaire = ${fmt(gb.q_linear_max, 1)} kPa.`}
+                </p>
+                <p className="text-slate-700">Les efforts du talon et du patin (armature) utilisent toujours la pression linéaire, quel que soit le critère.</p>
+                <p className="text-slate-700">Critère retenu pour ce projet (choix de l'utilisateur, onglet Critères) : <strong>{moments ? 'moments, pression linéaire' : 'largeur réduite B′'}</strong>.</p>
+              </div>
+            </div>
+          );
+        })()}
         <div className="text-xs bg-white p-4 rounded-2xl border border-slate-200 space-y-2">
           <div>
             <strong>Critère de renversement et de portance :</strong>{' '}
@@ -439,14 +496,14 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           ))}
           <div className="flex flex-wrap gap-2">
             {[
-              ['Glissement', result.governingSliding.status_sliding === 'OK', `FS = ${result.governingSliding.FOS_sliding.toFixed(2)}`],
-              ['Renversement', result.governingOverturning.status_overturning === 'OK', result.governingOverturning.outside_base ? 'hors base' : `FS = ${result.governingOverturning.FOS_overturning.toFixed(2)}`],
+              ['Glissement', result.governingSliding.status_sliding === 'NON VÉRIFIABLE' ? 'nv' : result.governingSliding.status_sliding === 'OK', `FS = ${result.governingSliding.FOS_sliding.toFixed(2)}`],
+              ['Renversement', result.governingOverturning.status_overturning === 'NON VÉRIFIABLE' ? 'nv' : result.governingOverturning.status_overturning === 'OK', result.governingOverturning.outside_base ? 'hors base' : `FS = ${result.governingOverturning.FOS_overturning.toFixed(2)}`],
               ['Excentricité e ≤ B/6 (ÉLU et ÉLS)', result.eccentricity_ok_ULS && result.eccentricity_ok_SLS, `ÉLU : ${result.eccentricity_ok_ULS ? 'respectée' : 'non respectée'} ; ÉLS : ${result.eccentricity_ok_SLS ? 'respectée' : 'non respectée'}`],
               ['Portance ÉLU', result.governingBearing.status_bearing === 'OK', result.governingBearing.outside_base ? 'non vérifiable (résultante hors base)' : `q = ${result.governingBearing.q_design.toFixed(1)} / ${result.governingBearing.q_capacity.toFixed(1)} kPa`],
               ['Béton du mur et de la semelle', Object.values(result.concreteDesign).every((d: any) => (d.checks_ok ?? d.status_ok) === true), 'flexion, cisaillement, As,min, ductilité, fissuration, ancrage, frottement']
             ].map(([label, ok, detail]) => (
-              <span key={label as string} className={`px-2 py-1 rounded font-bold ${!result.verifiable ? 'bg-amber-100 text-amber-800' : ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                {label as string} : {!result.verifiable ? 'NON VÉRIFIABLE' : ok ? 'CONFORME' : 'NON CONFORME'} ({detail as string})
+              <span key={label as string} className={`px-2 py-1 rounded font-bold ${!result.verifiable || ok === 'nv' ? 'bg-amber-100 text-amber-800' : ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                {label as string} : {!result.verifiable || ok === 'nv' ? 'NON VÉRIFIABLE' : ok ? 'CONFORME' : 'NON CONFORME'} ({detail as string})
               </span>
             ))}
           </div>
@@ -528,11 +585,11 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                     <td className="px-1.5 py-1 text-right font-bold">{c.Fs.toFixed(1)}</td>
                     <td className="px-1.5 py-1 text-right">{c.Fh_destab.toFixed(1)}</td>
                     <td className="px-1.5 py-1 text-right font-bold">{c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(3)}</td>
-                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : c.status_sliding === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
+                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable || c.status_sliding === 'NON VÉRIFIABLE' ? 'NON VÉRIFIABLE' : c.status_sliding === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
                     <td className="px-1.5 py-1 text-right">{c.Ms.toFixed(1)}</td>
                     <td className="px-1.5 py-1 text-right">{c.Mr.toFixed(1)}</td>
                     <td className="px-1.5 py-1 text-right font-bold">{c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(3)}</td>
-                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : c.status_overturning === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
+                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable || c.status_overturning === 'NON VÉRIFIABLE' ? 'NON VÉRIFIABLE' : c.status_overturning === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -656,7 +713,9 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                 {([
                   result.concreteDesign.mur_interieur,
                   result.concreteDesign.mur_exterieur,
-                  result.concreteDesign.mur_horizontal,
+                  { ...result.concreteDesign.mur_horizontal_ext, elementName: 'Voile - horizontales ext. (A3)' },
+                  { ...result.concreteDesign.mur_horizontal_int, elementName: 'Voile - horizontales int. (A4)' },
+                  { ...result.concreteDesign.mur_horizontal, elementName: 'Voile - total horizontal (A3 + A4) / 0,002Ag' },
                   result.concreteDesign.semelle_talon,
                   result.concreteDesign.semelle_orteil,
                   result.concreteDesign.semelle_retrait
@@ -888,7 +947,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                 />
                 <p className="text-[11px] text-slate-600">
                   As,min : {zoneRows.map(r => `${r.zone.id} ${r.As_min_basis}`).join(' ; ')}.
-                  {pair && ` Paire A3 + A4 : total requis ${fmt(pair.required, 0)} mm²/m, somme fournie ${fmt(pair.provided, 0)} mm²/m ; répartition entre faces : À CONFIRMER (décision de l'utilisateur en attente) ; statut : chaque face ≥ As,min.`}
+                  {pair && ` Paire A3 + A4 : total requis ${fmt(pair.required, 0)} mm²/m, somme fournie ${fmt(pair.provided, 0)} mm²/m ; 14.1.8.6 : aire totale ; répartition entre faces non prescrite par la norme. Statut de A3 et A4 : Σ (A3 + A4) ≥ 0,002Ag et espacement par nappe.`}
                   {' '}As,req = armature pour Mr = Mf (inverse exact de la formule de Mr, bloc rectangulaire 10.1.7) ; « — » : aucun effort de flexion. A7 : 2 lits. Statut : As,fourni ≥ max(As,req ; As,min) et espacement ≤ espacement maximal.
                 </p>
                 <SubTitle n="6.2" title="Nomenclature des barres (par mètre de mur)" />

@@ -8,6 +8,8 @@ const close = (a: number, b: number, relTol: number) => expect(Math.abs(a - b)).
 
 // Cas de référence MUR-00 §5 : mur en console, sans butée, sans surcharge, sans nappe
 const GEO_R: WallGeometry = { wallType: 'cantilever', hMur: 3.0, epStem: 0.3, ePiedAv: 0.6, ePiedAr: 1.5, epBase: 0.4 };
+// MUR-02 §11 : le défaut (df non saisie) est maintenant « butée nulle » ; ces cas d'avant §11 gardent la butée pleine
+const FROST_FULL: SoilProperties['frost'] = { deduct: true, df: 0, noDf: 'full_with_notice' };
 const soilR = (over: Partial<SoilProperties> = {}): SoilProperties => ({
   gamma: 19, phi: 32, cohesion: 0, mu: 0.55, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 2000,
   hasWaterTable: false, gamma_w: 9.81,
@@ -241,7 +243,7 @@ describe('Audit MUR-01 - D défavorable au facteur maximal', () => {
 describe('Amendement A2 - hauteur de butée depuis la sous-face', () => {
   const geoA2: WallGeometry = { ...GEO_R, epBase: 0.35 };
   it('hSolAv = 1,50, epBase = 0,35, φ = 29°, γ = 19 : Kp = 2,8821, Pp = 93,70 kN/m à 0,617 m', () => {
-    const r = analyzeRetainingWall(geoA2, soilR({ phi: 29, hSolAv: 1.5 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    const r = analyzeRetainingWall(geoA2, soilR({ frost: FROST_FULL, phi: 29, hSolAv: 1.5 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
     close(r.K_passive, 2.8821, 0.001);
     close(r.earthPressures.h_pass, 1.85, 1e-9);
     close(r.earthPressures.P_passive_nominal, 93.70, 0.001);
@@ -257,7 +259,7 @@ describe('Amendement A2 - hauteur de butée depuis la sous-face', () => {
 describe('Amendement A3 - butée sous la nappe et eau à l\'avant', () => {
   const geoA3: WallGeometry = { ...GEO_R, epBase: 0.35 };
   const wet = (hw: number, extra: Partial<SoilProperties> = {}) =>
-    analyzeRetainingWall(geoA3, soilR({ phi: 29, hSolAv: 1.5, hasWaterTable: true, waterTableHeight: hw, ...extra }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    analyzeRetainingWall(geoA3, soilR({ frost: FROST_FULL, phi: 29, hSolAv: 1.5, hasWaterTable: true, waterTableHeight: hw, ...extra }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
   it('exemple par défaut (hw = 2,5, zone de butée entièrement sous la nappe) : Pp′ = 45,32 kN/m à 0,617 m', () => {
     const r = wet(2.5);
     close(r.earthPressures.P_passive_nominal, 0.5 * 2.8821 * 9.19 * 1.85 * 1.85, 0.001);
@@ -276,7 +278,7 @@ describe('Amendement A3 - butée sous la nappe et eau à l\'avant', () => {
     expect(r.critical_sliding_ULS).toBeGreaterThan(a.critical_sliding_ULS);
   });
   it('sans nappe : Pw,a = 0 même si l\'option est cochée (avis non bloquant)', () => {
-    const r = analyzeRetainingWall(geoA3, soilR({ phi: 29, hSolAv: 1.5, frontWater: { enabled: true, hwAv: 1.85 } }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    const r = analyzeRetainingWall(geoA3, soilR({ frost: FROST_FULL, phi: 29, hSolAv: 1.5, frontWater: { enabled: true, hwAv: 1.85 } }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
     expect(r.earthPressures.P_water_front).toBe(0);
     expect(r.earthPressures.frontWaterScenario).toBe('A');
     expect(r.notices.length).toBeGreaterThan(0);
@@ -300,7 +302,7 @@ describe('Amendement A3 - butée sous la nappe et eau à l\'avant', () => {
     close(r.earthPressures.y_Pp, M / P, 1e-4);
   });
   it('sans nappe : Pp = 93,70 kN/m (A2 inchangé)', () => {
-    const r = analyzeRetainingWall(geoA3, soilR({ phi: 29, hSolAv: 1.5 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
+    const r = analyzeRetainingWall(geoA3, soilR({ frost: FROST_FULL, phi: 29, hSolAv: 1.5 }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
     close(r.earthPressures.P_passive_nominal, 93.70, 0.001);
     close(r.earthPressures.y_Pp, 0.617, 0.001);
   });

@@ -20,6 +20,7 @@ import {
   CnbEdition,
   GeotechLevel,
   GeotechResolved,
+  FrostNoDfTreatment,
   SeismicScenario,
   SeismicSummary
 } from './types';
@@ -532,7 +533,12 @@ export function analyzeRetainingWall(
   // sinon sur toute la hauteur. La pression verticale σ′v garde le poids du sol de la zone gelée (surcharge sur la zone de butée).
   const frostDeduct = soil.frost?.deduct ?? true;
   const dfInput = Number.isFinite(soil.frost?.df) ? Math.max(soil.frost!.df, 0) : 0;
-  const zPassiveTop = frostDeduct ? Math.min(dfInput, h_pass) : 0;
+  // MUR-02 §11 (D9) : case cochée et df non saisie -> traitement choisi par l'utilisateur (défaut : butée nulle)
+  const noDfTreatment: FrostNoDfTreatment = soil.frost?.noDf ?? 'zero';
+  const dfMissing = frostDeduct && !(dfInput > 0) && h_pass > 0 && Kp > 0;
+  const dfZeroPassive = dfMissing && noDfTreatment !== 'full_with_notice';
+  const zPassiveTop = frostDeduct ? (dfZeroPassive ? h_pass : Math.min(dfInput, h_pass)) : 0;
+  const frostUnverified = dfMissing && noDfTreatment === 'not_verifiable';
   let P_passive_nominal = 0;
   let M_passive_soil = 0;
   if (h_pass > 0 && Kp > 0 && zPassiveTop < h_pass) {
@@ -549,7 +555,10 @@ export function analyzeRetainingWall(
   const notices: string[] = [];
   if (h_pass > 0 && soilMethod.passiveMethod !== 'neglected') {
     if (!frostDeduct) notices.push("Butée sur toute la hauteur : sol avant déclaré permanent et non gélif par l'utilisateur.");
-    else if (!(dfInput > 0)) notices.push("Profondeur de gel df non saisie (0 m) : aucune déduction appliquée. Saisir df dans l'onglet Critères, ou décocher la case si le sol avant est permanent et non gélif.");
+    else if (!(dfInput > 0)) notices.push(
+      noDfTreatment === 'zero' ? "Profondeur de gel df non saisie (0 m) : butée statique prise nulle (choix par défaut, MUR-02 §11). Saisir df dans l'onglet Critères, ou décocher la case si le sol avant est permanent et non gélif."
+      : noDfTreatment === 'not_verifiable' ? "Profondeur de gel df non saisie (0 m) : butée prise nulle ; glissement et renversement NON VÉRIFIABLES (MUR-02 §11). Saisir df dans l'onglet Critères."
+      : "Profondeur de gel df non saisie (0 m) : aucune déduction appliquée, butée pleine (choix « butée pleine avec avis »). Saisir df dans l'onglet Critères, ou décocher la case si le sol avant est permanent et non gélif.");
     else if (dfInput >= h_pass) notices.push(`Profondeur de gel df = ${dfInput.toFixed(2)} m ≥ profondeur de butée ${h_pass.toFixed(2)} m : butée statique nulle.`);
   }
   const frontWaterReq = !!soil.frontWater?.enabled;
@@ -1292,6 +1301,8 @@ export function analyzeRetainingWall(
         if (toeSide) { q_t = (2 * Rv) / Lc; q_h = 0; } else { q_h = (2 * Rv) / Lc; q_t = 0; }
       }
       let q_design = Math.max(q_t, q_h);
+      const q_lin = q_design; // lecture seule : q max de la pression linéaire (moments)
+      const q_bp = Rv / B_eff; // lecture seule : V/B′ (largeur réduite)
       let pAt: (x: number) => number;
       if (criterion === 'eccentricity') {
         // Meyerhof : B' = B - 2e, pression uniforme V/B' sur [s0, s0 + B'] (CFEM 5e : limite de e À CONFIRMER, non appliquée)
@@ -1308,7 +1319,7 @@ export function analyzeRetainingWall(
       } else {
         pAt = (x: number) => q_t + ((q_h - q_t) * x) / baseWidth;
       }
-      return { Rv, uplift, x1, ecc, B_eff, distributionCase, q_t, q_h, q_design, pAt, outside };
+      return { Rv, uplift, x1, ecc, B_eff, distributionCase, q_t, q_h, q_design, q_lin, q_bp, pAt, outside };
     };
     const bZ = bearingOf(stab);
     const bF = bearingOf(full);
@@ -1329,14 +1340,14 @@ export function analyzeRetainingWall(
     const Fs = Rf_friction + Rf_cohesion + Rf_passive;
     const Fh_destab = Math.max(sumH, 0.01);
     const FOS_sl = sumH > 0 ? (Fs / Fh_destab) : Infinity;
-    const status_sliding: 'OK' | 'NON' = FOS_sl >= 1.0 ? 'OK' : 'NON';
+    const status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE' = frostUnverified ? 'NON VÉRIFIABLE' : FOS_sl >= 1.0 ? 'OK' : 'NON';
 
     // --- MUR-02 §2.3 (E08) : renversement  Ψ·φ_ov·ΣM_stab ≥ ΣM_renv (forme d'application À CONFIRMER) ; la butée fait partie de ΣM_stab
     const Ms_nominal = stab.Mres + Mpass_c;
     const Ms = psiC * phi_overturning * Ms_nominal;
     const Mr = Math.max(stab.Mover, 0.01);
     const FOS_over = stab.Mover > 0 ? (Ms / Mr) : Infinity;
-    let status_overturning: 'OK' | 'NON' = FOS_over >= 1.0 ? 'OK' : 'NON';
+    let status_overturning: 'OK' | 'NON' | 'NON VÉRIFIABLE' = frostUnverified ? 'NON VÉRIFIABLE' : FOS_over >= 1.0 ? 'OK' : 'NON';
     const bear = [bF, bH].reduce((best, b) => (b.q_design > best.q_design ? b : best), bZ);
     // Résultante hors de la base : renversement (vers l'orteil) ou basculement vers le talon -> NON, avec message
     const outsideSide = bZ.outside ?? bF.outside ?? bH.outside;
@@ -1447,6 +1458,8 @@ export function analyzeRetainingWall(
       status_ecc,
       B_eff: bear.B_eff,
       q_design: bear.q_design,
+      q_linear_max: bear.q_lin,
+      q_Beff: bear.q_bp,
       outside_base: outsideSide,
       stability_message,
       caseNo: comb.caseNo,
@@ -1579,8 +1592,10 @@ export function analyzeRetainingWall(
     otherVerticalAs: designMurInterieur.As_provided
   });
 
-  // 3. Mur - Armature Horizontale (Répartition) : chaque face est vérifiée séparément (règle : chaque face ≥ As,min, 14.1.8.6) ;
-  //    `mur_horizontal` est l'enveloppe (pire des deux faces), compatible avec l'ancien format.
+  // 3. Mur - Armature Horizontale (Répartition) — amendement M2-A1 (CSA A23.3-14, p. 133 ; -19 : À CONFIRMER mot à mot) :
+  //    14.1.8.6 : la SOMME des nappes (A3 + A4) ≥ 0,002Ag ; 14.1.8.4 (espacement), 14.1.8.2 (db ≤ t/10) et 10.6.1 (fissuration) : par nappe.
+  //    14.1.8.3 : une seule nappe est permise. Aucune répartition entre les faces n'est prescrite.
+  //    `mur_horizontal` est l'enveloppe (et logique de tous les drapeaux).
   const horizontalParams = (face: 'ext' | 'int') => {
     const sel = face === 'ext' ? rebarCfg.mur_horizontal_ext : rebarCfg.mur_horizontal_int;
     return {
@@ -1603,19 +1618,41 @@ export function analyzeRetainingWall(
       aggregate_size: agg
     };
   };
-  const designMurHorizontalExt = computeElementConcreteDesign(horizontalParams('ext'));
-  const designMurHorizontalInt = computeElementConcreteDesign(horizontalParams('int'));
-  const weakerH = designMurHorizontalExt.As_provided <= designMurHorizontalInt.As_provided ? designMurHorizontalExt : designMurHorizontalInt;
-  const worstH = !designMurHorizontalExt.checks_ok ? designMurHorizontalExt : !designMurHorizontalInt.checks_ok ? designMurHorizontalInt : weakerH;
-  const bothH = (f: (d: ConcreteElementDesign) => boolean | undefined) => (f(designMurHorizontalExt) ?? true) && (f(designMurHorizontalInt) ?? true);
+  const hExt0 = computeElementConcreteDesign(horizontalParams('ext'));
+  const hInt0 = computeElementConcreteDesign(horizontalParams('int'));
+  const hSumProvided = hExt0.As_provided + hInt0.As_provided;
+  const hSumOk = hSumProvided >= hExt0.As_min; // 14.1.8.6 : aire totale
+  const hBasis = '14.1.8.6 : 0,002·Ag, aire totale des nappes horizontales (A3 + A4) ; répartition entre faces non prescrite';
+  // statut de nappe : somme ≥ 0,002Ag (As_ok) + vérifications propres à la nappe
+  const perFace = (d: ConcreteElementDesign): ConcreteElementDesign => ({
+    ...d,
+    As_ok: hSumOk,
+    As_min_basis: hBasis,
+    checks_ok: hSumOk && d.shear_ok && d.flexure_ok && d.ductility_ok && (d.Z_ok ?? true) && (d.anchorage_ok ?? true) && d.spacing_ok && (d.db_ok ?? true)
+  });
+  const designMurHorizontalExt = perFace(hExt0);
+  const designMurHorizontalInt = perFace(hInt0);
+  const hFaces = [designMurHorizontalExt, designMurHorizontalInt];
+  const hAll = (f: (d: ConcreteElementDesign) => boolean | undefined) => hFaces.every(d => f(d) ?? true);
+  const hBase = hFaces.find(d => !(d.spacing_ok && d.ductility_ok && (d.Z_ok ?? true) && (d.db_ok ?? true) && (d.anchorage_ok ?? true) && d.flexure_ok && d.shear_ok))
+    ?? (designMurHorizontalExt.As_provided <= designMurHorizontalInt.As_provided ? designMurHorizontalExt : designMurHorizontalInt);
   const designMurHorizontal: ConcreteElementDesign = {
-    ...worstH,
+    ...hBase,
     elementName: 'Voile - Armature Horizontale (Répartition)',
-    As_ok: bothH(d => d.As_ok),
-    spacing_ok: bothH(d => d.spacing_ok),
-    db_ok: worstH.db_max === undefined ? undefined : bothH(d => d.db_ok),
-    Z_ok: bothH(d => d.Z_ok),
-    checks_ok: bothH(d => d.checks_ok)
+    bar_designation: `${designMurHorizontalExt.bar_designation} (ext.) + ${designMurHorizontalInt.bar_designation} (int.)`,
+    As_provided: hSumProvided,
+    As_ok: hSumOk,
+    As_min_basis: hBasis,
+    spacing_ok: hAll(d => d.spacing_ok),
+    db_ok: hBase.db_max === undefined ? undefined : hAll(d => d.db_ok),
+    Z_ok: hAll(d => d.Z_ok),
+    ductility_ok: hAll(d => d.ductility_ok),
+    flexure_ok: hAll(d => d.flexure_ok),
+    shear_ok: hAll(d => d.shear_ok),
+    anchorage_ok: hAll(d => d.anchorage_ok),
+    ld_status: hFaces.some(d => d.ld_status === 'À CONFIRMER') ? 'À CONFIRMER' : hBase.ld_status,
+    ld_eq12_1_required: hFaces.some(d => d.ld_eq12_1_required),
+    checks_ok: hSumOk && hFaces.every(d => d.checks_ok)
   };
 
   // 4. Semelle - Talon (Armature Supérieure en traction)
@@ -1780,7 +1817,7 @@ export function analyzeRetainingWall(
     cnbEdition,
     geotech,
     seismic,
-    frost: { deduct: frostDeduct, df: dfInput, df_entered: dfInput > 0, z_top: zPassiveTop },
+    frost: { deduct: frostDeduct, df: dfInput, df_entered: dfInput > 0, z_top: zPassiveTop, no_df_treatment: noDfTreatment, df_missing: dfMissing },
     eccentricity_ok_ULS: results.filter(r => r.type === 'ULS').every(r => r.status_ecc === 'OK'),
     eccentricity_ok_SLS: results.filter(r => r.type === 'SLS').every(r => r.status_ecc === 'OK'),
     lateral_nominal: components.concat(seismicComps[0] ?? []).filter(c => c.Fx !== 0).map(c => ({ name: c.name, type: c.type, Fx: c.Fx, y: c.y, applied: !!c.stemApplied })),

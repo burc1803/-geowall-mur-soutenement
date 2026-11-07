@@ -363,7 +363,9 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                 {[
                   conc.mur_interieur,
                   conc.mur_exterieur,
-                  conc.mur_horizontal,
+                  { ...conc.mur_horizontal_ext, elementName: 'Voile - horizontales ext. (A3)' },
+                  { ...conc.mur_horizontal_int, elementName: 'Voile - horizontales int. (A4)' },
+                  { ...conc.mur_horizontal, elementName: 'Voile - total horizontal (A3 + A4) / 0,002Ag' },
                   conc.semelle_talon,
                   conc.semelle_orteil,
                   conc.semelle_retrait

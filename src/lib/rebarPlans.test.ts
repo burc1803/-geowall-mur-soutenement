@@ -68,8 +68,10 @@ describe('Migration de mur_horizontal', () => {
   });
   it('moteur inchangé avec l\'ancien format : horizontal = mur_horizontal ; longitudinale = 15M @ 250 (2 lits)', () => {
     const res = run(oldFormat());
-    expect(res.concreteDesign.mur_horizontal.bar_designation).toBe('20M @ 300 mm');
-    expect(res.concreteDesign.mur_horizontal.As_provided).toBeCloseTo((300 * 1000) / 300, 9);
+    // M2-A1 : l'enveloppe porte la somme des deux nappes (14.1.8.6) ; chaque nappe garde la sélection de mur_horizontal
+    expect(res.concreteDesign.mur_horizontal_ext.bar_designation).toBe('20M @ 300 mm');
+    expect(res.concreteDesign.mur_horizontal_int.bar_designation).toBe('20M @ 300 mm');
+    expect(res.concreteDesign.mur_horizontal.As_provided).toBeCloseTo(2 * ((300 * 1000) / 300), 9);
     expect(res.concreteDesign.semelle_retrait.bar_designation).toBe('15M @ 250 mm (2 lits)');
     expect(res.concreteDesign.semelle_retrait.As_provided).toBeCloseTo((2 * 200 * 1000) / 250, 9);
   });
@@ -110,30 +112,48 @@ describe('Statut d\'une zone', () => {
     expect(rows.filter(x => x.zone.id === 'A3' || x.zone.id === 'A4').every(x => x.As_req === null && !!x.pair)).toBe(true);
     expect(rows.find(x => x.zone.id === 'A7')!.As_req).toBeNull();
   });
-  it('A3 / A4 : chaque face ≥ As,min (règle du moteur) ; la somme ne rend pas OK', () => {
-    const cfg = setZoneSelection(setZoneSelection(REBAR, 'mur_horizontal_ext', { barSize: '10M', spacing: 300 }), 'mur_horizontal_int', { barSize: '10M', spacing: 300 });
-    const res = run(cfg);
+  const hz = (e: [string, number], i: [string, number]) =>
+    setZoneSelection(setZoneSelection(REBAR, 'mur_horizontal_ext', { barSize: e[0] as '10M', spacing: e[1] }), 'mur_horizontal_int', { barSize: i[0] as '10M', spacing: i[1] });
+  it('M2-A1 : A3 + A4 en 10M @ 300 chacune : 333 + 333 = 667 ≥ 600 -> OK', () => {
+    const res = run(hz(['10M', 300], ['10M', 300]));
     const rows = buildZoneRows(res);
     for (const id of ['A3', 'A4']) {
       const r = rows.find(x => x.zone.id === id)!;
+      expect(r.ok).toBe(true);
+      expect(r.pair!.provided).toBeCloseTo(666.67, 1);
+      expect(r.pair!.required).toBeCloseTo(600, 9);
+    }
+    const h = res.concreteDesign.mur_horizontal;
+    expect(h.As_ok).toBe(true);
+    expect(h.spacing_ok && (h.db_ok ?? true)).toBe(true);
+    // la fissuration (10.6.1) est vérifiée par nappe : à 300 mm, z dépasse 25 000 N/mm (cover 60) -> NON à cause de Z seulement
+    expect(h.Z_ok).toBe(false);
+    expect(h.checks_ok).toBe(false);
+  });
+  it('M2-A1 : A3 + A4 en 10M @ 500 chacune : 200 + 200 = 400 < 600 -> NON', () => {
+    const res = run(hz(['10M', 500], ['10M', 500]));
+    for (const r of buildZoneRows(res).filter(x => x.zone.id === 'A3' || x.zone.id === 'A4')) {
       expect(r.ok).toBe(false);
-      expect(r.reasons.join(' ')).toContain('As,min');
-      expect(r.pair!.provided).toBeCloseTo(2 * 333.33, 0); // somme informative
+      expect(r.reasons.join(' ')).toContain('Σ As');
     }
     expect(res.concreteDesign.mur_horizontal.As_ok).toBe(false);
-    const good = buildZoneRows(run(setZoneSelection(setZoneSelection(REBAR, 'mur_horizontal_ext', { barSize: '15M', spacing: 300 }), 'mur_horizontal_int', { barSize: '15M', spacing: 300 })));
-    expect(good.filter(x => x.zone.id === 'A3' || x.zone.id === 'A4').every(x => x.ok)).toBe(true);
+    expect(res.concreteDesign.mur_horizontal.checks_ok).toBe(false);
   });
-  it('moteur : chaque face vérifiée ; ext 10M @ 300 et int 35M @ 600 -> NON (db > t/10 et espacement)', () => {
-    const cfg = setZoneSelection(setZoneSelection(REBAR, 'mur_horizontal_ext', { barSize: '10M', spacing: 300 }), 'mur_horizontal_int', { barSize: '35M', spacing: 600 });
-    const d = run(cfg).concreteDesign;
+  it('M2-A1 : ext 10M @ 300 et int 35M @ 600 : somme suffisante mais NON (db > t/10 et espacement par nappe)', () => {
+    const d = run(hz(['10M', 300], ['35M', 600])).concreteDesign;
+    expect(d.mur_horizontal.As_ok).toBe(true);
     expect(d.mur_horizontal_int.db_ok).toBe(false);
     expect(d.mur_horizontal_int.spacing_ok).toBe(false);
-    expect(d.mur_horizontal_ext.As_ok).toBe(false);
-    expect(d.mur_horizontal.checks_ok).toBe(false);
     expect(d.mur_horizontal.db_ok).toBe(false);
     expect(d.mur_horizontal.spacing_ok).toBe(false);
-    expect(d.mur_horizontal.As_ok).toBe(false);
+    expect(d.mur_horizontal.checks_ok).toBe(false);
+  });
+  it('enveloppe : ET de tous les drapeaux (ext 10M @ 300, int 35M @ 100 : ductility_ok faux)', () => {
+    const d = run(hz(['10M', 300], ['35M', 100])).concreteDesign;
+    expect(d.mur_horizontal_ext.ductility_ok).toBe(true);
+    expect(d.mur_horizontal_int.ductility_ok).toBe(false);
+    expect(d.mur_horizontal.ductility_ok).toBe(false);
+    expect(d.mur_horizontal.checks_ok).toBe(false);
   });
   it('Auto : propose une configuration dont tous les statuts sont OK, sans modifier l\'entrée', () => {
     const before = JSON.stringify(REBAR);

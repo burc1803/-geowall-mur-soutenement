@@ -287,9 +287,34 @@ describe('MUR-02 D9 - butée et profondeur de gel', () => {
   });
   it('df ≥ h_pass : butée nulle ; df non saisie (0) : aucune déduction, avis', () => {
     expect(rp({ deduct: true, df: 2.0 }).earthPressures.P_passive_nominal).toBe(0);
-    const r0 = rp({ deduct: true, df: 0 });
+    // MUR-02 §11 : « butée pleine avec avis » redonne la valeur antérieure
+    const r0 = rp({ deduct: true, df: 0, noDf: 'full_with_notice' });
     close(r0.earthPressures.P_passive_nominal, 93.70, 0.001);
     expect(r0.notices.some(n => n.includes('df non saisie'))).toBe(true);
+  });
+  it('MUR-02 §11 : par défaut (case cochée, df = 0), Pp = 0 et avis', () => {
+    for (const f of [{ deduct: true, df: 0 }, { deduct: true, df: 0, noDf: 'zero' as const }]) {
+      const r = rp(f);
+      expect(r.earthPressures.P_passive_nominal).toBe(0);
+      expect(r.frost.df_missing).toBe(true);
+      expect(r.frost.no_df_treatment).toBe('zero');
+      expect(r.notices.some(n => n.includes('df non saisie') && n.includes('nulle'))).toBe(true);
+      expect(r.combinations.every(c => c.status_sliding !== 'NON VÉRIFIABLE')).toBe(true);
+    }
+    expect(rp(undefined).earthPressures.P_passive_nominal).toBe(0); // projet ancien sans champ frost
+  });
+  it('MUR-02 §11 : « non vérifiable » -> glissement et renversement NON VÉRIFIABLES, butée nulle, portance inchangée', () => {
+    const r = rp({ deduct: true, df: 0, noDf: 'not_verifiable' });
+    expect(r.earthPressures.P_passive_nominal).toBe(0);
+    expect(r.verifiable).toBe(true); // via un statut, pas via warnings
+    expect(r.combinations.every(c => c.status_sliding === 'NON VÉRIFIABLE' && c.status_overturning === 'NON VÉRIFIABLE')).toBe(true);
+    expect(r.governingBearing.status_bearing === 'OK' || r.governingBearing.status_bearing === 'NON').toBe(true);
+    // df saisie : statuts normaux
+    const ok = rp({ deduct: true, df: 1.2, noDf: 'not_verifiable' });
+    expect(ok.combinations.every(c => c.status_sliding !== 'NON VÉRIFIABLE')).toBe(true);
+  });
+  it('MUR-02 §11 : critère de portance par défaut = moments (nouveau projet et projet sans valeur)', () => {
+    expect(rp({ deduct: true, df: 1.2 }, { stabilityCriterion: undefined }).stabilityCriterion).toBe('moments');
   });
   it('avec nappe, la zone gelée est conservée comme surcharge (σ′v) : intégration par couches', () => {
     const r = rp({ deduct: true, df: 1.0 }, { hasWaterTable: true, waterTableHeight: 1.0 });
