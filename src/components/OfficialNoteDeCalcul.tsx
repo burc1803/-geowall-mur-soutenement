@@ -14,7 +14,7 @@ interface OfficialNoteDeCalculProps {
   loads?: LoadsConfig; // charges saisies (absentes : « non disponible »)
 }
 
-const fmt = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : 'non disponible');
+const fmt = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : v === Infinity ? '∞' : 'non disponible');
 
 function SectionTitle({ n, title }: { n: string; title: string }) {
   return (

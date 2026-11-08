@@ -101,3 +101,34 @@ describe('MUR-04 M4-A1 : hauteur du sol arrière hr', () => {
     expect(run(soilOf(b, { hr: 0 })).verifiable).toBe(false);
   });
 });
+
+describe('MUR-04 (décision du 2026-11-08) : charge linéaire QL avec hr < h', () => {
+  const b = bearing({ deltaB: (Math.atan(0.55) * 180) / Math.PI });
+  const QL = 50;
+  const withLoad = (hr?: number) => analyzeRetainingWall(GEO, soilOf(b, hr === undefined ? {} : { hr }), { ...LOADS, additionalLoads: [{ id: 'ql', name: 'QL', nature: 'Fy', magnitude: QL, caseType: 'L', x: GEO.ePiedAv + GEO.epStem + 1.0, y: 3.4 } as any] }, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
+  const lineComp = (r: ReturnType<typeof withLoad>) => r.lateral_nominal.find(c => c.name.includes('fig. 20.8'))!;
+  it('hr = 2,0 : H = 2,40, m = 1,0/2,40, origine à la surface du remblai ; PH et sa position recalculés', () => {
+    const H = 2.4, m = 1.0 / H; // m > 0,4 : formule éloignée
+    const PH = (0.64 * QL) / (m * m + 1);
+    // position : centroïde de g(n) = 1,28·m²·n/(m² + n²)², intégré indépendamment (Simpson, 20000 pas)
+    const g = (n: number) => (1.28 * m * m * n) / Math.pow(m * m + n * n, 2);
+    const N = 20000; let I0 = 0, I1 = 0;
+    for (let i = 0; i <= N; i++) { const n = i / N; const w = i === 0 || i === N ? 1 : i % 2 ? 4 : 2; I0 += w * g(n); I1 += w * g(n) * n; }
+    const zc = (I1 / I0) * H; // profondeur sous la surface du remblai
+    const c = lineComp(withLoad(2.0));
+    close(c.Fx, PH, 1e-9); close(c.Fx, 27.27, 0.002); // 0,64·50/(0,4167² + 1)
+    close(c.y, H - zc, 1e-4); // hauteur au-dessus de la sous-face
+  });
+  it('hr = 2,0 : aucune poussée de la charge au-dessus du remblai (voile : z < 1,0 m sous le haut)', () => {
+    const r = withLoad(2.0);
+    const full = withLoad(undefined);
+    // la poussée totale sur le voile dépend de la hauteur remblayée : effort tranchant à la base du voile plus petit
+    expect(r.combinations.find(c => c.caseNo === 2)!.mur_Vf).toBeLessThan(full.combinations.find(c => c.caseNo === 2)!.mur_Vf);
+  });
+  it('hr = h : identique à hr non défini', () => {
+    const a = withLoad(undefined);
+    const c = withLoad(3.0);
+    expect(c.combinations).toEqual(a.combinations);
+    expect(c.lateral_nominal).toEqual(a.lateral_nominal);
+  });
+});

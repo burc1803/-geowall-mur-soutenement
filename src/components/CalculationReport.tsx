@@ -58,6 +58,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
               <tr><th className="py-1.5 font-semibold text-slate-700">Épaisseur de la semelle (hs)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{geo.epBase.toFixed(2)} m</td></tr>
               <tr className="bg-indigo-50/50"><th className="py-1.5 font-bold text-indigo-950">Largeur totale semelle (B)</th><td className="py-1.5 text-right font-mono font-black text-indigo-950">{baseWidth.toFixed(2)} m</td></tr>
               <tr className="bg-indigo-50/50"><th className="py-1.5 font-bold text-indigo-950">Hauteur totale arrière (Ht)</th><td className="py-1.5 text-right font-mono font-black text-indigo-950">{totalHeight.toFixed(2)} m</td></tr>
+              <tr><th className="py-1.5 font-semibold text-slate-700">Hauteur du sol arrière (hr) ; hauteur de poussée H_p = hr + ts</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{result.soilHeight.hr.toFixed(2)} m ; {result.soilHeight.Hp.toFixed(2)} m</td></tr>
             </tbody>
           </table>
         </div>

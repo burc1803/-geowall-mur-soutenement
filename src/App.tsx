@@ -621,7 +621,7 @@ export default function App() {
                             <label className="flex flex-col gap-1">
                               <span className="text-[9px] text-slate-500 font-bold">Nappe hw depuis la sous-face (m)</span>
                               <input 
-                                type="number" step="0.25" min="0" max={geo.hMur + geo.epBase}
+                                type="number" step="0.25" min="0" max={result.soilHeight.Hp}
                                 className="p-1.5 border rounded bg-white font-mono text-xs font-bold text-cyan-800 disabled:opacity-40" 
                                 value={soil.waterTableHeight ?? 2.50} 
                                 disabled={!(soil.hasWaterTable ?? true)}

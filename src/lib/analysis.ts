@@ -943,15 +943,15 @@ export function analyzeRetainingWall(
       // Une charge répartie sur une longueur est ramenée à sa résultante au centre : approximation À CONFIRMER.
       const stemBack = geo.ePiedAv + geo.epStem;
       if (al.nature === 'Fy' && fy > 0 && x_c >= stemBack) {
-        const m = (x_c - stemBack) / totalHeight;
-        const lt = lineLoadThrust(fy, m, totalHeight);
+        const m = (x_c - stemBack) / Hp; // MUR-04 (décision du 2026-11-08) : H = H_p = hr + ts, origine à la surface du remblai
+        const lt = lineLoadThrust(fy, m, Hp);
         if (lt.PH > 0) {
-          lineLoadsInfo.push({ name: al.name, QL: fy, m, PH: lt.PH, yPH: totalHeight - lt.zc });
+          lineLoadsInfo.push({ name: al.name, QL: fy, m, PH: lt.PH, yPH: Hp - lt.zc });
           components.push({
             name: `${al.name} (Poussée de la charge linéaire, fig. 20.8)`,
             type: al.caseType,
             Fx: lt.PH,
-            y: totalHeight - lt.zc,
+            y: Hp - lt.zc,
             Fy: 0,
             x: 0,
             Mz: 0,
@@ -1072,14 +1072,16 @@ export function analyzeRetainingWall(
   for (const c of components) {
     if (!c.lineLoad) continue;
     const nSeg = 24;
-    const zEnd = Math.min(geo.hMur, totalHeight);
+    const zEnd = hr; // le voile ne reçoit la poussée que sur la hauteur remblayée ; d = profondeur sous la surface du remblai
     for (let i = 0; i < nSeg; i++) {
-      const z1 = (i / nSeg) * zEnd;
-      const z2 = ((i + 1) / nSeg) * zEnd;
-      const p1 = c.lineLoad.sigmaAt(z1);
-      const p2 = c.lineLoad.sigmaAt(z2);
+      const d1 = (i / nSeg) * zEnd;
+      const d2 = ((i + 1) / nSeg) * zEnd;
+      const p1 = c.lineLoad.sigmaAt(d1);
+      const p2 = c.lineLoad.sigmaAt(d2);
       if (p1 === 0 && p2 === 0) continue;
-      const slope = (p2 - p1) / (z2 - z1);
+      const slope = (p2 - p1) / (d2 - d1);
+      const z1 = zs + d1; // z mesuré depuis le haut du voile
+      const z2 = zs + d2;
       stemItems.push({ kind: 'linear', type: c.lineLoad.type, label: c.lineLoad.label, z1, z2, a: p1 - slope * z1, b: slope });
     }
   }

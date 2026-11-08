@@ -170,7 +170,7 @@ export function Visualizer({
 
   const rx = uls ? uls.sumH : result.sumH_active;
   const ry = uls ? uls.sumV_max : result.sumV;
-  const mr = uls ? uls.Mr : (rx * (totalH / 3));
+  const mr = uls ? uls.Mr : (rx * (result.soilHeight.Hp / 3));
 
   // Seismic dynamic lateral thrust
   const seismicMethod = soil.methodConfig?.seismicMethod || result.soilMethodConfig?.seismicMethod || 'seed_whitman';
@@ -179,7 +179,7 @@ export function Visualizer({
   const seismicMethodName = result.seismic.method === 'wood' ? 'Wood' : result.seismic.method === 'seed_whitman' ? 'Seed & Whitman' : 'Mononobe-Okabe';
   const seismicKh = isSeismicEnabled ? result.seismic.kh : 0;
   const deltaPae = isSeismicEnabled ? (result.earthPressures?.delta_Pae_seed ?? 0) : 0;
-  const yPae = result.earthPressures?.y_Pae || (0.60 * totalH);
+  const yPae = result.earthPressures?.y_Pae || (0.60 * result.soilHeight.Hp);
   const isSeismicActive = isSeismicEnabled && deltaPae > 0;
 
   // Auto-reset selected pressure filter if seismic is disabled
@@ -399,7 +399,7 @@ export function Visualizer({
                 type="number"
                 step="0.25"
                 min="0"
-                max={totalH}
+                max={result.soilHeight.Hp}
                 value={soil.waterTableHeight ?? 2.5}
                 disabled={!(soil.hasWaterTable || options.waterTable)}
                 onChange={(e) => {
@@ -915,7 +915,7 @@ export function Visualizer({
               </g>
 
               {/* Active Side Card (Amont - Right) */}
-              <g transform={`translate(${tx(geo.ePiedAv + geo.epStem + 0.8)}, ${ty(totalH - 0.3)})`}>
+              <g transform={`translate(${tx(geo.ePiedAv + geo.epStem + 0.8)}, ${ty(soilTop - 0.3)})`}>
                 <rect 
                   x="0" y="0" width="130" height="70" 
                   rx="10" 
@@ -1679,7 +1679,7 @@ export function Visualizer({
                   />
                   <text 
                     x={tx(geo.ePiedAv + geo.epStem + 0.9)} 
-                    y={ty(geo.epBase + totalH / 3)} 
+                    y={ty(geo.epBase + result.soilHeight.Hp / 3)} 
                     fill="#60a5fa" 
                     fontSize="11" 
                     fontWeight="bold"
@@ -1711,7 +1711,7 @@ export function Visualizer({
                         />
                         <text 
                           x={tx(geo.ePiedAv + geo.epStem + surWidth + 0.1)} 
-                          y={ty(geo.epBase + totalH * 0.55)} 
+                          y={ty(geo.epBase + result.soilHeight.Hp * 0.55)} 
                           fill="#c4b5fd" 
                           fontSize="10" 
                           fontWeight="bold"
