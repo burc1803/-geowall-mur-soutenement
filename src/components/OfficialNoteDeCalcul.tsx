@@ -278,7 +278,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
     if (n.startsWith('P_seismic_soil')) return n.includes('Wood') ? 'Incrément sismique de poussée ΔP0E (Wood)' : 'Incrément sismique de poussée ΔPAE';
     if (n.startsWith('E_stem_inertia')) return 'Inertie sismique du voile (kh·W)';
     if (n.startsWith('E_base_inertia')) return 'Inertie sismique de la semelle (kh·W)';
-    if (n === 'E_heelSoil_inertia_sat') return 'Inertie sismique du sol au-dessus du talon, sol déjaugé sous la nappe (kh·W)';
+    if (n === 'E_heelSoil_inertia_sat') return 'Inertie sismique du sol au-dessus du talon, sol saturé sous la nappe, masse totale γ (kh·W)';
     if (n.startsWith('E_heelSoil_inertia')) return 'Inertie sismique du sol au-dessus du talon, sol sec au-dessus de la nappe (kh·W)';
     return n;
   };
