@@ -631,6 +631,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
         {/* 4.3 GLISSEMENT ET RENVERSEMENT : tableau 1c */}
         <div className="space-y-2">
           <SubTitle n="4.3" title="Tableau 1c : glissement Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·Pp] ≥ ΣHf et renversement Ψ·φ_ov·ΣM_stab ≥ ΣM_renv" />
+          <p className="text-[10px] text-slate-600">Glissement et renversement : combinaisons ÉLU avec la charge permanente stabilisante (0,9D aux cas 2 à 4, 1,0D au cas 5 ; CNB 4.1.3.2.(5)) ; ÉLS sans objet (MUR-02 §12).</p>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-left text-[11px] border-collapse">
               <thead>

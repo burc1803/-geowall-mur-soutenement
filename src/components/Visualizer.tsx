@@ -1057,21 +1057,21 @@ export function Visualizer({
                 x1={tx(baseW + 1.2)} 
                 y1={ty(0)} 
                 x2={tx(baseW + 1.2)} 
-                y2={ty(totalH)} 
+                y2={ty(soilTop)} 
                 stroke="#10b981" 
                 strokeWidth="1.8" 
                 strokeDasharray="6 4" 
               />
               <text 
                 x={tx(baseW + 1.4)} 
-                y={ty(totalH / 2)} 
+                y={ty(soilTop / 2)} 
                 fill="#10b981" 
                 fontSize="13" 
                 fontWeight="900" 
                 textAnchor="middle"
-                transform={`rotate(-90, ${tx(baseW + 1.4)}, ${ty(totalH / 2)})`}
+                transform={`rotate(-90, ${tx(baseW + 1.4)}, ${ty(soilTop / 2)})`}
               >
-                {totalH.toFixed(1)} m
+                {soilTop.toFixed(2)} m
               </text>
             </g>
           )}
@@ -1198,9 +1198,9 @@ export function Visualizer({
                       <line 
                         key={idx}
                         x1={tx(sx)} 
-                        y1={ty(totalH + 0.6)} 
+                        y1={ty(soilTop + 0.6)} 
                         x2={tx(sx)} 
-                        y2={ty(totalH)} 
+                        y2={ty(soilTop)} 
                         stroke="#a855f7" 
                         strokeWidth="2" 
                         markerEnd="url(#arrow-purple)" 
@@ -1209,15 +1209,15 @@ export function Visualizer({
                   })}
                   <line 
                     x1={tx(geo.ePiedAv + geo.epStem + 0.3)} 
-                    y1={ty(totalH + 0.6)} 
+                    y1={ty(soilTop + 0.6)} 
                     x2={tx(geo.ePiedAv + geo.epStem + 0.3 + 5 * 0.45)} 
-                    y2={ty(totalH + 0.6)} 
+                    y2={ty(soilTop + 0.6)} 
                     stroke="#a855f7" 
                     strokeWidth="2" 
                   />
                   <rect
                     x={tx(geo.ePiedAv + geo.epStem + 1.4) - 75}
-                    y={ty(totalH + 0.9) - 12}
+                    y={ty(soilTop + 0.9) - 12}
                     width="150"
                     height="18"
                     rx="4"
@@ -1226,7 +1226,7 @@ export function Visualizer({
                   />
                   <text 
                     x={tx(geo.ePiedAv + geo.epStem + 1.4)} 
-                    y={ty(totalH + 0.9) + 1} 
+                    y={ty(soilTop + 0.9) + 1} 
                     fill="#e9d5ff" 
                     fontSize="11" 
                     fontWeight="bold" 
