@@ -42,7 +42,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
   const ulsBearing = result.governingBearing;
   const nv = !result.verifiable; // KAE indéterminé, γ ≤ γw, etc. : aucun statut CONFORME / OK n'est affiché
   const st = (ok: boolean, okTxt = 'CONFORME', koTxt = 'NON CONFORME') => (nv ? 'NON VÉRIFIABLE' : ok ? okTxt : koTxt);
-  const slidingEq = buildSlidingEq(ulsSliding, result, soil);
+  const slidingEq = buildSlidingEq(ulsSliding, result);
   const overturningEq = buildOverturningEq(ulsOverturning, result.verifiable);
   const bearingEq = buildBearingEq(ulsBearing, baseWidth, result.stabilityCriterion);
   const inertia = conc ? inertiaStrings(result, geo, conc) : { stem: ' = ', base: ' = ' };
@@ -129,7 +129,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
                   general={<><V n="K" s="a" /> = <Frac n={<>cos²<V n="φ" /></>} d={<>cos <V n="δ" /> · [1 + <Sqrt><Frac n={<>sin(<V n="φ" />+<V n="δ" />) · sin <V n="φ" /></>} d={<>cos <V n="δ" /></>} /></Sqrt>]²</>} /></>}
                   substituted={<>cos²({fr(soil.phi, 1)}°) / (cos({fr(ep.delta_deg, 2)}°) · [1 + √(sin({fr(soil.phi, 1)}° + {fr(ep.delta_deg, 2)}°) · sin({fr(soil.phi, 1)}°) / cos({fr(ep.delta_deg, 2)}°))]²)</>}
                   result={<><V n="K" s="a" /> = {fr(ep.Ka_coulomb, 4)}</>}
-                  note={<>δ = min(atan μ ; {fr(result.soilMethodConfig.deltaFrictionRatio, 3)}·φ) = min({fr((Math.atan(soil.mu) * 180) / Math.PI, 2)}° ; {fr(result.soilMethodConfig.deltaFrictionRatio * soil.phi, 2)}°) = {fr(ep.delta_deg, 2)}°.</>}
+                  note={<>δ = r·φ du remblai, avec r = {fr(result.coulombRatio, 3)}, sans plafond par le frottement de base (MUR-04, D10) : δ = {fr(result.coulombRatio, 3)} × {fr(soil.phi, 1)}° = {fr(ep.delta_deg, 2)}°.</>}
                 />
               </div>
 
@@ -168,9 +168,9 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
             {/* Résultantes */}
             <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Eq
-                general={<><V n="P" s="a" /> = ½ · <V n="K" s="a,ret" /> · <V n="γ" /> · <V n="H" />² (nominale, sol seul)</>}
-                substituted={<>0,5 · {fr(ep.K_active_used, 4)} · {fr(soil.gamma, 1)} · {fr(totalHeight)}²</>}
-                result={<><V n="P" s="a" /> = {fr(ep.P_active_nominal, 1)} kN/m, à {fr(ep.y_Pa, 2)} m de la sous-face (<V n="H" />/3)</>}
+                general={<><V n="P" s="a" /> = ½ · <V n="K" s="a,ret" /> · <V n="γ" /> · <V n="H" s="p" />² (nominale, sol seul ; H_p = hr + ts)</>}
+                substituted={<>0,5 · {fr(ep.K_active_used, 4)} · {fr(soil.gamma, 1)} · {fr(result.soilHeight.Hp)}²</>}
+                result={<><V n="P" s="a" /> = {fr(ep.P_active_nominal, 1)} kN/m, à {fr(ep.y_Pa, 2)} m de la sous-face (H_p/3)</>}
                 note="La surcharge, l'eau et le séisme sont des composantes séparées (voir la note de calcul). Avec nappe, l'eau et le déjaugeage sont traités par le moteur à part."
               />
               <Eq
@@ -324,10 +324,10 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
                 </span>
               </div>
               <Eq
-                general={<><V n="Ψ" /> · [ <V n="φ" s="gs" /> · Σ<V n="V" prime /> · tan <V n="δ" s="b" /> + <V n="φ" s="coh" /> · <V n="c" prime /> · <V n="B" prime /> + <V n="φ" s="p" /> · (<V n="P" s="p" prime /> + <V n="P" s="w,a" />) ] ≥ Σ<V n="H" s="f" /></>}
+                general={<><V n="Ψ" /> · [ <V n="φ" s="gs" /> · Σ<V n="V" prime /> · tan <V n="δ" s="b" /> + <V n="φ" s="p" /> · (<V n="P" s="p" prime /> + <V n="P" s="w,a" />) ] ≥ Σ<V n="H" s="f" /> (long terme, c′<sub>a</sub> = 0) ; court terme (assise CL) : <V n="Ψ" /> · <V n="φ" s="coh" /> · <V n="c" s="a" /> · <V n="B" prime /> ≥ Σ<V n="H" s="f" /></>}
                 substituted={<>{slidingEq.substituted} ≥ {fr(slidingEq.sumHf, 1)}</>}
                 result={<Tx>{slidingEq.result}</Tx>}
-                note={<>Σ<i>V</i>′ : force verticale effective (sous-pression déduite), variables stabilisantes à 0 (CNB 4.1.3.2.(3)). <i>B</i>′ = <i>B</i> − 2<i>e</i> (largeur comprimée) pour le terme cohésif : À CONFIRMER (D13). Σ<i>H</i><sub>f</sub> inclut l'inertie, la poussée dynamique et, au séisme, Westergaard. tan δ<sub>b</sub> = μ = {fr(soil.mu)}. Combinaison : {ulsSliding.combName} ({ulsSliding.formula}).</>}
+                note={<>Σ<i>V</i>′ : force verticale effective (sous-pression déduite), variables stabilisantes à 0 (CNB 4.1.3.2.(3)). <i>B</i>′ = <i>B</i> − 2<i>e</i> (largeur comprimée) pour le terme d'adhérence à court terme : À CONFIRMER (D13). Σ<i>H</i><sub>f</sub> inclut l'inertie, la poussée dynamique et, au séisme, Westergaard. tan δ<sub>b</sub> = {fr(result.bearingSoil.tanDeltaB, 4)} (δ<sub>b</sub> = {result.bearingSoil.deltaB !== undefined ? fr(result.bearingSoil.deltaB, 2) : 'non défini'}° ; {result.bearingSoil.deltaBSource}). Condition retenue : {slidingEq.condition === 'undrained' ? 'court terme (non drainée)' : 'long terme (drainée)'}. Combinaison : {ulsSliding.combName} ({ulsSliding.formula}).</>}
               />
             </div>
 

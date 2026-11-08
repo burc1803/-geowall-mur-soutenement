@@ -3,10 +3,12 @@ import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, req
 import { buildBarSchedule, buildZoneRows, proposeAutoConfig, setZoneSelection, totalScheduleMass, zoneStatus } from './rebarPlans';
 import type { LoadsConfig, SoilProperties, WallGeometry, RebarCustomConfig } from './types';
 
+// MUR-04 : δb saisi = atan 0,55 (ancien μ de MUR-02) pour que les cas de référence restent reproductibles
+const DELTA_B_MU055 = (Math.atan(0.55) * 180) / Math.PI;
 // Cas G1 (MUR-02 §7) : mêmes données que mur02.test.ts
 const GEO: WallGeometry = { wallType: 'cantilever', hMur: 3.0, epStem: 0.3, ePiedAv: 0.6, ePiedAr: 1.5, epBase: 0.4 };
 const SOIL: SoilProperties = {
-  gamma: 19, phi: 32, cohesion: 0, mu: 0.55, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
+  gamma: 19, phi: 32, cohesion: 0, bearingSoil: { phi: 32, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
   hasWaterTable: false, gamma_w: 9.81, stabilityCriterion: 'eccentricity', geotechLevel: 'typical', psi: 1.0,
   methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'none', pga: 0.15, deltaFrictionRatio: 0.667 }
 };

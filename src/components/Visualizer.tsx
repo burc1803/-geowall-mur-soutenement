@@ -135,6 +135,7 @@ export function Visualizer({
   const padBottom = 110;
 
   const totalH = geo.hMur + geo.epBase;
+  const soilTop = geo.epBase + result.soilHeight.hr; // M4-A1 : surface du remblai arrière (hr depuis le dessus de la semelle)
   const baseW = result.baseWidth;
 
   const canvasWidthMeters = Math.max(baseW + 4.5, 7.5);
@@ -159,7 +160,7 @@ export function Visualizer({
 
   // Water table height
   const isWaterActive = options.waterTable && (soil.hasWaterTable || (soil.waterTableHeight ?? 0) > 0);
-  const hw = isWaterActive ? Math.min(Math.max(soil.waterTableHeight ?? 2.5, 0), totalH) : 0;
+  const hw = isWaterActive ? Math.min(Math.max(soil.waterTableHeight ?? 2.5, 0), result.soilHeight.Hp) : 0;
 
   // Stability status
   const uls = result.governingULS || result.combinations[0];
@@ -752,9 +753,9 @@ export function Visualizer({
           {/* Backfill Horizon (Amont) */}
           <line 
             x1={tx(geo.ePiedAv + geo.epStem)} 
-            y1={ty(totalH)} 
+            y1={ty(soilTop)} 
             x2={tx(canvasWidthMeters + 1)} 
-            y2={ty(totalH)} 
+            y2={ty(soilTop)} 
             stroke="#334155" 
             strokeWidth="2.5" 
           />
@@ -1669,7 +1670,7 @@ export function Visualizer({
                     points={`
                       ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase)}
                       ${tx(geo.ePiedAv + geo.epStem + 1.8)},${ty(geo.epBase)}
-                      ${tx(geo.ePiedAv + geo.epStem)},${ty(totalH)}
+                      ${tx(geo.ePiedAv + geo.epStem)},${ty(soilTop)}
                     `}
                     fill="#3b82f6"
                     fillOpacity="0.22"
@@ -1699,8 +1700,8 @@ export function Visualizer({
                           points={`
                             ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase)}
                             ${tx(geo.ePiedAv + geo.epStem + surWidth)},${ty(geo.epBase)}
-                            ${tx(geo.ePiedAv + geo.epStem + surWidth)},${ty(totalH)}
-                            ${tx(geo.ePiedAv + geo.epStem)},${ty(totalH)}
+                            ${tx(geo.ePiedAv + geo.epStem + surWidth)},${ty(soilTop)}
+                            ${tx(geo.ePiedAv + geo.epStem)},${ty(soilTop)}
                           `}
                           fill="#8b5cf6"
                           fillOpacity="0.2"
@@ -1735,8 +1736,8 @@ export function Visualizer({
                           <polygon 
                             points={`
                               ${tx(geo.ePiedAv + geo.epStem)},${ty(geo.epBase)}
-                              ${tx(geo.ePiedAv + geo.epStem + seisWidth)},${ty(totalH)}
-                              ${tx(geo.ePiedAv + geo.epStem)},${ty(totalH)}
+                              ${tx(geo.ePiedAv + geo.epStem + seisWidth)},${ty(soilTop)}
+                              ${tx(geo.ePiedAv + geo.epStem)},${ty(soilTop)}
                             `}
                             fill="#f43f5e"
                             fillOpacity="0.22"

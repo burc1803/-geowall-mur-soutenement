@@ -15,14 +15,6 @@ export type SeismicMethod = 'seed_whitman' | 'mononobe_okabe' | 'none';
  */
 export type StabilityCriterion = 'moments' | 'eccentricity';
 
-export type SoilPresetType = 
-  | 'dense_gravel' 
-  | 'compact_sand' 
-  | 'silty_sand' 
-  | 'cohesive_soil' 
-  | 'stiff_clay' 
-  | 'custom';
-
 export interface SoilMethodConfig {
   activeMethod: ActivePressureMethod;
   passiveMethod: PassivePressureMethod;
@@ -162,26 +154,40 @@ export interface ConcreteProperties {
   cover_base_bottom: number; // mm (ex: 75 mm)
 }
 
-/** Sol de fondation (portance, glissement) : distinct du sol de remblai (poussée) — MUR-01 §3.3. */
-export interface FoundationSoilProperties {
-  gamma: number; // kN/m3 (sol de butée à l'avant et déjaugé sous la nappe)
+/** Sol avant (MUR-04) : butée (Kp, couches A2/A3, gel §11) et poids sur le patin (déjaugé sous la nappe). La hauteur hs,av est `SoilProperties.hSolAv`. */
+export interface FrontSoilProperties {
+  gamma: number; // kN/m3
   phi: number; // φ′ (degrés) : coefficient de butée Kp
-  cohesion: number; // c′ (kPa) : adhérence au glissement de la base
+}
+/** Nom conservé : sol avant. Le champ `cohesion` (ancien projet) n'est plus lu (MUR-04 R4 : c′a = 0). */
+export interface FoundationSoilProperties extends FrontSoilProperties {
+  cohesion?: number;
+}
+
+/** Sol d'assise (MUR-04) : glissement et portance. qadm et qu restent saisis dans `SoilProperties` (R6). */
+export interface BearingSoilProperties {
+  uscs?: import('./cfemTable204').UscsClass; // classe USCS du tableau 20.4 ; absente = non définie
+  phi: number; // φ′ d'assise (degrés), borne de δb
+  contact: import('./cfemTable204').BaseContact; // béton coulé contre le sol ou formé/préfabriqué
+  deltaB?: number; // δb saisi (°) ; absent = valeur proposée par le tableau 20.4(a) (borne inférieure, plafonnée à φ′)
+  deltaBOrigin?: 'legacy'; // migration d'un ancien projet
+  cu?: number; // kPa, seulement pour la classe CL
 }
 
 /** Sol de REMBLAI (poussée sur le voile, poids sur le talon). Le sol de fondation est dans `foundation`. */
 export interface SoilProperties {
   gamma: number; // Poids volumique du sol de remblai humide (kN/m3)
+  hr?: number; // MUR-04 M4-A1 : hauteur du sol arrière depuis le dessus de la semelle (m), 0 < hr ≤ hMur ; défaut hMur
   gamma_prime?: number; // Poids volumique déjaugé (kN/m3)
   phi: number; // φ′ du remblai (degrés)
   cohesion?: number; // c′ du remblai (kPa) — négligée dans la poussée active (conservateur)
-  foundation?: FoundationSoilProperties; // Sol de fondation ; absent = identique au remblai
+  foundation?: FoundationSoilProperties; // Sol avant (butée, poids sur le patin) ; absent = identique au remblai
+  bearingSoil?: BearingSoilProperties; // Sol d'assise (MUR-04) ; absent = projet ancien, migré par resolveBearingSoil
   stabilityCriterion?: StabilityCriterion; // Défaut : 'moments'
   // Amendement A3 : eau à l'avant (scénario B), désactivée par défaut (scénario A : sol déjaugé, sans eau à l'avant)
   frontWater?: { enabled: boolean; hwAv?: number }; // hwAv mesuré depuis la sous-face ; défaut : h_pass
-  mu: number; // Coefficient de frottement sol-béton (tan delta) - default 0.55 (CFEM 5e éd., À CONFIRMER)
-  soilFrictionType?: string; // e.g. 'compact_sand' | 'clean_gravel' | 'silty_sand' | 'custom'
-  presetType?: SoilPresetType;
+  /** @deprecated MUR-04 R5 : lu seulement pour migrer un ancien projet (δb = atan μ). Remplacé par bearingSoil.deltaB. */
+  mu?: number;
   methodConfig?: SoilMethodConfig;
   hSolAv: number; // Hauteur de sol à l'avant (m)
   qAllowable_SLS: number; // Portance admissible SLS (kPa) pour tassement <= 25mm
@@ -263,10 +269,16 @@ export interface CombinationResult {
   Pp_used: number; // kN/m — butée du sol
   Pw_front_used: number; // kN/m — eau à l'avant (moins l'effet de Westergaard au séisme)
   // Glissement : Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·(Pp + Pw,a)] ≥ ΣHf (MUR-02 §2.1)
-  Rf_friction: number;
-  Rf_cohesion: number;
-  Rf_passive: number;
-  B_slide: number; // largeur comprimée B′ pour le terme cohésif (m)
+  Rf_friction: number; // condition gouvernante : Ψ·φgs·ΣV′·tan δb (0 si court terme gouverne)
+  Rf_cohesion: number; // condition gouvernante : Ψ·φcoh·ca·B′ (court terme seulement ; c′a = 0 à long terme, MUR-04 R4)
+  Rf_passive: number; // 0 si court terme gouverne (MUR-04 R3)
+  B_slide: number; // largeur comprimée B′ pour le terme d'adhérence (m)
+  // MUR-04 R2 : conditions de glissement. Sol non cohérent : drainée seulement.
+  sliding_condition: 'drained' | 'undrained'; // condition qui gouverne (le plus faible rapport)
+  tanDeltaB: number; // tan δb de l'assise
+  ca_used: number; // kPa — adhérence à court terme (0 si assise non cohérente)
+  Fs_drained: number; FOS_drained: number;
+  Fs_undrained?: number; FOS_undrained?: number; // seulement si l'assise est cohérente
   // Stabilité au Glissement (CFEM 5e éd., tableau 6.2)
   Fs: number; // Force stabilisante totale (pondérée : Rf_friction + Rf_cohesion + Rf_passive)
   Fh_destab: number; // Sollicitation horizontale déstabilisante
@@ -499,7 +511,10 @@ export interface AnalysisResult {
   warnings: string[]; // alertes de validation des données (ex. γ ≤ γw avec nappe)
   notices: string[]; // avis non bloquants (n'affectent pas `verifiable`)
   verifiable: boolean; // false si une alerte rend les statuts globaux NON VÉRIFIABLES
-  foundationSoil: FoundationSoilProperties;
+  foundationSoil: FoundationSoilProperties; // sol avant (butée, poids sur le patin)
+  bearingSoil: import('./bearingSoil').ResolvedBearingSoil; // sol d'assise (MUR-04)
+  soilHeight: { hr: number; Hp: number }; // M4-A1 : hauteur du remblai et hauteur de poussée H_p = hr + ts (m)
+  coulombRatio: number; // r : δ = r·φ du remblai (Coulomb), sans plafond par la base (MUR-04 D10)
   hydro: { hasWater: boolean; hw: number; gamma_w: number; gamma_prime: number; uplift_nominal: number };
 
   // All Combinations

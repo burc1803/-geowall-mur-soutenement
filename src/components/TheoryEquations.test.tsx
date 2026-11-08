@@ -6,9 +6,11 @@ import { SoilAndSeismicMethodModal } from './SoilAndSeismicMethodModal';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG } from '../lib/analysis';
 import type { LoadsConfig, SoilProperties, WallGeometry } from '../lib/types';
 
+// MUR-04 : δb saisi = atan 0,55 (ancien μ de MUR-02) pour que les cas de référence restent reproductibles
+const DELTA_B_MU055 = (Math.atan(0.55) * 180) / Math.PI;
 const GEO: WallGeometry = { wallType: 'cantilever', hMur: 3.8, epStem: 0.35, ePiedAv: 0.8, ePiedAr: 1.75, epBase: 0.35 };
 const SOIL: SoilProperties = {
-  gamma: 19, gamma_prime: 9.2, phi: 29, cohesion: 0, mu: 0.55, hSolAv: 1.5, qAllowable_SLS: 130, qUltimate_ULS: 392, presetType: 'compact_sand',
+  gamma: 19, gamma_prime: 9.2, phi: 29, cohesion: 0, bearingSoil: { phi: 29, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 1.5, qAllowable_SLS: 130, qUltimate_ULS: 392,
   methodConfig: DEFAULT_SOIL_METHOD_CONFIG, hasWaterTable: true, waterTableHeight: 2.5, gamma_w: 9.81, geotechLevel: 'typical', psi: 1.0, quFactored: false,
   frost: { deduct: true, df: 1.2, noDf: 'zero' }
 };

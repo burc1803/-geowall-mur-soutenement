@@ -10,7 +10,6 @@ import {
   ConcreteElementDesign,
   EarthPressureCalculations,
   SoilMethodConfig,
-  SoilPresetType,
   CanadianBarSize,
   CANADIAN_REBAR_CATALOG,
   RebarCustomConfig,
@@ -24,6 +23,7 @@ import {
   SeismicScenario,
   SeismicSummary
 } from './types';
+import { resolveBearingSoil, resolveFrontSoil } from './bearingSoil';
 import { solveBeamFEM, SupportBoundary } from './fem';
 import { coulombKp, linearSegmentEffect, StemItem, stemItemFactor, stemSectionEffort, proppedTopReaction, mononobeOkabeKae, mononobeOkabeKpe, lineLoadThrust } from './wallMechanics';
 
@@ -94,48 +94,6 @@ export function requiredAsForMf(p: { Mf: number; b: number; d: number; fc: numbe
   const T = K * (p.d - Math.sqrt(disc)); // N
   return T / (p.phi_s * p.fy);
 }
-
-export const SOIL_PRESETS: Record<SoilPresetType, { 
-  name: string; 
-  description: string;
-  gamma: number; 
-  phi: number; 
-  cohesion: number; 
-  mu: number; 
-  qAllowable_SLS: number; 
-  qUltimate_ULS: number; 
-}> = {
-  dense_gravel: { 
-    name: 'Gravier Dense / Enrochement', 
-    description: 'Sol granulaire compact, haute friction, excellent drainage',
-    gamma: 21.0, phi: 38.0, cohesion: 0, mu: 0.60, qAllowable_SLS: 250, qUltimate_ULS: 650 
-  },
-  compact_sand: { 
-    name: 'Sable Compact (Standard)', 
-    description: 'Remblai sélectionné standard selon CNB/CFEM',
-    gamma: 19.0, phi: 32.0, cohesion: 0, mu: 0.55, qAllowable_SLS: 150, qUltimate_ULS: 420 
-  },
-  silty_sand: { 
-    name: 'Sable Limoneux / Remblai Modéré', 
-    description: 'Sable fin ou silteux de densité moyenne',
-    gamma: 18.0, phi: 28.0, cohesion: 0, mu: 0.45, qAllowable_SLS: 110, qUltimate_ULS: 320 
-  },
-  cohesive_soil: { 
-    name: 'Sol Cohésif Frottant (c-φ)', 
-    description: 'Mélange argile/sable avec cohésion effective',
-    gamma: 18.5, phi: 24.0, cohesion: 15.0, mu: 0.45, qAllowable_SLS: 120, qUltimate_ULS: 350 
-  },
-  stiff_clay: { 
-    name: 'Argile Raide Non-drainée', 
-    description: 'Argile consistante avec cohésion prépondérante',
-    gamma: 17.5, phi: 18.0, cohesion: 35.0, mu: 0.35, qAllowable_SLS: 90, qUltimate_ULS: 260 
-  },
-  custom: { 
-    name: 'Sol Personnalisé (Manuel)', 
-    description: 'Valeurs définies manuellement par l’ingénieur géotechnique',
-    gamma: 19.0, phi: 29.0, cohesion: 0, mu: 0.55, qAllowable_SLS: 130, qUltimate_ULS: 392 
-  }
-};
 
 export const DEFAULT_CONCRETE_PROPS: ConcreteProperties = {
   fc_mur: 30.0,
@@ -457,7 +415,8 @@ export function analyzeRetainingWall(
   const phiRad = (soil.phi * Math_PI) / 180;
 
   // Deux sols (MUR-01 §3.3) : remblai (poussée, poids sur le talon) et fondation (butée, cohésion de glissement, poids à l'avant)
-  const foundation: FoundationSoilProperties = soil.foundation ?? { gamma: soil.gamma, phi: soil.phi, cohesion: soil.cohesion ?? 0 };
+  const foundation: FoundationSoilProperties = resolveFrontSoil(soil); // sol avant (MUR-04)
+  const bearing = resolveBearingSoil(soil); // sol d'assise (MUR-04)
   const phiF = (foundation.phi * Math_PI) / 180;
   const criterion: StabilityCriterion = soil.stabilityCriterion ?? 'moments';
   
@@ -473,9 +432,9 @@ export function analyzeRetainingWall(
   const K0 = 1 - Math.sin(phiRad);
   const Kp_rankine = Math.pow(Math.tan(Math_PI / 4 + phiF / 2), 2); // sol de fondation
 
-  // Coulomb active & passive with wall friction delta = min(atan(mu), delta_ratio * phi)
+  // Coulomb actif : δ = r·φ du remblai, sans plafond par le frottement de base (MUR-04 D10)
   const delta_ratio = soilMethod.deltaFrictionRatio ?? (2 / 3);
-  const delta_rad = Math.min(Math.atan(soil.mu), delta_ratio * phiRad);
+  const delta_rad = delta_ratio * phiRad;
   const cosDelta = Math.cos(delta_rad);
   const sinPhi = Math.sin(phiRad);
   const sinPhiDelta = Math.sin(phiRad + delta_rad);
@@ -484,7 +443,8 @@ export function analyzeRetainingWall(
   const Ka_coulomb = (Math.pow(Math.cos(phiRad), 2)) / (cosDelta * Math.pow(denomCoulombA, 2));
 
   // E19 : Kp de Coulomb exact (sin(φ + δ), et non sin(φ − δ)), sol de fondation
-  const delta_p_rad = Math.min(Math.atan(soil.mu), delta_ratio * phiF);
+  // Butée de Coulomb : δ ≤ φ′/2 (CFEM 5e, § 20.2.6, p. 690 ; MUR-04 §4.4, D10), jamais plafonnée par la base
+  const delta_p_rad = Math.min(delta_ratio, 0.5) * phiF;
   const Kp_coulombRaw = coulombKp(phiF, delta_p_rad);
   const Kp_coulomb = Number.isFinite(Kp_coulombRaw) ? Kp_coulombRaw : Kp_rankine;
 
@@ -510,6 +470,12 @@ export function analyzeRetainingWall(
 
   const baseWidth = geo.ePiedAv + geo.epStem + geo.ePiedAr;
   const totalHeight = geo.hMur + geo.epBase;
+  // MUR-04 M4-A1 : hauteur du sol arrière hr, depuis le dessus de la semelle (défaut hr = hMur), 0 < hr ≤ hMur. H_p = hr + ts : hauteur de poussée.
+  const hrRaw = soil.hr ?? geo.hMur;
+  const hrValid = Number.isFinite(hrRaw) && hrRaw > 0 && hrRaw <= geo.hMur + 1e-9;
+  const hr = hrValid ? Math.min(hrRaw, geo.hMur) : geo.hMur;
+  const Hp = hr + geo.epBase;
+  const zs = geo.hMur - hr; // profondeur de la surface du remblai sous le haut du voile (m)
 
   // Séisme (MUR-02 §4.1, D6) : kh = ah par défaut (CFEM 5e, éq. 18.22) ; option avancée désactivée par défaut :
   // kh = 0,5·ah et kv = 0 (CSA S6 citée par le CFEM p. 631), réservée aux murs libres de remblais routiers ou autoroutiers.
@@ -524,14 +490,14 @@ export function analyzeRetainingWall(
   const kv_val = 0; // kv signé : voir `scenarios` (les deux signes de kvInput sont étudiés)
 
   // Static nominal forces
-  const P_active_nominal = 0.5 * K_active * soil.gamma * totalHeight * totalHeight;
-  const y_Pa = totalHeight / 3;
+  const P_active_nominal = 0.5 * K_active * soil.gamma * Hp * Hp;
+  const y_Pa = Hp / 3;
   // Amendement A2 de MUR-01 : hSolAv est mesurée depuis le dessus de la semelle ; la butée s'exerce depuis la sous-face
   // (h_pass = hSolAv + epBase). Sans sol à l'avant (hSolAv <= 0), la butée est nulle.
   const h_pass = soil.hSolAv > 0 ? soil.hSolAv + geo.epBase : 0;
   // Amendement A3 : butée effective par couches. σ′v = γ·z au-dessus de la nappe, γ·z_sec + γ′·(z − z_sec) en dessous
   // (γ′ = γ − γw). Pp′ = ∫ Kp·σ′v dz ; y_Pp = centroïde du diagramme depuis la sous-face. L'eau n'est jamais multipliée par Kp.
-  const hwP = (!!soil.hasWaterTable && (soil.waterTableHeight ?? 0) > 0) ? Math.min(Math.max(soil.waterTableHeight || 0, 0), totalHeight) : 0;
+  const hwP = (!!soil.hasWaterTable && (soil.waterTableHeight ?? 0) > 0) ? Math.min(Math.max(soil.waterTableHeight || 0, 0), Hp) : 0;
   const gammaW_P = soil.gamma_w ?? 9.81;
   const zDryP = hwP > 0 ? Math.min(Math.max(h_pass - hwP, 0), h_pass) : h_pass; // profondeur de la nappe sous la surface avant
   const gammaPrimeP = foundation.gamma - gammaW_P;
@@ -575,8 +541,8 @@ export function analyzeRetainingWall(
   if (frontWaterOn && hwAvReq > hw_av + 1e-9) notices.push(`hw,av limité à ${hw_av.toFixed(2)} m (sous-pression uniforme, §7.4).`);
   const P_water_front = 0.5 * gammaW_P * hw_av * hw_av;
   const y_Pw_front = hw_av / 3;
-  const P_surcharge_nominal = K_active * loads.surcharge * totalHeight;
-  const y_Psur = totalHeight / 2;
+  const P_surcharge_nominal = K_active * loads.surcharge * Hp;
+  const y_Psur = Hp / 2;
   const E_stem_nominal = geo.hMur * geo.epStem * conc.gamma_c * kh_val;
   const E_base_nominal = baseWidth * geo.epBase * conc.gamma_c * kh_val;
 
@@ -584,6 +550,7 @@ export function analyzeRetainingWall(
   // Scénarios sismiques (MUR-02 §4) : un par signe de kv (kv signé ; sign = +1 : vers le haut, poids W(1 − kv))
   // ---------------------------------------------------------------------------
   const warnings: string[] = [];
+  if (!hrValid) warnings.push(`Hauteur du sol arrière hr = ${hrRaw} m hors de ]0 ; hMur = ${geo.hMur} m] (MUR-04 M4-A1) : hr ramenée à hMur, résultats NON VÉRIFIABLES.`);
   const seisMethod: SeismicSummary['method'] = !seismicOn ? 'none' : rigidWall ? 'wood' : soilMethod.seismicMethod === 'seed_whitman' ? 'seed_whitman' : 'mononobe_okabe';
   const westergaard = seismicOn && hw_av > 0;
   if (!!soilMethod.csaS6Reduction && seismicOn && rigidWall) notices.push("Option CSA S6 (kh = 0,5·ah) non appliquée : elle ne vise pas les murs rigides ou retenus (MUR-02 §4.1). kh = ah.");
@@ -602,20 +569,20 @@ export function analyzeRetainingWall(
     let yRel = 0.6; // fraction de H : 0,6 (Seed-Whitman, éq. 18.26) ; 0,58 (Wood, éq. 18.39)
     if (seisMethod === 'wood') {
       // Wood : ΔP0E = kh·γ·H² à 0,58H (CFEM 18.7.3, éq. 18.39)
-      dPae = kh_val * soil.gamma * totalHeight * totalHeight;
-      dPaeStem = kh_val * soil.gamma * geo.hMur * geo.hMur;
+      dPae = kh_val * soil.gamma * Hp * Hp;
+      dPaeStem = kh_val * soil.gamma * hr * hr;
       yRel = 0.58;
     } else if (seisMethod === 'seed_whitman') {
-      dPae = 0.375 * kh_val * soil.gamma * totalHeight * totalHeight;
-      dPaeStem = 0.375 * kh_val * soil.gamma * geo.hMur * geo.hMur;
+      dPae = 0.375 * kh_val * soil.gamma * Hp * Hp;
+      dPaeStem = 0.375 * kh_val * soil.gamma * hr * hr;
     } else if (seisMethod === 'mononobe_okabe') {
       const K = mononobeOkabeKae(phiRad, deltaSeis, psi);
       if (K === null) {
         indeterminate = true; // φ − β < ψ : jamais de NaN ; calcul sismique arrêté avec message (CFEM p. 632, 18.7.4)
       } else {
         Kae = K;
-        dPae = Math.max(gH2(totalHeight) * ((1 - kv) * Kae - K_active), 0); // PAE = PA + ΔPAE (éq. 18.20, 18.23)
-        dPaeStem = Math.max(gH2(geo.hMur) * ((1 - kv) * Kae - K_active), 0);
+        dPae = Math.max(gH2(Hp) * ((1 - kv) * Kae - K_active), 0); // PAE = PA + ΔPAE (éq. 18.20, 18.23)
+        dPaeStem = Math.max(gH2(hr) * ((1 - kv) * Kae - K_active), 0);
       }
     }
     let Kpe = 0;
@@ -628,7 +595,7 @@ export function analyzeRetainingWall(
       }
     }
     const Pw_dyn = westergaard ? (7 / 12) * kh_val * gammaW_P * hw_av * hw_av : 0; // Westergaard, éq. 18.33
-    return { sign, kv, psi_rad: psi, psi_deg: (psi * 180) / Math_PI, Kae, indeterminate, dPae, dPae_stem: dPaeStem, y_dPae: yRel * totalHeight, Kpe, Pp_factor: ppFactor, Pw_dyn };
+    return { sign, kv, psi_rad: psi, psi_deg: (psi * 180) / Math_PI, Kae, indeterminate, dPae, dPae_stem: dPaeStem, y_dPae: yRel * Hp, Kpe, Pp_factor: ppFactor, Pw_dyn };
   });
   const sc0: SeismicScenario | undefined = scenarios[0];
   if (scenarios.some(sc => sc.indeterminate)) {
@@ -663,7 +630,7 @@ export function analyzeRetainingWall(
     Kae_mo: sc0 && !sc0.indeterminate && seisMethod === 'mononobe_okabe' ? sc0.Kae : K_active,
     delta_Kae_seed: 0.75 * kh_val,
     delta_Pae_seed: sc0?.dPae ?? 0,
-    y_Pae: sc0?.y_dPae ?? 0.6 * totalHeight,
+    y_Pae: sc0?.y_dPae ?? 0.6 * Hp,
     P_active_nominal,
     y_Pa,
     P_passive_nominal,
@@ -710,7 +677,9 @@ export function analyzeRetainingWall(
   const phi_renv = geotech.phi_ov;
   const phi_p = geotech.phi_p;
   const phi_coh = geotech.phi_coh;
-  const c2 = foundation.cohesion; // c′ du sol de fondation (adhérence de la base)
+  // MUR-04 R4 : c′a = 0 à long terme ; adhérence à court terme ca (tableau 20.4(b)) seulement si l'assise est cohérente (R2)
+  const slidingUnverified = bearing.issues.length > 0;
+  for (const msg of bearing.issues) warnings.push(`Sol d'assise : ${msg} — glissement NON VÉRIFIABLE (MUR-04).`);
 
   interface ForceComp { 
     name: string; 
@@ -753,8 +722,9 @@ export function analyzeRetainingWall(
 
   // Nappe (E02) : hw = hauteur de la nappe au-dessus de la sous-face de la semelle
   const hasWater = !!soil.hasWaterTable && (soil.waterTableHeight ?? 0) > 0;
-  const hw = hasWater ? Math.min(Math.max(soil.waterTableHeight || 0, 0), totalHeight) : 0;
+  const hw = hasWater ? Math.min(Math.max(soil.waterTableHeight || 0, 0), Hp) : 0;
   const gamma_w = soil.gamma_w ?? 9.81;
+  if (hasWater && (soil.waterTableHeight ?? 0) > Hp + 1e-9) notices.push(`hw limité à H_p = ${Hp.toFixed(2)} m (hauteur de poussée hr + ts, MUR-04 M4-A1).`);
   // γ′ = γ − γw, sans plancher : le γ saisi est pris comme poids volumique saturé (hypothèse signalée dans la note)
   if (hasWater && soil.gamma <= gamma_w) warnings.push(`Remblai : γ = ${soil.gamma} kN/m³ ≤ γw = ${gamma_w} kN/m³ avec nappe — poids déjaugé non physique, résultats NON VÉRIFIABLES.`);
   if (hasWater && foundation.gamma <= gamma_w) warnings.push(`Fondation : γ = ${foundation.gamma} kN/m³ ≤ γw = ${gamma_w} kN/m³ avec nappe — poids déjaugé non physique, résultats NON VÉRIFIABLES.`);
@@ -762,19 +732,19 @@ export function analyzeRetainingWall(
   const gamma_prime_f = foundation.gamma - gamma_w; // fondation
 
   // Hauteurs de sol sec / déjaugé au-dessus de la semelle (E02)
-  const hSubHeel = hasWater ? Math.min(Math.max(hw - geo.epBase, 0), geo.hMur) : 0;
-  const hDryHeel = geo.hMur - hSubHeel;
+  const hSubHeel = hasWater ? Math.min(Math.max(hw - geo.epBase, 0), hr) : 0;
+  const hDryHeel = hr - hSubHeel;
   const hSubToe = hasWater ? Math.min(Math.max(Math.min(hw, geo.epBase + soil.hSolAv) - geo.epBase, 0), soil.hSolAv) : 0;
   const hDryToe = Math.max(soil.hSolAv - hSubToe, 0);
 
   // W_heel (sol de remblai sur le talon) : sec au-dessus de la nappe, déjaugé (γ′) en dessous
   if (hDryHeel > 0) {
     components.push({ name: 'W1_sol_arrière', type: 'D', Fx: 0, y: 0, Fy: hDryHeel * geo.ePiedAr * soil.gamma,
-      x: geo.ePiedAv + geo.epStem + geo.ePiedAr / 2, Mz: 0, soil: { saturated: false, hs: geo.hMur } });
+      x: geo.ePiedAv + geo.epStem + geo.ePiedAr / 2, Mz: 0, soil: { saturated: false, hs: hr } });
   }
   if (hSubHeel > 0) {
     components.push({ name: 'W1_sol_arrière_déjaugé', type: 'D', Fx: 0, y: 0, Fy: hSubHeel * geo.ePiedAr * gamma_prime,
-      x: geo.ePiedAv + geo.epStem + geo.ePiedAr / 2, Mz: 0, soil: { saturated: true, hs: geo.hMur } });
+      x: geo.ePiedAv + geo.epStem + geo.ePiedAr / 2, Mz: 0, soil: { saturated: true, hs: hr } });
   }
 
   // W_toe (sol de fondation à l'avant sur le patin)
@@ -808,7 +778,7 @@ export function analyzeRetainingWall(
   // Poussée active du sol arrière et Nappe Phréatique (H)
 
   if (hasWater && hw > 0) {
-    const h1 = totalHeight - hw; // Hauteur de sol sec au-dessus de la nappe
+    const h1 = Hp - hw; // Hauteur de sol sec au-dessus de la nappe
     const h2 = hw; // Hauteur immergée
     
     // Couche 1 supérieure (sol sec)
@@ -864,12 +834,12 @@ export function analyzeRetainingWall(
     });
   } else {
     // Sol sec standard
-    const P_active_soil = 0.5 * K_active * soil.gamma * totalHeight * totalHeight;
+    const P_active_soil = 0.5 * K_active * soil.gamma * Hp * Hp;
     components.push({ 
       name: 'Pa_sol', 
       type: 'H', 
       Fx: P_active_soil, 
-      y: totalHeight / 3, 
+      y: Hp / 3, 
       Fy: 0, 
       x: 0, 
       Mz: 0 
@@ -880,7 +850,7 @@ export function analyzeRetainingWall(
   const surType = loads.surchargeType || 'L';
   if (loads.surcharge > 0) {
     const W_sur = loads.surcharge * geo.ePiedAr;
-    const P_sur = K_active * loads.surcharge * totalHeight;
+    const P_sur = K_active * loads.surcharge * Hp;
     components.push({ 
       name: `W_surcharge_amont (${surType})`, 
       type: surType, 
@@ -894,7 +864,7 @@ export function analyzeRetainingWall(
       name: `Pa_surcharge_amont (${surType})`, 
       type: surType, 
       Fx: P_sur, 
-      y: totalHeight / 2, 
+      y: Hp / 2, 
       Fy: 0, 
       x: 0, 
       Mz: 0 
@@ -1024,7 +994,7 @@ export function analyzeRetainingWall(
   const W_heelSoil = W_heelSub + W_heelDry;
   const yHeelSub = geo.epBase + hSubHeel / 2;
   const yHeelDry = geo.epBase + hSubHeel + hDryHeel / 2;
-  const y_heelSoil = W_heelSoil > 0 ? (W_heelSub * yHeelSub + W_heelDry * yHeelDry) / W_heelSoil : geo.epBase + geo.hMur / 2;
+  const y_heelSoil = W_heelSoil > 0 ? (W_heelSub * yHeelSub + W_heelDry * yHeelDry) / W_heelSoil : geo.epBase + hr / 2;
   earthPressures.W_heelSoil_inertia = W_heelSoil;
   earthPressures.E_heelSoil_nominal = W_heelSoil * kh_val;
   earthPressures.y_heelSoil = y_heelSoil;
@@ -1061,25 +1031,25 @@ export function analyzeRetainingWall(
   // z = profondeur sous le haut du voile (m).
   // ---------------------------------------------------------------------------
   const stemItems: StemItem[] = [];
-  const zWater = hasWater ? Math.max(totalHeight - hw, 0) : Infinity;
+  const zWater = hasWater ? Math.max(totalHeight - hw, zs) : Infinity; // profondeur de la nappe sous le haut du voile (≥ surface du remblai)
   const zDryEnd = Math.min(zWater, geo.hMur);
-  if (zDryEnd > 0) {
-    stemItems.push({ kind: 'linear', type: 'H', label: 'Poussée des terres (sol sec)', z1: 0, z2: zDryEnd, a: 0, b: K_active * soil.gamma });
+  if (zDryEnd > zs) {
+    stemItems.push({ kind: 'linear', type: 'H', label: 'Poussée des terres (sol sec)', z1: zs, z2: zDryEnd, a: -K_active * soil.gamma * zs, b: K_active * soil.gamma });
   }
   if (zWater < geo.hMur) {
     stemItems.push({ kind: 'linear', type: 'H', label: 'Poussée des terres (sol déjaugé)', z1: zWater, z2: geo.hMur,
-      a: K_active * (soil.gamma - gamma_prime) * zWater, b: K_active * gamma_prime });
+      a: K_active * (soil.gamma * (zWater - zs) - gamma_prime * zWater), b: K_active * gamma_prime });
     stemItems.push({ kind: 'linear', type: 'H', label: "Pression d'eau", z1: zWater, z2: geo.hMur, a: -gamma_w * zWater, b: gamma_w });
   }
   if (loads.surcharge > 0) {
-    stemItems.push({ kind: 'linear', type: surType, label: 'Poussée de la surcharge', z1: 0, z2: geo.hMur, a: K_active * loads.surcharge, b: 0 });
+    stemItems.push({ kind: 'linear', type: surType, label: 'Poussée de la surcharge', z1: zs, z2: geo.hMur, a: K_active * loads.surcharge, b: 0 });
   }
   // Séisme : un jeu d'items par signe de kv (ΔPAE du voile à 0,6 h au-dessus du pied, ΔP0E de Wood à 0,58 h, inertie du voile à h/2)
   const stemItemsE: StemItem[][] = scenarios.map(sc => {
     const out: StemItem[] = [];
     if (kh_val <= 0 && kvInput <= 0) return out;
-    const zFrac = seisMethod === 'wood' ? 1 - 0.58 : 1 - 0.6; // profondeur sous le haut = (1 − fraction) · h
-    if (sc.dPae_stem > 0) out.push({ kind: 'point', type: 'E', label: seisMethod === 'wood' ? 'Incrément sismique de Wood (ΔP0E)' : 'Incrément sismique du sol (ΔPAE)', z: zFrac * geo.hMur, F: sc.dPae_stem });
+    const yRelS = seisMethod === 'wood' ? 0.58 : 0.6; // fraction de la hauteur remblayée hr, au-dessus du pied du voile
+    if (sc.dPae_stem > 0) out.push({ kind: 'point', type: 'E', label: seisMethod === 'wood' ? 'Incrément sismique de Wood (ΔP0E)' : 'Incrément sismique du sol (ΔPAE)', z: geo.hMur - yRelS * hr, F: sc.dPae_stem });
     if (E_stem_nominal > 0) out.push({ kind: 'point', type: 'E', label: 'Inertie du voile', z: geo.hMur / 2, F: E_stem_nominal });
     return out;
   });
@@ -1353,13 +1323,22 @@ export function analyzeRetainingWall(
     const phi_cohesion = isULS ? phi_coh : 1.0;
     const phi_overturning = isULS ? phi_renv : 1.0;
     const B_slide = bZ.outside ? 0 : Math.min(bZ.B_eff, baseWidth);
-    const Rf_friction = psiC * phi_sliding_friction * Math.max(sumV_min, 0) * soil.mu;
-    const Rf_cohesion = psiC * phi_cohesion * c2 * B_slide;
-    const Rf_passive = psiC * phi_passive * (Pp_c + Pw_c);
-    const Fs = Rf_friction + Rf_cohesion + Rf_passive;
+    // Long terme (drainé) : Ψ·[φgs·ΣV′·tan δb + φp·(P′p + Pw,a)], c′a = 0 (MUR-04 R4). Court terme (assise CL) : Ψ·φcoh·ca·B′, butée nulle (R3).
     const Fh_destab = Math.max(sumH, 0.01);
-    const FOS_sl = sumH > 0 ? (Fs / Fh_destab) : Infinity;
-    const status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE' | 'SANS OBJET' = !isULS ? 'SANS OBJET' : frostUnverified ? 'NON VÉRIFIABLE' : FOS_sl >= 1.0 ? 'OK' : 'NON';
+    const Rf_friction_d = psiC * phi_sliding_friction * Math.max(sumV_min, 0) * bearing.tanDeltaB;
+    const Rf_passive_d = psiC * phi_passive * (Pp_c + Pw_c);
+    const Fs_d = Rf_friction_d + Rf_passive_d;
+    const FOS_d = sumH > 0 ? (Fs_d / Fh_destab) : Infinity;
+    const undrainedApplies = bearing.cohesive && isULS;
+    const Fs_u = undrainedApplies ? psiC * phi_cohesion * bearing.ca * B_slide : undefined;
+    const FOS_u = Fs_u !== undefined ? (sumH > 0 ? Fs_u / Fh_destab : Infinity) : undefined;
+    const undrainedGoverns = FOS_u !== undefined && FOS_u < FOS_d;
+    const Rf_friction = undrainedGoverns ? 0 : Rf_friction_d;
+    const Rf_cohesion = undrainedGoverns ? Fs_u! : 0;
+    const Rf_passive = undrainedGoverns ? 0 : Rf_passive_d;
+    const Fs = Rf_friction + Rf_cohesion + Rf_passive;
+    const FOS_sl = undrainedGoverns ? FOS_u! : FOS_d;
+    const status_sliding: 'OK' | 'NON' | 'NON VÉRIFIABLE' | 'SANS OBJET' = !isULS ? 'SANS OBJET' : (frostUnverified || slidingUnverified) ? 'NON VÉRIFIABLE' : FOS_sl >= 1.0 ? 'OK' : 'NON';
 
     // --- MUR-02 §2.3 (E08) : renversement  Ψ·φ_ov·ΣM_stab ≥ ΣM_renv (forme d'application À CONFIRMER) ; la butée fait partie de ΣM_stab
     const Ms_nominal = stab.Mres + Mpass_c;
@@ -1397,8 +1376,8 @@ export function analyzeRetainingWall(
       let down: number;
       if (kind === 'heel') {
         down = comb.factors.D * conc.gamma_c * geo.epBase
-          + fSoil(false, geo.hMur) * soil.gamma * hDryHeel
-          + fSoil(true, geo.hMur) * gamma_prime * hSubHeel
+          + fSoil(false, hr) * soil.gamma * hDryHeel
+          + fSoil(true, hr) * gamma_prime * hSubHeel
           + fH * gamma_w * hSubHeel
           + loads.surcharge * fSur; // charge directe sur le talon : défavorable, facteur plein
       } else {
@@ -1464,6 +1443,13 @@ export function analyzeRetainingWall(
       Rf_cohesion,
       Rf_passive,
       B_slide,
+      sliding_condition: undrainedGoverns ? 'undrained' : 'drained',
+      tanDeltaB: bearing.tanDeltaB,
+      ca_used: undrainedApplies ? bearing.ca : 0,
+      Fs_drained: Fs_d,
+      FOS_drained: FOS_d,
+      Fs_undrained: Fs_u,
+      FOS_undrained: FOS_u,
       sumV_min,
       sumV_max: bear.Rv,
       sumH,
@@ -1882,6 +1868,9 @@ export function analyzeRetainingWall(
     notices,
     verifiable: warnings.length === 0,
     foundationSoil: foundation,
+    bearingSoil: bearing,
+    coulombRatio: delta_ratio,
+    soilHeight: { hr, Hp },
     hydro: { hasWater, hw, gamma_w, gamma_prime, uplift_nominal },
     combinations: results,
     critical_q_toe_SLS,

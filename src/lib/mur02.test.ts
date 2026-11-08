@@ -3,6 +3,8 @@ import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, GEO
 import { mononobeOkabeKae, mononobeOkabeKpe, lineLoadThrust } from './wallMechanics';
 import type { LoadsConfig, SoilProperties, WallGeometry, RebarCustomConfig } from './types';
 
+// MUR-04 : δb saisi = atan 0,55 (ancien μ de MUR-02) pour que les cas de référence restent reproductibles
+const DELTA_B_MU055 = (Math.atan(0.55) * 180) / Math.PI;
 const deg = (d: number) => (d * Math.PI) / 180;
 const close = (a: number, b: number, relTol: number, label = '') =>
   expect(Math.abs(a - b), `${label} obtenu ${a}, attendu ${b}`).toBeLessThanOrEqual(Math.abs(b) * relTol);
@@ -10,7 +12,7 @@ const close = (a: number, b: number, relTol: number, label = '') =>
 // Cas de référence MUR-02 §7 : hMur 3,00 ; voile 0,30 ; patin 0,60 ; talon 1,50 ; semelle 0,40
 const GEO: WallGeometry = { wallType: 'cantilever', hMur: 3.0, epStem: 0.3, ePiedAv: 0.6, ePiedAr: 1.5, epBase: 0.4 };
 const soilG = (over: Partial<SoilProperties> = {}, method: Partial<SoilProperties['methodConfig'] & object> = {}): SoilProperties => ({
-  gamma: 19, phi: 32, cohesion: 0, mu: 0.55, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
+  gamma: 19, phi: 32, cohesion: 0, bearingSoil: { phi: 32, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
   hasWaterTable: false, gamma_w: 9.81, stabilityCriterion: 'eccentricity',
   geotechLevel: 'typical', psi: 1.0,
   methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'none', pga: 0.15, deltaFrictionRatio: 0.667, ...method },
@@ -213,12 +215,13 @@ describe('MUR-02 §7.2 - Cas G2 (séisme kh = 0,15 ; kv = 0 ; δ = 0 ; 1,0D ; 1,
   });
 });
 
-describe('MUR-02 §2.1 - terme cohésif c′a·B′', () => {
-  it('c′ = 10 kPa, 0,9D + 1,5H : Rf,coh = Ψ·φcoh·c′·B′ = 0,6·10·1,862 = 11,17 kN/m', () => {
+describe("MUR-02 §2.1 / MUR-04 R4 - terme d'adhérence", () => {
+  it("MUR-04 R4 : c′a = 0 ; l'ancien c′ = 10 kPa (Rf,coh = 11,17 kN/m) n'ajoute plus rien", () => {
     const base = c(run(), 2, 0.9);
     const rc = c(run(soilG({ foundation: { gamma: 19, phi: 32, cohesion: 10 } })), 2, 0.9);
-    close(rc.B_slide, 1.862, 0.005); close(rc.Rf_cohesion, 0.6 * 10 * rc.B_slide, 1e-9); close(rc.Rf_cohesion, 11.17, 0.005);
-    close(rc.Fs - base.Fs, rc.Rf_cohesion, 1e-9);
+    close(rc.B_slide, 1.862, 0.005);
+    expect(rc.Rf_cohesion).toBe(0); // ancienne valeur : 0,6·10·1,862 = 11,17
+    expect(rc.Fs).toBe(base.Fs);
   });
 });
 

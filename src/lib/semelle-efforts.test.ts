@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG } from './analysis';
 import type { LoadsConfig, SoilProperties, WallGeometry } from './types';
 
+// MUR-04 : δb saisi = atan 0,55 (ancien μ de MUR-02) pour que les cas de référence restent reproductibles
+const DELTA_B_MU055 = (Math.atan(0.55) * 180) / Math.PI;
 // Efforts du patin et du talon : états à résultante hors base exclus, intégration exacte de la pression linéaire par morceaux (MUR-02 §5)
 const GEO_G: WallGeometry = { wallType: 'cantilever', hMur: 3.0, epStem: 0.3, ePiedAv: 0.6, ePiedAr: 1.5, epBase: 0.4 };
 const SOIL_G1: SoilProperties = {
-  gamma: 19, phi: 32, cohesion: 0, mu: 0.55, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
+  gamma: 19, phi: 32, cohesion: 0, bearingSoil: { phi: 32, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
   hasWaterTable: false, gamma_w: 9.81, stabilityCriterion: 'moments', geotechLevel: 'typical', psi: 1.0,
   methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'none', pga: 0.15, deltaFrictionRatio: 0.667 }
 };
@@ -14,7 +16,7 @@ const LOADS: LoadsConfig = { surcharge: 0, surchargeType: 'L', additionalLoads: 
 
 const GEO_D: WallGeometry = { wallType: 'cantilever', hMur: 3.8, epStem: 0.35, ePiedAv: 0.8, ePiedAr: 1.75, epBase: 0.35 };
 const SOIL_D: SoilProperties = {
-  gamma: 19, gamma_prime: 9.2, phi: 29, cohesion: 0, mu: 0.55, hSolAv: 1.5, qAllowable_SLS: 130, qUltimate_ULS: 392, presetType: 'compact_sand',
+  gamma: 19, gamma_prime: 9.2, phi: 29, cohesion: 0, bearingSoil: { phi: 29, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 1.5, qAllowable_SLS: 130, qUltimate_ULS: 392,
   methodConfig: DEFAULT_SOIL_METHOD_CONFIG, hasWaterTable: true, waterTableHeight: 2.5, gamma_w: 9.81, geotechLevel: 'typical', psi: 1.0, quFactored: false,
   frost: { deduct: true, df: 0, noDf: 'zero' }
 };

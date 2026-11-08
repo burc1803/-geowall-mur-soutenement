@@ -3,6 +3,8 @@ import { analyzeRetainingWall, CNB_2020_COMBINATIONS, CNB_2025_COMBINATIONS, DEF
 import { coulombKp, proppedTopReaction, stemSectionEffort, StemItem } from './wallMechanics';
 import type { LoadsConfig, SoilProperties, WallGeometry } from './types';
 
+// MUR-04 : δb saisi = atan 0,55 (ancien μ de MUR-02) pour que les cas de référence restent reproductibles
+const DELTA_B_MU055 = (Math.atan(0.55) * 180) / Math.PI;
 const deg = (d: number) => (d * Math.PI) / 180;
 const close = (a: number, b: number, relTol: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(Math.abs(b) * relTol);
 
@@ -11,7 +13,7 @@ const GEO_R: WallGeometry = { wallType: 'cantilever', hMur: 3.0, epStem: 0.3, eP
 // MUR-02 §11 : le défaut (df non saisie) est maintenant « butée nulle » ; ces cas d'avant §11 gardent la butée pleine
 const FROST_FULL: SoilProperties['frost'] = { deduct: true, df: 0, noDf: 'full_with_notice' };
 const soilR = (over: Partial<SoilProperties> = {}): SoilProperties => ({
-  gamma: 19, phi: 32, cohesion: 0, mu: 0.55, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 2000,
+  gamma: 19, phi: 32, cohesion: 0, bearingSoil: { phi: 32, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 2000,
   hasWaterTable: false, gamma_w: 9.81,
   methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'none', pga: 0.15, seismicDisplacementTolerance: 'free_cantilever', deltaFrictionRatio: 0.667 },
   geotechFactors: { phi_gu: 0.5, phi_gs: 0.8, phi_renv: 0.5, phi_p: 0.5, phi_coh: 0.6 },
@@ -132,7 +134,8 @@ describe('Cas R2 (MUR-00 §5.2) - sismique kh = 0,15', () => {
     const rm = analyzeRetainingWall(GEO_R, soilR({ methodConfig: { ...soilR().methodConfig!, seismicMethod: 'mononobe_okabe' } }), loadsR({ kh: 0.15 }), DEFAULT_CONCRETE_PROPS, rebarR);
     close(rm.earthPressures.Kae_mo, 0.4025, 0.002);
     close(rm.earthPressures.Ka_coulomb, 0.2750, 0.002);
-    close(rm.earthPressures.Kp_coulomb, 7.34, 0.005); // Kp avec δ = 21,34° (E19)
+    // MUR-04 D10 : δ de butée = φ′/2 = 16° (CFEM § 20.2.6), sans plafond par la base. Ancienne valeur 7,34 (δ = 21,34°) ; nouvelle valeur 5,77.
+    close(rm.earthPressures.Kp_coulomb, 5.77, 0.005);
   });
   it('E01 : efforts du voile avec 1,0H + 1,0E (facteurs de MUR-00) : Mf = 48,44, Vf = 39,13', () => {
     const f = { D: 1, L: 0, S: 0, W: 0, E: 1, H: 1 };
@@ -204,11 +207,11 @@ describe('E02 - nappe : sous-pression et sol déjaugé', () => {
 });
 
 describe('Deux sols et critère par défaut', () => {
-  it('fondation : c′ de la fondation entre dans le glissement ; critère par défaut = moments', () => {
+  it("MUR-04 R4 : l'ancien c′ de la fondation n'entre plus dans le glissement (c′a = 0) ; critère par défaut = moments", () => {
     const a = analyzeRetainingWall(GEO_R, soilR(), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
     const b = analyzeRetainingWall(GEO_R, soilR({ foundation: { gamma: 19, phi: 32, cohesion: 10 } }), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
     expect(a.stabilityCriterion).toBe('moments');
-    expect(b.critical_sliding_ULS).toBeGreaterThan(a.critical_sliding_ULS);
+    expect(b.critical_sliding_ULS).toBe(a.critical_sliding_ULS); // ancien test : b > a avec c′ = 10 kPa
   });
 });
 

@@ -61,7 +61,7 @@ function DataTable({ head, rows }: { head: string[]; rows: string[][] }) {
 }
 
 /** Croquis coté de la coupe : formes et cotes issues de la géométrie (pas de moteur de dessin). */
-function WallSketch({ geo, B, totalHeight, hSolAv, hPass }: { geo: WallGeometry; B: number; totalHeight: number; hSolAv: number; hPass: number }) {
+function WallSketch({ geo, B, totalHeight, hSolAv, hPass, hr }: { geo: WallGeometry; B: number; totalHeight: number; hSolAv: number; hPass: number; hr: number }) {
   const sc = 200 / Math.max(B, totalHeight);
   const ox = hSolAv > 0 ? 74 : 46; // marge gauche (cotes H, hp et hs,av)
   const oy = 26; // marge haute (cote t)
@@ -120,9 +120,9 @@ function WallSketch({ geo, B, totalHeight, hSolAv, hPass }: { geo: WallGeometry;
       )}
 
       {/* Remblai sur le talon */}
-      <rect x={xs1} y={y(totalHeight)} width={x(B) - xs1} height={geo.hMur * sc} fill="url(#skSoil)" opacity="0.8" />
-      <line x1={xs1} y1={y(totalHeight)} x2={x(B) + 8} y2={y(totalHeight)} stroke="#b45309" strokeWidth="1" />
-      <text x={(xs1 + x(B)) / 2} y={y(totalHeight) + 12} fontSize="8" fontWeight="bold" fill="#92400e" textAnchor="middle">Remblai</text>
+      <rect x={xs1} y={y(geo.epBase + hr)} width={x(B) - xs1} height={hr * sc} fill="url(#skSoil)" opacity="0.8" />
+      <line x1={xs1} y1={y(geo.epBase + hr)} x2={x(B) + 8} y2={y(geo.epBase + hr)} stroke="#b45309" strokeWidth="1" />
+      <text x={(xs1 + x(B)) / 2} y={y(geo.epBase + hr) + 12} fontSize="8" fontWeight="bold" fill="#92400e" textAnchor="middle">Remblai</text>
 
       {/* Béton : semelle et voile */}
       <rect x={x(0)} y={y(geo.epBase)} width={W} height={geo.epBase * sc} fill="url(#skConcrete)" stroke="#0f172a" strokeWidth="1.2" />
@@ -317,6 +317,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                   ['Largeur totale de la semelle', 'B', fmt(B, 2), 'm'],
                   ['Sixième de la largeur', 'B/6', fmt(B_over_6, 3), 'm'],
                   ['Hauteur totale (sous-face de la semelle au haut du voile)', 'H', fmt(result.totalHeight, 2), 'm'],
+                  ['Hauteur du sol arrière hr (depuis le dessus de la semelle ; hauteur de poussée H_p = hr + ts = ' + fmt(result.soilHeight.Hp, 2) + ' m)', 'hr', fmt(result.soilHeight.hr, 2) + (soil.hr === undefined ? ' (défaut : hr = h)' : ''), 'm'],
                   ['Hauteur de sol à l\'avant', 'hs,av', fmt(soil.hSolAv, 2), 'm'],
                   ['Profondeur de butée (depuis la sous-face)', 'hp', soil.hSolAv > 0 ? fmt(result.earthPressures.h_pass, 2) : '0 (sans sol à l\'avant, butée nulle)', 'm'],
                   ['Pente du remblai', 'β', 'non disponible (remblai horizontal seulement)', '°'],
@@ -324,7 +325,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                 ]}
               />
             </div>
-            <WallSketch geo={geo} B={B} totalHeight={result.totalHeight} hSolAv={soil.hSolAv} hPass={result.earthPressures.h_pass} />
+            <WallSketch geo={geo} B={B} totalHeight={result.totalHeight} hSolAv={soil.hSolAv} hPass={result.earthPressures.h_pass} hr={result.soilHeight.hr} />
           </div>
         </div>
 
@@ -340,20 +341,66 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               ['Enrobage du voile', 'c voile', fmt(conc.cover_h, 0), 'mm'],
               ['Enrobage du talon (lit supérieur)', 'c talon', fmt(conc.cover_v, 0), 'mm'],
               ['Enrobage de l\'orteil (lit inférieur)', 'c orteil', fmt(conc.cover_base_bottom, 0), 'mm'],
-              ['Remblai : poids volumique', 'γ', fmt(soil.gamma, 1), 'kN/m³'],
-              ['Remblai : angle de frottement interne', 'φ′', fmt(soil.phi, 1), '°'],
-              ['Remblai : cohésion (négligée dans la poussée active)', 'c′', fmt(soil.cohesion ?? 0, 1), 'kPa'],
-              ['Sol de fondation : poids volumique', 'γ', fmt(result.foundationSoil.gamma, 1), 'kN/m³'],
-              ['Sol de fondation : angle de frottement interne', 'φ′', fmt(result.foundationSoil.phi, 1), '°'],
-              ['Sol de fondation : cohésion', 'c′', fmt(result.foundationSoil.cohesion, 1), 'kPa'],
-              ['Frottement de base sol-béton', 'μ', fmt(soil.mu, 2), '—'],
               ['Eau : poids volumique', 'γw', fmt(result.hydro.gamma_w, 2), 'kN/m³'],
               ['Nappe : hauteur au-dessus de la sous-face de la semelle', 'hw', result.hydro.hasWater ? fmt(result.hydro.hw, 2) : 'nappe inactive', result.hydro.hasWater ? 'm' : '—'],
               ['Poids volumique déjaugé retenu (γ − γw, hypothèse : γ saisi = γ saturé)', 'γ′', result.hydro.hasWater ? fmt(result.hydro.gamma_prime, 2) : 'sans objet', result.hydro.hasWater ? 'kN/m³' : '—'],
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <SubTitle n="1.2a" title="Sol arrière (remblai) : poussée sur le voile, poids sur le talon" />
+          <DataTable
+            head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
+            rows={[
+              ['Poids volumique', 'γ', fmt(soil.gamma, 1), 'kN/m³'],
+              ['Angle de frottement interne', 'φ′', fmt(soil.phi, 1), '°'],
+              ['Cohésion (négligée dans la poussée active ; plus utilisée comme adhérence de la base)', 'c′', fmt(soil.cohesion ?? 0, 1), 'kPa'],
+              ['Hauteur du sol arrière (depuis le dessus de la semelle)', 'hr', fmt(result.soilHeight.hr, 2), 'm'],
+              ['Frottement de Coulomb sur le plan fictif : δ = r·φ, sans plafond par la base (MUR-04, D10)', 'r', fmt(result.coulombRatio, 3), '—'],
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <SubTitle n="1.2b" title="Sol avant : butée, poids sur le patin" />
+          <DataTable
+            head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
+            rows={[
+              ['Poids volumique (déjaugé sous la nappe)', 'γ', fmt(result.foundationSoil.gamma, 1), 'kN/m³'],
+              ['Angle de frottement interne (coefficient de butée Kp)', 'φ′', fmt(result.foundationSoil.phi, 1), '°'],
+              ['Hauteur du sol avant', 'hs,av', fmt(soil.hSolAv, 2), 'm'],
+            ]}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <SubTitle n="1.2c" title="Sol d'assise de la fondation : glissement (c′a = 0 au long terme), portance" />
+          <DataTable
+            head={['Désignation', 'Symbole', 'Valeur', 'Unité']}
+            rows={[
+              ['Type de sol (USCS, CFEM 5e, tableau 20.4)', '—', result.bearingSoil.classLabel, '—'],
+              ['Angle de frottement interne d’assise (borne de δb)', 'φ′', fmt(result.bearingSoil.phi, 1), '°'],
+              ['Contact de la base', '—', result.bearingSoil.contactLabel, '—'],
+              ['Angle de frottement de base, avec sa source : ' + result.bearingSoil.deltaBSource, 'δb', result.bearingSoil.deltaB !== undefined ? fmt(result.bearingSoil.deltaB, 2) : 'non défini', '°'],
+              ['Coefficient de frottement de base', 'tan δb', result.bearingSoil.deltaB !== undefined ? fmt(result.bearingSoil.tanDeltaB, 4) : 'non défini', '—'],
+              ['Adhérence à long terme (CFEM 5e, § 10.6, p. 351 : « if any at all »)', 'c′a', '0', 'kPa'],
+              ...(result.bearingSoil.cohesive ? [
+                ['Résistance au cisaillement non drainée (classe CL)', 'cu', fmt(result.bearingSoil.cu, 1), 'kPa'],
+                ['Adhérence à court terme (tableau 20.4(b), interpolée : À CONFIRMER)', 'ca', fmt(result.bearingSoil.ca, 1) + (result.bearingSoil.cu > 0 ? ' (α = ca/cu = ' + fmt(result.bearingSoil.ca / result.bearingSoil.cu, 2) + ')' : ''), 'kPa'],
+                ['Condition gouvernante du glissement (nombre de combinaisons ÉLU : court terme / long terme)', '—', result.combinations.filter(c => c.type === 'ULS' && c.sliding_condition === 'undrained').length + ' / ' + result.combinations.filter(c => c.type === 'ULS' && c.sliding_condition === 'drained').length, '—'],
+              ] : [['Condition de glissement', '—', 'drainée seulement (sol non cohérent)', '—']]),
               ['Portance admissible saisie (ÉLS)', 'qadm', fmt(soil.qAllowable_SLS, 0), 'kPa'],
               [result.geotech.quFactored ? 'Portance ultime saisie (ÉLU, déclarée déjà pondérée : φgu = 1)' : 'Portance ultime saisie (ÉLU, non pondérée : le programme applique Ψ·φgu)', 'qu', fmt(soil.qUltimate_ULS, 0), 'kPa'],
             ]}
           />
+          <DataTable
+            head={result.bearingSoil.cohesive ? ['Combinaison ÉLU', 'FS long terme (drainé)', 'FS court terme (non drainé)', 'Condition'] : ['Combinaison ÉLU', 'FS long terme (drainé)', 'Condition']}
+            rows={result.combinations.filter(c => c.type === 'ULS').map(c => result.bearingSoil.cohesive
+              ? [c.combName, fmt(c.FOS_drained, 2), c.FOS_undrained !== undefined ? fmt(c.FOS_undrained, 2) : '—', c.sliding_condition === 'undrained' ? 'CT (non drainée) gouverne' : 'LT (drainée) gouverne']
+              : [c.combName, fmt(c.FOS_drained, 2), 'LT (drainée)'])}
+          />
+          <p className="text-[10px] text-slate-600">Sources : CFEM 5e éd., tableau 20.4, p. 691 (PDF 723) ; § 10.6, p. 351. δb proposé = borne inférieure du tableau, plafonnée à φ′. Butée nulle à court terme (MUR-04, R3, À CONFIRMER). qu saisi : il doit correspondre à la condition la plus défavorable (p. 344).</p>
         </div>
 
         <div className="space-y-2">

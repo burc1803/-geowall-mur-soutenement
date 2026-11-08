@@ -3,10 +3,12 @@ import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEF
 import { buildBearingEq, buildDeltaPaeEq, buildOverturningEq, buildSlidingEq, fr, recomposeDeltaPae } from './theoryEquations';
 import type { LoadsConfig, SoilProperties, WallGeometry } from './types';
 
+// MUR-04 : δb saisi = atan 0,55 (ancien μ de MUR-02) pour que les cas de référence restent reproductibles
+const DELTA_B_MU055 = (Math.atan(0.55) * 180) / Math.PI;
 // G1 (MUR-02 §7)
 const GEO_G1: WallGeometry = { wallType: 'cantilever', hMur: 3.0, epStem: 0.3, ePiedAv: 0.6, ePiedAr: 1.5, epBase: 0.4 };
 const SOIL_G1: SoilProperties = {
-  gamma: 19, phi: 32, cohesion: 0, mu: 0.55, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
+  gamma: 19, phi: 32, cohesion: 0, bearingSoil: { phi: 32, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 0, qAllowable_SLS: 300, qUltimate_ULS: 300,
   hasWaterTable: false, gamma_w: 9.81, stabilityCriterion: 'eccentricity', geotechLevel: 'typical', psi: 1.0,
   methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'none', pga: 0.15, deltaFrictionRatio: 0.667 }
 };
@@ -15,7 +17,7 @@ const LOADS_G1: LoadsConfig = { surcharge: 0, surchargeType: 'L', additionalLoad
 // Projet « nappe » : exemple par défaut de l'application (nappe à 2,50 m, sol avant, séisme M-O, surcharge)
 const GEO_N: WallGeometry = { wallType: 'cantilever', hMur: 3.8, epStem: 0.35, ePiedAv: 0.8, ePiedAr: 1.75, epBase: 0.35 };
 const SOIL_N: SoilProperties = {
-  gamma: 19, gamma_prime: 9.2, phi: 29, cohesion: 0, mu: 0.55, hSolAv: 1.5, qAllowable_SLS: 130, qUltimate_ULS: 392, presetType: 'compact_sand',
+  gamma: 19, gamma_prime: 9.2, phi: 29, cohesion: 0, bearingSoil: { phi: 29, contact: 'cast', deltaB: DELTA_B_MU055 }, hSolAv: 1.5, qAllowable_SLS: 130, qUltimate_ULS: 392,
   methodConfig: DEFAULT_SOIL_METHOD_CONFIG, hasWaterTable: true, waterTableHeight: 2.5, gamma_w: 9.81, geotechLevel: 'typical', psi: 1.0, quFactored: false,
   frost: { deduct: true, df: 1.2, noDf: 'zero' }
 };
@@ -36,8 +38,8 @@ describe('Étapes & formules : valeurs substituées = valeurs du moteur', () => 
 
     it(`${p.name} : glissement, chaque combinaison recomposée à partir des termes affichés`, () => {
       for (const c of r.combinations) {
-        const s = buildSlidingEq(c, r, p.soil);
-        const Fs = s.psi * (s.phi_gs * s.sumV * s.mu + s.phi_coh * s.c * s.Bp + s.phi_p * (s.Pp + s.Pw));
+        const s = buildSlidingEq(c, r);
+        const Fs = s.condition === 'undrained' ? s.psi * s.phi_coh * s.ca * s.Bp : s.psi * (s.phi_gs * s.sumV * s.tanDeltaB + s.phi_p * (s.Pp + s.Pw));
         expect(Math.abs(Fs - c.Fs)).toBeLessThanOrEqual(Math.max(Math.abs(c.Fs) * 1e-9, 1e-9));
         expect(s.sumHf).toBe(c.Fh_destab);
         expect(s.substituted).toContain(fr(c.phi_gs));
@@ -91,4 +93,25 @@ describe('Étapes & formules : valeurs substituées = valeurs du moteur', () => 
     }
     expect(found).toBeGreaterThan(0);
   });
+});
+
+describe('MUR-04 M4-A1 : équations affichées avec hr < h (H_p = hr + ts)', () => {
+  const sm = (method: 'mononobe_okabe' | 'seed_whitman', wall: 'cantilever' | 'basement' = 'cantilever') => ({
+    ...SOIL_G1, hr: 2.0, methodConfig: { ...SOIL_G1.methodConfig!, seismicMethod: method, pga: 0.2 }
+  } as SoilProperties);
+  for (const [name, wall, method] of [['M-O', 'cantilever', 'mononobe_okabe'], ['Seed-Whitman', 'cantilever', 'seed_whitman'], ['Wood (sous-sol)', 'basement', 'mononobe_okabe']] as const) {
+    it(`${name} : Pa et ΔPAE recomposés avec H_p = 2,4 m, substitution affichée avec 2,40`, () => {
+      const geo = { ...GEO_G1, wallType: wall };
+      const soil = sm(method);
+      const r = analyzeRetainingWall(geo, soil, LOADS_G1, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
+      expect(r.soilHeight.Hp).toBeCloseTo(2.4, 12);
+      // Pa nominale = ½·K·γ·H_p² (K utilisé par le moteur)
+      expect(Math.abs(r.earthPressures.P_active_nominal - 0.5 * r.earthPressures.K_active_used * 19 * 2.4 * 2.4)).toBeLessThan(1e-9);
+      const sc = r.seismic.scenarios[0];
+      const e = buildDeltaPaeEq(r, soil, geo, 0)!;
+      expect(Math.abs(recomposeDeltaPae(r, soil, geo, 0) - sc.dPae)).toBeLessThanOrEqual(Math.max(sc.dPae * 1e-9, 1e-9));
+      expect(e.substituted).toContain('2,40²');
+      expect(e.substituted).not.toContain('3,40');
+    });
+  }
 });

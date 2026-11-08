@@ -150,7 +150,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
             Renversement <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_ov = {result.geotech.phi_ov}</code> • 
             Butée <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Φ_p = {result.geotech.phi_p}</code> • 
             Conséquence <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">Ψ = {result.geotech.psi}</code> • 
-            Frottement sol-béton <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">μ = {soil.mu} (tan δ)</code>
+            Frottement sol-béton <code className="bg-white px-1.5 py-0.5 rounded text-blue-700 font-bold">tan δb = {result.bearingSoil.tanDeltaB.toFixed(4)}</code>
           </span>
         </div>
         <div className="text-[11px] font-mono text-slate-500">
@@ -171,7 +171,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                   Tableau 1 : Vérification de la Stabilité au Glissement
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Formule CFEM : <span className="font-mono font-semibold">Fs = C₂·B·Φ₅ + P_p·Φ₄ + (∑V_min)·μ·Φ₂</span> contre <span className="font-mono font-semibold">∑Fh (déstabilisant)</span>
+                  Formule CFEM : <span className="font-mono font-semibold">Long terme : Fs = (∑V_min)·tan δb·Φ₂ + P_p·Φ₄ (c′a = 0) ; court terme (assise CL) : Fs = ca·B′·Φ₅, sans butée</span> contre <span className="font-mono font-semibold">∑Fh (déstabilisant)</span>
                 </p>
               </div>
             </div>

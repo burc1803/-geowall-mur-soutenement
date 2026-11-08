@@ -72,7 +72,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             <tbody className="divide-y divide-slate-200">
               <tr><th className="py-1.5 font-semibold text-slate-700">Poids volumique sol (γ)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.gamma.toFixed(1)} kN/m³</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Angle de frottement interne (φ)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.phi.toFixed(1)} °</td></tr>
-              <tr><th className="py-1.5 font-semibold text-slate-700">Coeff. frottement base (μ = tan δ)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.mu.toFixed(2)}</td></tr>
+              <tr><th className="py-1.5 font-semibold text-slate-700">Frottement de base tan δb (sol d'assise)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{result.bearingSoil.deltaB !== undefined ? `${result.bearingSoil.tanDeltaB.toFixed(4)} (δb = ${result.bearingSoil.deltaB.toFixed(2)}°)` : 'non défini'}</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Hauteur de sol à l'avant (hs,av, depuis le dessus de la semelle)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.hSolAv.toFixed(2)} m</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Profondeur de butée (hp, depuis la sous-face)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{result.earthPressures.h_pass.toFixed(2)} m</td></tr>
               <tr><th className="py-1.5 font-semibold text-slate-700">Capacité portante admissible ELS (q_adm)</th><td className="py-1.5 text-right font-mono font-bold text-slate-900">{soil.qAllowable_SLS.toFixed(1)} kPa</td></tr>
@@ -148,7 +148,7 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
           </h2>
         </div>
         <p className="text-[11px] text-slate-600 mb-2">
-          Résistance au glissement : <strong className="font-mono">Fs = C₂·B·Φ₅ + P_p·Φ₄ + (∑V_min)·μ·Φ₂</strong> avec coefficient de frottement sol-béton <strong className="font-mono">μ = {soil.mu}</strong>. Critère de sécurité : <strong className="font-mono">Ratio (Fs / ∑Fh) ≥ 1.00</strong>.
+          Résistance au glissement : <strong className="font-mono">Fs = (∑V_min)·tan δb·Φ₂ + P_p·Φ₄</strong> (long terme, c′a = 0) avec <strong className="font-mono">tan δb = {result.bearingSoil.tanDeltaB.toFixed(4)}</strong> ({result.bearingSoil.deltaBSource}) ; assise cohérente : court terme <strong className="font-mono">Fs = ca·B′·Φ₅</strong>, le plus défavorable gouverne. Critère de sécurité : <strong className="font-mono">Ratio (Fs / ∑Fh) ≥ 1.00</strong>.
         </p>
         <p className="text-[10px] text-slate-500 mb-2">Glissement et renversement : ÉLU seulement (MUR-02 §12)</p>
         <div className="overflow-x-auto border border-slate-200 rounded-xl">

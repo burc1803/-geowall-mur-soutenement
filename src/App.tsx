@@ -19,7 +19,7 @@ import {
   Droplets,
   Activity
 } from 'lucide-react';
-import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, FoundationSoilProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment, SiteSeismicValues } from './lib/types';
+import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment, SiteSeismicValues } from './lib/types';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
 import { Visualizer } from './components/Visualizer';
 import { ForceCharts } from './components/ForceCharts';
@@ -31,6 +31,7 @@ import { RebarManager } from './components/RebarManager';
 import { RebarPlans } from './components/RebarPlans';
 import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModal';
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
+import { FoundationSoilCards } from './components/FoundationSoilCards';
 import { SiteSeismicCard } from './components/SiteSeismicCard';
 import { sourceAfterManualAh } from './lib/siteSeismic';
 
@@ -52,11 +53,11 @@ const INITIAL_SOIL: SoilProperties = {
   gamma_prime: 9.2,
   phi: 29.0,
   cohesion: 0.0,
-  mu: 0.55,
   hSolAv: 1.50,
   qAllowable_SLS: 130.0,
   qUltimate_ULS: 392.0,
-  presetType: 'compact_sand',
+  // MUR-04 : sol d'assise (classe SW, béton coulé contre le sol -> δb = 24° par le tableau 20.4(a)) ; à confirmer par le rapport géotechnique
+  bearingSoil: { uscs: 'SW', phi: 29.0, contact: 'cast' },
   methodConfig: DEFAULT_SOIL_METHOD_CONFIG,
   hasWaterTable: true,
   waterTableHeight: 2.50,
@@ -124,10 +125,6 @@ export default function App() {
   const handleChangeGeo = (key: keyof WallGeometry, value: number) => setGeo(prev => ({ ...prev, [key]: value }));
   const handleChangeSoil = (key: keyof SoilProperties, value: number) => setSoil(prev => ({ ...prev, [key]: value }));
   const handleChangeConc = (key: keyof ConcreteProperties, value: number) => setConc(prev => ({ ...prev, [key]: value }));
-  // Sol de fondation : absent = identique au remblai
-  const foundationSoil: FoundationSoilProperties = soil.foundation ?? { gamma: soil.gamma, phi: soil.phi, cohesion: soil.cohesion ?? 0 };
-  const handleChangeFoundation = (key: keyof FoundationSoilProperties, value: number) =>
-    setSoil(prev => ({ ...prev, foundation: { ...(prev.foundation ?? { gamma: prev.gamma, phi: prev.phi, cohesion: prev.cohesion ?? 0 }), [key]: value } }));
   const handleChangeLoads = (key: keyof LoadsConfig, value: number) => setLoads(prev => ({ ...prev, [key]: value }));
 
   return (
@@ -433,7 +430,22 @@ export default function App() {
 
                         {/* Sol arrière (remblai) : poussée sur le voile, poids sur le talon */}
                         <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-300 flex flex-col gap-2 mt-1">
-                          <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider">Sol arrière (remblai) : poussée sur le voile, poids sur le talon</span>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-[10px] font-black uppercase text-slate-800 tracking-wider">Sol arrière (remblai)</span>
+                            <label className="flex items-center gap-1.5 text-[10px] text-slate-600 font-bold">
+                              Poussée
+                              <select
+                                className="p-1 border rounded bg-white text-[11px] font-semibold"
+                                value={soil.methodConfig?.activeMethod ?? DEFAULT_SOIL_METHOD_CONFIG.activeMethod}
+                                onChange={e => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), activeMethod: e.target.value as 'rankine' | 'coulomb' | 'at_rest' } }))}
+                              >
+                                <option value="rankine">Ka, Rankine</option>
+                                <option value="coulomb">Ka, Coulomb</option>
+                                <option value="at_rest">K0, au repos</option>
+                              </select>
+                              <span className="font-mono text-slate-800">{(soil.methodConfig?.activeMethod ?? DEFAULT_SOIL_METHOD_CONFIG.activeMethod) === 'at_rest' || geo.wallType === 'basement' ? 'K0' : 'Ka'} = {result.K_active.toFixed(3).replace('.', ',')}</span>
+                            </label>
+                          </div>
                           <div className="grid grid-cols-2 gap-3">
                              <label className="flex flex-col gap-1">
                                 <span className="text-[10px] font-bold text-slate-500 uppercase">Poids Vol. γ (kN/m³)</span>
@@ -447,69 +459,17 @@ export default function App() {
                                 <span className="text-[10px] font-bold text-slate-500 uppercase">c′ (kPa) — négligée dans la poussée active</span>
                                 <input type="number" step="1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.cohesion ?? 0} onChange={(e) => handleChangeSoil('cohesion', parseFloat(e.target.value) || 0)} />
                              </label>
+                             <label className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Hauteur du sol arrière hr (m), depuis le dessus de la semelle</span>
+                                <input type="number" step="0.1" min={0} max={geo.hMur} className={`p-2 border rounded-lg text-sm bg-slate-50 font-semibold ${soil.hr !== undefined && !(soil.hr > 0 && soil.hr <= geo.hMur) ? 'border-rose-400' : ''}`} value={soil.hr ?? geo.hMur} onChange={(e) => setSoil(prev => ({ ...prev, hr: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 }))} />
+                                <span className="text-[9px] text-slate-500 normal-case leading-tight">0 &lt; hr ≤ h ({geo.hMur.toFixed(2)} m). Hauteur de poussée H_p = hr + ts = {result.soilHeight.Hp.toFixed(2)} m.</span>
+                             </label>
                           </div>
-                          <p className="text-[10px] text-slate-500">γ et φ′ alimentent Ka, K₀, la poussée sur le voile et le poids du sol sur le talon. c′ n'entre pas dans la poussée active ; elle ne sert que de valeur par défaut au c′ du sol de fondation tant que celui-ci est « identique au remblai ».</p>
+                          <p className="text-[10px] text-slate-500">γ et φ′ alimentent Ka, K₀, la poussée sur le voile et le poids du sol sur le talon. c′ n'entre pas dans la poussée active et ne sert plus d'adhérence à la base (MUR-04 R4). Le δ de Coulomb vaut r·φ avec r = {result.coulombRatio.toFixed(3).replace('.', ',')} (CFEM 5e, § 20.2.6), sans plafond par la base.</p>
                         </div>
 
-                        {/* Sol avant et de fondation : butée, glissement, portance, poids sur le patin */}
-                        <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200 flex flex-col gap-2 mt-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase text-amber-900 tracking-wider">Sol avant et de fondation : butée, glissement, portance, poids sur le patin</span>
-                            <button
-                              className="text-[10px] font-bold text-amber-800 underline"
-                              onClick={() => setSoil(prev => ({ ...prev, foundation: undefined }))}
-                            >Identique au remblai</button>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">γ fond. (kN/m³)</span>
-                              <input type="number" step="0.5" className="p-1.5 border rounded bg-white font-mono text-xs" value={foundationSoil.gamma} onChange={e => handleChangeFoundation('gamma', parseFloat(e.target.value) || 0)} />
-                            </label>
-                            <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">φ′ fond. (°)</span>
-                              <input type="number" step="1" className="p-1.5 border rounded bg-white font-mono text-xs" value={foundationSoil.phi} onChange={e => handleChangeFoundation('phi', parseFloat(e.target.value) || 0)} />
-                            </label>
-                            <label className="flex flex-col">
-                              <span className="text-[9px] text-slate-500 font-bold">c′ fond. (kPa)</span>
-                              <input type="number" step="1" className="p-1.5 border rounded bg-white font-mono text-xs" value={foundationSoil.cohesion} onChange={e => handleChangeFoundation('cohesion', parseFloat(e.target.value) || 0)} />
-                            </label>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                             <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">H. Sol Avant (m)</span>
-                                <input type="number" step="0.1" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.hSolAv} onChange={(e) => handleChangeSoil('hSolAv', parseFloat(e.target.value) || 0)} />
-                             </label>
-                             <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Frottement Base μ</span>
-                                <span className="text-[9px] text-slate-500 normal-case leading-tight">μ limite aussi δ (Coulomb actif et butée)</span>
-                                <input type="number" step="0.05" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.mu} onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value) || 0)} />
-                             </label>
-                             <label className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Preset μ (CFEM 5e éd., À CONFIRMER)</span>
-                                <select 
-                                  className="p-2 border rounded-lg text-xs bg-slate-50 font-semibold text-slate-700 truncate"
-                                  value={soil.mu}
-                                  onChange={(e) => handleChangeSoil('mu', parseFloat(e.target.value))}
-                                >
-                                  <option value={0.55}>Sable compact (0.55)</option>
-                                  <option value={0.60}>Gravier propre (0.60)</option>
-                                  <option value={0.45}>Sable silteux (0.45)</option>
-                                  <option value={0.70}>Rocher sain (0.70)</option>
-                                </select>
-                             </label>
-                          </div>
-                          <div className="grid grid-cols-1 gap-3">
-                             <label className="flex flex-col gap-1 col-span-2">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité Portante Adm. SLS (kPa)</span>
-                                <input type="number" step="10" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.qAllowable_SLS} onChange={(e) => handleChangeSoil('qAllowable_SLS', parseFloat(e.target.value) || 0)} />
-                             </label>
-                             <label className="flex flex-col gap-1 col-span-2">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Capacité Portante Ult. ULS (kPa)</span>
-                                <input type="number" step="10" className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold" value={soil.qUltimate_ULS} onChange={(e) => handleChangeSoil('qUltimate_ULS', parseFloat(e.target.value) || 0)} />
-                             </label>
-                          </div>
-                          <p className="text-[10px] text-slate-500">γ, φ′ et c′ de fondation : butée, poids du sol sur le patin et cohésion de glissement. H. sol avant : profondeur de butée et poids sur le patin. μ = tan δ<sub>b</sub> : glissement à la base (il fixe aussi le plafond de δ de Coulomb). Capacités : portance.</p>
-                        </div>
+                        {/* MUR-04 : sol avant et sol d'assise */}
+                        <FoundationSoilCards soil={soil} setSoil={setSoil} result={result} />
 
                         {/* Béton et armature (CSA A23.3-19) */}
                         <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 flex flex-col gap-2 mt-1">

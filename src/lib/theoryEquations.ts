@@ -9,18 +9,31 @@ import { AnalysisResult, CombinationResult, ConcreteProperties, SoilProperties, 
 export const fr = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',') : v > 0 ? '∞' : 'non défini');
 
 export interface SlidingEq {
-  psi: number; phi_gs: number; sumV: number; mu: number; phi_coh: number; c: number; Bp: number; phi_p: number; Pp: number; Pw: number;
+  condition: 'drained' | 'undrained'; // condition qui gouverne (MUR-04 R2)
+  psi: number; phi_gs: number; sumV: number; tanDeltaB: number; phi_coh: number; ca: number; Bp: number; phi_p: number; Pp: number; Pw: number;
   sumHf: number; Fs: number; ratio: number;
   substituted: string; result: string;
 }
 
-/** Glissement (MUR-02 §2.1) : Ψ·[φgs·ΣV′·tan δb + φcoh·c′·B′ + φp·(P′p + Pw,a)] ≥ ΣHf. */
-export function buildSlidingEq(c: CombinationResult, r: AnalysisResult, soil: SoilProperties): SlidingEq {
+/**
+ * Glissement (MUR-02 §2.1, MUR-04 R2-R4), condition qui gouverne :
+ * long terme : Ψ·[φgs·ΣV′·tan δb + φp·(P′p + Pw,a)] ≥ ΣHf (c′a = 0) ;
+ * court terme (assise CL) : Ψ·φcoh·ca·B′ ≥ ΣHf (butée nulle).
+ */
+export function buildSlidingEq(c: CombinationResult, r: AnalysisResult): SlidingEq {
   const sumV = Math.max(c.sumV_min, 0);
-  const cohesion = r.foundationSoil.cohesion ?? 0;
-  const substituted = `${fr(c.psi)} · [ ${fr(c.phi_gs)} · ${fr(sumV, 1)} · ${fr(soil.mu)} + ${fr(c.phi_coh)} · ${fr(cohesion, 1)} · ${fr(c.B_slide)} + ${fr(c.phi_p)} · (${fr(c.Pp_used, 1)} + ${fr(c.Pw_front_used, 1)}) ]`;
-  const result = `Fs = ${fr(c.Fs, 1)} kN/m ; ΣHf = ${fr(c.Fh_destab, 1)} kN/m ; Fs / ΣHf = ${fr(c.FOS_sliding)} ${c.FOS_sliding >= 1 ? '≥' : '<'} 1,00 (${r.verifiable ? c.status_sliding : 'NON VÉRIFIABLE'})`;
-  return { psi: c.psi, phi_gs: c.phi_gs, sumV, mu: soil.mu, phi_coh: c.phi_coh, c: cohesion, Bp: c.B_slide, phi_p: c.phi_p, Pp: c.Pp_used, Pw: c.Pw_front_used, sumHf: c.Fh_destab, Fs: c.Fs, ratio: c.FOS_sliding, substituted, result };
+  const undrained = c.sliding_condition === 'undrained';
+  const substituted = undrained
+    ? `${fr(c.psi)} · ${fr(c.phi_coh)} · ${fr(c.ca_used, 1)} · ${fr(c.B_slide)}`
+    : `${fr(c.psi)} · [ ${fr(c.phi_gs)} · ${fr(sumV, 1)} · ${fr(c.tanDeltaB, 4)} + ${fr(c.phi_p)} · (${fr(c.Pp_used, 1)} + ${fr(c.Pw_front_used, 1)}) ]`;
+  const other = c.Fs_undrained !== undefined
+    ? ` ; long terme : ${fr(c.FOS_drained)} ; court terme : ${fr(c.FOS_undrained ?? NaN)}`
+    : '';
+  const result = `Fs = ${fr(c.Fs, 1)} kN/m ; ΣHf = ${fr(c.Fh_destab, 1)} kN/m ; Fs / ΣHf = ${fr(c.FOS_sliding)} ${c.FOS_sliding >= 1 ? '≥' : '<'} 1,00 (${r.verifiable ? c.status_sliding : 'NON VÉRIFIABLE'}) ; condition retenue : ${undrained ? 'court terme (non drainée)' : 'long terme (drainée)'}${other}`;
+  return {
+    condition: c.sliding_condition, psi: c.psi, phi_gs: c.phi_gs, sumV, tanDeltaB: c.tanDeltaB, phi_coh: c.phi_coh, ca: c.ca_used, Bp: c.B_slide,
+    phi_p: c.phi_p, Pp: c.Pp_used, Pw: c.Pw_front_used, sumHf: c.Fh_destab, Fs: c.Fs, ratio: c.FOS_sliding, substituted, result
+  };
 }
 
 export interface OverturningEq {
@@ -100,7 +113,7 @@ export interface SeismicEq {
 export function buildDeltaPaeEq(r: AnalysisResult, soil: SoilProperties, geo: WallGeometry, scIdx = 0): SeismicEq | null {
   const sc = r.seismic.scenarios[scIdx];
   if (!sc) return null;
-  const H = geo.hMur + geo.epBase;
+  const H = r.soilHeight.Hp; // H_p = hr + ts (MUR-04 M4-A1)
   const g = soil.gamma;
   const kh = r.seismic.kh;
   let substituted = '';
@@ -117,7 +130,7 @@ export function buildDeltaPaeEq(r: AnalysisResult, soil: SoilProperties, geo: Wa
 /** Recompose ΔPAE à partir des termes affichés (pour les tests). */
 export function recomposeDeltaPae(r: AnalysisResult, soil: SoilProperties, geo: WallGeometry, scIdx = 0): number {
   const sc = r.seismic.scenarios[scIdx];
-  const H = geo.hMur + geo.epBase;
+  const H = r.soilHeight.Hp; // H_p = hr + ts (MUR-04 M4-A1)
   const kh = r.seismic.kh;
   if (r.seismic.method === 'mononobe_okabe') return Math.max(0.5 * soil.gamma * H * H * ((1 - sc.kv) * sc.Kae - r.earthPressures.K_active_used), 0);
   if (r.seismic.method === 'wood') return kh * soil.gamma * H * H;

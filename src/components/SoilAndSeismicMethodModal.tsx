@@ -5,7 +5,6 @@ import {
   LoadsConfig, 
   SeismicSummary,
   SoilMethodConfig, 
-  SoilPresetType, 
   ActivePressureMethod, 
   PassivePressureMethod, 
   SeismicMethod,
@@ -13,8 +12,8 @@ import {
 } from '../lib/types';
 import { Eq, V, Frac, Sqrt } from './Eq';
 import { fr } from '../lib/theoryEquations';
-import { SOIL_PRESETS, DEFAULT_SOIL_METHOD_CONFIG } from '../lib/analysis';
-import { X, Sparkles, Activity, ShieldAlert, Sliders, CheckCircle2, Info } from 'lucide-react';
+import { DEFAULT_SOIL_METHOD_CONFIG } from '../lib/analysis';
+import { X, Activity, ShieldAlert, Sliders, Info } from 'lucide-react';
 
 interface SoilAndSeismicMethodModalProps {
   isOpen: boolean;
@@ -44,20 +43,6 @@ export function SoilAndSeismicMethodModal({
   const currentMethod: SoilMethodConfig = {
     ...DEFAULT_SOIL_METHOD_CONFIG,
     ...(soil.methodConfig || {})
-  };
-
-  const handleSelectPreset = (presetKey: SoilPresetType) => {
-    const p = SOIL_PRESETS[presetKey];
-    onUpdateSoil({
-      ...soil,
-      presetType: presetKey,
-      gamma: p.gamma,
-      phi: p.phi,
-      cohesion: p.cohesion,
-      mu: p.mu,
-      qAllowable_SLS: p.qAllowable_SLS,
-      qUltimate_ULS: p.qUltimate_ULS
-    });
   };
 
   // MUR-02 D6 : kh = ah par défaut ; le moteur calcule kh (voir `seismic.kh`). Aucun kh n'est recalculé ici.
@@ -94,49 +79,6 @@ export function SoilAndSeismicMethodModal({
         </div>
 
         <div className="p-6 space-y-8 text-slate-800">
-          {/* Section 1: Presets Sol */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-black uppercase text-slate-500 tracking-wider flex items-center gap-2">
-                <Sparkles size={16} className="text-indigo-600" />
-                1. Sélection du Type de Sol (Banque de Sols CFEM)
-              </h4>
-              <span className="text-xs text-slate-400 font-medium">Préconfigure les angles φ, γ, cohésion et portance</span>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {(Object.keys(SOIL_PRESETS) as SoilPresetType[]).map((key) => {
-                const preset = SOIL_PRESETS[key];
-                const isSelected = soil.presetType === key;
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleSelectPreset(key)}
-                    className={`p-3.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-indigo-50/80 border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm'
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <strong className="text-xs font-black text-slate-900">{preset.name}</strong>
-                        {isSelected && <CheckCircle2 size={16} className="text-indigo-600" />}
-                      </div>
-                      <p className="text-[11px] text-slate-500 leading-tight mb-2">{preset.description}</p>
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-600 bg-slate-100/70 p-1.5 rounded-lg flex justify-between">
-                      <span>φ={preset.phi}° | γ={preset.gamma}</span>
-                      <span>qu={preset.qUltimate_ULS} kPa</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Section 2: Méthodes de Poussée Active (Ka) et Butée Passive (Kp) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Active Pressure Method */}
@@ -159,7 +101,7 @@ export function SoilAndSeismicMethodModal({
                   {
                     value: 'coulomb',
                     label: 'Coulomb (Avec Frottement δ)',
-                    sub: 'Prend en compte le frottement sol-béton δ = min(atan μ ; r·φ), r = rapport δ/φ de la saisie. Réduit la poussée active. μ limite aussi δ (Coulomb actif et butée) ; pas de saisie δ séparée.'
+                    sub: 'Frottement sur le plan fictif δ = r·φ du remblai (r = rapport δ/φ de la saisie), sans plafond par le frottement de base (MUR-04, D10). Pour la butée de Coulomb : δ = min(r ; 0,5)·φ′ du sol avant (CFEM 5e, § 20.2.6). Le frottement de base tan δb (sol d’assise) ne sert qu’au glissement.'
                   },
                   {
                     value: 'at_rest',
