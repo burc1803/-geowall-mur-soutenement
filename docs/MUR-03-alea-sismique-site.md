@@ -4,7 +4,7 @@
 |---|---|
 | Statut | **APPROUVÉE** le 2026-11-07, selon la proposition d'implémentation de la section « Complément du 2026-11-07 ». L'utilisateur a répondu « Tout Canada » à la question « Approuves-tu MUR-03 ainsi ? Données de tout le Canada ou du Québec seulement ? ». Données retenues : les 679 localités. Proposée le même jour. |
 | Juridiction / norme / édition | Québec. CNB 2020 (vol. 1, div. B) par défaut ; CNB 2025 en option. CFEM 5e (2023), § 18.7.1. |
-| Fichier de données | `MUR-03-tableau-C3-quebec.csv` (125 localités du Québec, voir §3) |
+| Fichier de données | `src/data/shd2020.json` (données CNRC SHD-VAS 2020, 679 localités ; voir le complément du 2026-11-07). L'extraction du tableau C-3 (`MUR-03-tableau-C3-quebec.csv`), non vérifiée et inutilisée, a été retirée du dépôt le 2026-11-08. |
 | Fiches liées | MUR-02 §4.1 (décision D6 : kh = ah/g par défaut ; option CSA S6 kh = 0,5·ah/g, kv = 0) |
 
 **Méthode de lecture.** Les pages ont été lues dans les extractions `pdftotext -layout` des PDF du projet. La page PDF est obtenue en comptant les sauts de page de l'extraction. Il faut la confirmer à l'ouverture du PDF. Les citations sont courtes ; le reste est paraphrasé.
@@ -48,7 +48,7 @@ Bilan : 15 références VÉRIFIÉES, 3 À CONFIRMER, plus le point d'alignement 
 - **Grandeurs, CNB 2020** : Sa(0,2) seulement. Les valeurs Sa(0,05), Sa(0,1), Sa(0,5), Sa(1,0), Sa(2,0), Sa(5,0), Sa(10,0), ainsi que PGA et PGV, sont **absentes** du C-3.
 - **Référence** : Sa(0,2) du CNB 2015 (catégorie C, déduite, **À CONFIRMER**). La probabilité de 2 % en 50 ans est celle de 4.1.8.4.(1) ; le C-3 lui-même ne la répète pas.
 - **CNB 2025** : le C-3 donne Smax = max[(2/3)·S(0,2, XS) ; S(0,5, XS)] (p. C-48, PDF 746), pour les catégories A à E et pour une catégorie inconnue. Ce n'est pas non plus une PGA.
-- **Extraction du Québec** : `MUR-03-tableau-C3-quebec.csv`, 125 localités. Colonnes :
+- **Extraction du Québec (retirée le 2026-11-08, non vérifiée et remplacée par les données CNRC)** : `MUR-03-tableau-C3-quebec.csv`, 125 localités. Colonnes :
   - `Sa_0_2_partie9_g`, en g ;
   - `PGA_g` et `PGV_m_s` laissées **vides**, faute de données dans le C-3 ;
   - page imprimée et page PDF ;
