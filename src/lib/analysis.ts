@@ -34,6 +34,7 @@ export const DEFAULT_SOIL_METHOD_CONFIG: SoilMethodConfig = {
   pga: 0.15, // ah (g) — à remplacer par la valeur du site (MUR-02 D6)
   ahSource: '',
   csaS6Reduction: false,
+  neglectKv: false,
   seismicPassive: 'none',
   deltaFrictionRatio: 0.667
 };
@@ -486,7 +487,8 @@ export function analyzeRetainingWall(
   const kh_val = csaS6 ? 0.5 * ah : ah;
   // MUR-02 §4.1, D6 : kv = 2/3·kh à défaut d'étude du site (CFEM p. 629), deux signes étudiés ; option CSA S6 : kv = 0
   const kvIsDefault = !(loads.kv !== undefined && Number.isFinite(loads.kv));
-  const kvInput = !seismicOn || csaS6 ? 0 : kvIsDefault ? (2 / 3) * kh_val : Math.abs(loads.kv as number);
+  const kvNeglected = !!soilMethod.neglectKv && seismicOn && !csaS6; // MUR-02 §13 : un seul scénario, kv = 0 partout
+  const kvInput = !seismicOn || csaS6 || kvNeglected ? 0 : kvIsDefault ? (2 / 3) * kh_val : Math.abs(loads.kv as number);
   const kv_val = 0; // kv signé : voir `scenarios` (les deux signes de kvInput sont étudiés)
 
   // Static nominal forces
@@ -612,8 +614,9 @@ export function analyzeRetainingWall(
     ahSource: soilMethod.ahSource ?? '',
     kh: kh_val,
     csaS6,
+    kvNeglected,
     kvInput,
-    kvIsDefault: kvIsDefault && !csaS6,
+    kvIsDefault: kvIsDefault && !csaS6 && !kvNeglected,
     scenarios,
     passiveMode: soilMethod.seismicPassive === 'kpe' ? 'kpe' : 'none',
     westergaard

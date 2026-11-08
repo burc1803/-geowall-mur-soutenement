@@ -23,6 +23,8 @@ export interface SoilMethodConfig {
   ahSource?: string; // source de ah saisie par l'utilisateur (RNCan, F(PGA)·PGA, etc.)
   /** Option avancée, DÉSACTIVÉE par défaut : kh = 0,5·ah et kv = 0 (CSA S6 citée par le CFEM p. 631), murs de remblais routiers ou autoroutiers. */
   csaS6Reduction?: boolean;
+  /** MUR-02 §13 : « Négliger kv (kv = 0) », choix de l'utilisateur, non coché par défaut (anciens projets : false). */
+  neglectKv?: boolean;
   /** Butée au séisme (MUR-02 D9) : 'none' (défaut) ou 'kpe' (réduite, CFEM éq. 18.27-18.31). */
   seismicPassive?: 'none' | 'kpe';
   /** @deprecated MUR-02 D6 : remplacé par `csaS6Reduction`. Ignoré par le moteur. */
@@ -452,6 +454,7 @@ export interface SeismicSummary {
   ahSource: string;
   kh: number;
   csaS6: boolean;
+  kvNeglected: boolean; // kv = 0 par choix de l'utilisateur (MUR-02 §13)
   kvInput: number;
   kvIsDefault: boolean; // kv = 2/3·kh (non saisi)
   scenarios: SeismicScenario[];

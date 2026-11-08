@@ -218,7 +218,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
               <div className="flex items-center gap-2 font-bold text-amber-900 mb-1"><Info size={16} /><span>Accélération de calcul (MUR-02 §4.1, décision D6)</span></div>
               <Eq
                 general={<><V n="k" s="h" /> = <V n="a" s="h" />/<V n="g" /> (CFEM 5e éd., éq. 18.22) ; <V n="k" s="v" /> = ⅔ · <V n="k" s="h" /> à défaut d'étude du site (CFEM 5e éd., p. 629), deux signes étudiés</>}
-                substituted={<><V n="k" s="h" /> = {fr(result.seismic.ah, 3)}{result.seismic.csaS6 ? ' × 0,5 (option CSA S6, remblais routiers : kv = 0)' : ''} ; |<V n="k" s="v" />| = {fr(result.seismic.kvInput, 3)}{result.seismic.kvIsDefault ? ' (= ⅔ · kh, défaut)' : ' (saisi)'}</>}
+                substituted={<><V n="k" s="h" /> = {fr(result.seismic.ah, 3)}{result.seismic.csaS6 ? ' × 0,5 (option CSA S6, remblais routiers : kv = 0)' : ''} ; |<V n="k" s="v" />| = {fr(result.seismic.kvInput, 3)}{result.seismic.kvNeglected ? ' (négligé par choix de l’utilisateur : kv = 0, un seul scénario)' : result.seismic.kvIsDefault ? ' (= ⅔ · kh, défaut)' : ' (saisi)'}</>}
                 result={<><V n="k" s="h" /> = {fr(result.seismic.kh, 3)} ; |<V n="k" s="v" />| = {fr(result.seismic.kvInput, 3)}</>}
                 note={result.seismic.rigid ? 'Mur rigide ou retenu : kh = ah ; l\'option CSA S6 ne s\'y applique pas.' : 'L\'option kh = 0,5·ah (CSA S6) est désactivée par défaut ; elle vise les murs de remblais routiers pouvant se déplacer de 25 à 50 mm.'}
               />

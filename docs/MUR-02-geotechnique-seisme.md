@@ -298,3 +298,12 @@ Message de l'utilisateur : « le glissement et renversement doit être juste vé
 - **Glissement et renversement :** vérifiés **seulement à l'ÉLU**, avec les combinaisons pondérées du tableau 4.1.3.2.-A. Les combinaisons ÉLS ne portent pas de statut de glissement ni de renversement (« sans objet (ÉLS) »).
 - **Portance :** vérifiée à l'**ÉLU** (q ≤ Ψ·φgu·qu) **et** à l'**ÉLS** (q ≤ qadm, avec e ≤ B/6, tiers central).
 - Constat du code au 2026-11-07 : les statuts gouvernants de glissement et de renversement n'utilisent déjà que l'ÉLU (`ulsStab`). En revanche, les combinaisons ÉLS ont `stabApplicable = true` et affichent un glissement et un renversement dans les tableaux. Il faut passer `stabApplicable` à false pour l'ÉLS et vérifier l'affichage. Les statuts gouvernants ne changent pas.
+
+## 13. Décision de l'utilisateur du 2026-11-08 : option « Négliger kv »
+
+Message de l'utilisateur : « ajouter une option pour négliger kv pour les calculs de séisme, option à cocher ».
+
+- Case à cocher **« Négliger kv (kv = 0) »** dans l'onglet SÉISME, **non cochée par défaut**. Le défaut reste kv = ⅔·kh avec les deux signes (D6, CFEM 5e p. 629).
+- Cochée : kv = 0, un seul scénario sismique. kv = 0 s'applique partout : M-O (1 − kv, ψ), forces kv·W, KPE et Westergaard.
+- La note l'indique : « kv négligé (kv = 0) : choix de l'utilisateur ; le CFEM 5e (p. 629) propose kv = ⅔·kh à défaut d'étude du site ».
+- L'option CSA S6 force déjà kv = 0 : les deux options restent compatibles.

@@ -820,7 +820,7 @@ export default function App() {
                                    </label>
                                    <label className="flex flex-col gap-1.5">
                                       <span className="text-[10px] font-bold text-slate-500 uppercase">|kv| saisi (deux signes étudiés)</span>
-                                      <input type="number" step="0.01" min="0" disabled={result.seismic.csaS6} className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold disabled:opacity-40" value={Number(result.seismic.kvInput.toFixed(4))} onChange={(e) => handleChangeLoads('kv', Math.abs(parseFloat(e.target.value) || 0))} />
+                                      <input type="number" step="0.01" min="0" disabled={result.seismic.csaS6 || result.seismic.kvNeglected} className="p-2 border rounded-lg text-sm bg-slate-50 font-semibold disabled:opacity-40" value={Number(result.seismic.kvInput.toFixed(4))} onChange={(e) => handleChangeLoads('kv', Math.abs(parseFloat(e.target.value) || 0))} />
                                    </label>
                                 </div>
                                 <input
@@ -833,9 +833,18 @@ export default function App() {
                                 />
                                 <div className="flex items-center justify-between text-[10.5px] bg-amber-50 border border-amber-200 rounded-lg p-2 font-mono text-amber-900">
                                   <span>kh = {result.seismic.kh.toFixed(3)}{result.seismic.csaS6 ? ' (0,5·ah, CSA S6)' : ' (= ah)'}</span>
+                                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700 font-sans">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!soil.methodConfig?.neglectKv}
+                                      disabled={result.seismic.csaS6}
+                                      onChange={e => setSoil(prev => ({ ...prev, methodConfig: { ...DEFAULT_SOIL_METHOD_CONFIG, ...(prev.methodConfig ?? {}), neglectKv: e.target.checked } }))}
+                                    />
+                                    Négliger kv (kv = 0)
+                                  </label>
                                   <button
                                     type="button"
-                                    disabled={result.seismic.csaS6}
+                                    disabled={result.seismic.csaS6 || result.seismic.kvNeglected}
                                     onClick={() => setLoads(prev => ({ ...prev, kv: undefined }))}
                                     className="text-[10px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200 disabled:opacity-40"
                                     title="CFEM 5e p. 629 : kv = 2/3·kh à défaut d'étude du site"

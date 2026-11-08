@@ -402,3 +402,31 @@ describe('Robustesse : projet de démonstration complet, sans NaN', () => {
     expect(r.combinations.every(x => Number.isFinite(x.Ms) && Number.isFinite(x.mur_Mf) && Number.isFinite(x.q_design))).toBe(true);
   });
 });
+
+describe('MUR-02 §13 - « Négliger kv (kv = 0) »', () => {
+  const sMO = (method: object = {}) => soilG({}, { seismicMethod: 'mononobe_okabe', ...method });
+  const case5 = (r: ReturnType<typeof run>) => r.combinations.find(x => x.caseNo === 5 && x.factors.L === 0)!;
+  it('cochée : un seul scénario, résultats identiques à kv = 0 saisi (G2 : glissement 0,899, renversement 1,018), même si kv est saisi', () => {
+    const explicit = run(sMO(), loadsG({ kv: 0 }));
+    const neglected = run(sMO({ neglectKv: true }), loadsG({ kv: undefined }));
+    const ignoredInput = run(sMO({ neglectKv: true }), loadsG({ kv: 0.3 }));
+    for (const r of [neglected, ignoredInput]) {
+      expect(r.seismic.scenarios.length).toBe(1);
+      expect(r.seismic.kvNeglected).toBe(true); expect(r.seismic.kvInput).toBe(0);
+      expect(r.combinations).toEqual(explicit.combinations);
+      close(case5(r).FOS_sliding, 0.899, 0.005); close(case5(r).FOS_overturning, 1.018, 0.005);
+    }
+  });
+  it('décochée (défaut) : kv = ⅔·kh avec les deux signes, comme avant', () => {
+    const r = run(sMO(), loadsG({ kv: undefined }));
+    expect(r.seismic.kvNeglected).toBe(false);
+    expect(r.seismic.scenarios.length).toBe(2);
+    close(r.seismic.kvInput, (2 / 3) * 0.15, 1e-12); expect(r.seismic.kvIsDefault).toBe(true);
+  });
+  it('compatible avec l\'option CSA S6 (kv = 0 déjà forcé) ; sans séisme, aucun effet', () => {
+    const s6 = run(soilG({}, { seismicMethod: 'mononobe_okabe', csaS6Reduction: true, neglectKv: true }), loadsG({ kv: undefined }));
+    expect(s6.seismic.scenarios.length).toBe(1); expect(s6.seismic.kvInput).toBe(0);
+    const none = run(soilG({}, { seismicMethod: 'none', neglectKv: true }));
+    expect(none.seismic.scenarios.length).toBe(0);
+  });
+});
