@@ -96,7 +96,7 @@ function DataTable({ head, rows }: { head: string[]; rows: string[][] }) {
               {r.map((c, j) => (
                 <td
                   key={j}
-                  className={`px-2.5 py-1 ${ctr(j) ? 'text-center' : ''} ${isNumeric(c) ? (ctr(j) ? 'font-mono whitespace-nowrap' : 'text-right font-mono whitespace-nowrap') : j === 0 && head[0] === 'N°' ? 'text-slate-500' : 'max-w-[22rem]'}`}
+                  className={`px-2.5 py-1 ${ctr(j) ? 'text-center' : ''} ${j === 0 && head[0].startsWith('N') && head[0].length === 2 ? 'text-slate-500 font-sans' : isNumeric(c) ? (ctr(j) ? 'font-mono whitespace-nowrap' : 'text-right font-mono whitespace-nowrap') : j === 0 && head[0] === 'N°' ? 'text-slate-500' : 'max-w-[22rem]'}`}
                 >
                   {isNumeric(c) ? c : <Fm>{c}</Fm>}
                 </td>
@@ -278,7 +278,8 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
     if (n.startsWith('P_seismic_soil')) return n.includes('Wood') ? 'Incrément sismique de poussée ΔP0E (Wood)' : 'Incrément sismique de poussée ΔPAE';
     if (n.startsWith('E_stem_inertia')) return 'Inertie sismique du voile (kh·W)';
     if (n.startsWith('E_base_inertia')) return 'Inertie sismique de la semelle (kh·W)';
-    if (n.startsWith('E_heelSoil_inertia')) return 'Inertie sismique du sol au-dessus du talon (kh·W)';
+    if (n === 'E_heelSoil_inertia_sat') return 'Inertie sismique du sol au-dessus du talon, sol déjaugé sous la nappe (kh·W)';
+    if (n.startsWith('E_heelSoil_inertia')) return 'Inertie sismique du sol au-dessus du talon, sol sec au-dessus de la nappe (kh·W)';
     return n;
   };
   for (const c of result.lateral_nominal.filter(c => !c.applied)) {
