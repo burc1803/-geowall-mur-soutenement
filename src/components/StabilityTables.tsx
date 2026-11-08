@@ -255,7 +255,7 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                   Tableau 2 : Vérification de la Stabilité au Renversement
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Calcul au point de basculement (pointe avant de l'orteil). Formule : <span className="font-mono font-semibold">Ms = ∑Mv_min + M_hp·Φ₃</span> contre <span className="font-mono font-semibold">Mr = ∑M_h</span>
+                  Calcul au point de basculement (pointe avant de l'orteil). Formule (MUR-02 §2.3) : <span className="font-mono font-semibold">Ψ·Φ_ov·ΣM_stab ≥ ΣM_renv</span>, avec ΣM_stab = moments stabilisants (ΣMv min) + butée (M_hp) + eau à l’avant
                 </p>
               </div>
             </div>
@@ -334,7 +334,10 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                   Tableau 3 : Vérification de la Capacité Portante du Sol
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Excentricité <span className="font-mono font-semibold">e = |L/2 - x₁|</span> comparée à <span className="font-mono font-semibold">L/6</span> • Diagnostic des 4 Cas de Répartition
+                  Excentricité <span className="font-mono font-semibold">e = |B/2 − x₁|</span> comparée à <span className="font-mono font-semibold">B/6</span> • {result.stabilityCriterion === 'eccentricity'
+                    ? <>Critère B′ : <span className="font-mono font-semibold">B′ = B − 2e</span>, pression uniforme <span className="font-mono font-semibold">q = ΣV / B′</span></>
+                    : <>Critère des moments : pression linéaire <span className="font-mono font-semibold">q = ΣV/B·(1 ± 6e/B)</span>, diagnostic des 4 cas de répartition</>}
+                  {' '}• Vérification <span className="font-mono font-semibold">q ≤ Ψ·Φ_gu·qu</span> (ÉLU), <span className="font-mono font-semibold">q ≤ q_adm</span> (ÉLS)
                 </p>
               </div>
             </div>
