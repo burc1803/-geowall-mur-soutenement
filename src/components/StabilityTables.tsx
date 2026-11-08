@@ -185,15 +185,15 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                  <th className="p-3">Combinaison (CNB {result.cnbEdition})</th>
-                  <th className="p-3">Type</th>
-                  <th className="p-3 text-right">∑V min (kN/m)</th>
-                  <th className="p-3 text-right">Butée Pp·Φ₄ (kN/m)</th>
-                  <th className="p-3 text-right">Frottement (kN/m)</th>
-                  <th className="p-3 text-right font-bold text-slate-800">Force Stab. Fs (kN/m)</th>
-                  <th className="p-3 text-right font-bold text-slate-800">Force Déstab. ∑Fh (kN/m)</th>
-                  <th className="p-3 text-right font-bold">Ratio (Fs / ∑Fh)</th>
-                  <th className="p-3 text-center">Statut</th>
+                  <th className="px-2 py-2 whitespace-normal min-w-[8rem]">Combinaison<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(CNB {result.cnbEdition})</span></th>
+                  <th className="px-2 py-2 ">Type</th>
+                  <th className="px-2 py-2 text-right">ΣV min<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                  <th className="px-2 py-2 text-right">Butée Pp·Φ₄<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                  <th className="px-2 py-2 text-right">Frottement<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                  <th className="px-2 py-2 text-right font-bold text-slate-800">Force stab. Fs<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                  <th className="px-2 py-2 text-right font-bold text-slate-800">Force déstab. ΣFh<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                  <th className="px-2 py-2 text-right font-bold">Ratio<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">Fs / ΣFh</span></th>
+                  <th className="px-2 py-2 text-center">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -203,26 +203,26 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                   const passivePart = c.Rf_passive;
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-3 font-bold text-slate-900">
+                      <td className="px-2 py-2 font-bold text-slate-900 whitespace-normal min-w-[8rem]">
                         <div>{c.combName}</div>
                         <div className="text-[10px] font-normal text-slate-400 font-mono">{c.formula}</div>
                       </td>
-                      <td className="p-3">
+                      <td className="px-2 py-2">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.type === 'ULS' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                           {c.type}
                         </span>
                       </td>
-                      <td className="p-3 text-right font-mono text-slate-600">{c.sumV_min.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono text-slate-600">{passivePart.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono text-slate-600">{frictionPart.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.Fs.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-bold text-rose-700">{c.Fh_destab.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-black text-sm">
+                      <td className="px-2 py-2 text-right font-mono text-slate-600">{c.sumV_min.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-slate-600">{passivePart.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-slate-600">{frictionPart.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono font-bold text-indigo-700">{c.Fs.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono font-bold text-rose-700">{c.Fh_destab.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono font-black text-sm">
                         <span className={c.type === 'SLS' ? 'text-slate-400' : c.status_sliding === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_sliding >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
                           {c.type === 'SLS' ? '—' : c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(2)}
                         </span>
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="px-2 py-2 text-center">
                         {c.type === 'SLS' ? (<span className="text-slate-400 text-[11px]">sans objet (ÉLS)</span>) : c.status_sliding === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_sliding === 'OK' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                             <CheckCircle2 size={12} /> OK
@@ -267,14 +267,14 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                  <th className="p-3">Combinaison (CNB {result.cnbEdition})</th>
-                  <th className="p-3">Type</th>
-                  <th className="p-3 text-right">∑Mv (Vert. min) (kNm/m)</th>
-                  <th className="p-3 text-right">Moment Butée M_hp·Φ₃ (kNm/m)</th>
-                  <th className="p-3 text-right font-bold text-slate-800">Moment Stab. Ms (kNm/m)</th>
-                  <th className="p-3 text-right font-bold text-slate-800">Moment Renvers. Mr (kNm/m)</th>
-                  <th className="p-3 text-right font-bold">Ratio (Ms / Mr)</th>
-                  <th className="p-3 text-center">Statut</th>
+                  <th className="px-2 py-2 whitespace-normal min-w-[8rem]">Combinaison<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(CNB {result.cnbEdition})</span></th>
+                  <th className="px-2 py-2 ">Type</th>
+                  <th className="px-2 py-2 text-right">ΣMv min<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                  <th className="px-2 py-2 text-right">Butée M_hp·Φ₃<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                  <th className="px-2 py-2 text-right font-bold text-slate-800">Moment stab. Ms<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                  <th className="px-2 py-2 text-right font-bold text-slate-800">Moment renv. Mr<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                  <th className="px-2 py-2 text-right font-bold">Ratio<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">Ms / Mr</span></th>
+                  <th className="px-2 py-2 text-center">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -283,25 +283,25 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
                   const vertMomPart = c.Ms - passiveMomentPart;
                   return (
                     <tr key={i} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-3 font-bold text-slate-900">
+                      <td className="px-2 py-2 font-bold text-slate-900 whitespace-normal min-w-[8rem]">
                         <div>{c.combName}</div>
                         <div className="text-[10px] font-normal text-slate-400 font-mono">{c.formula}</div>
                       </td>
-                      <td className="p-3">
+                      <td className="px-2 py-2">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.type === 'ULS' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                           {c.type}
                         </span>
                       </td>
-                      <td className="p-3 text-right font-mono text-slate-600">{vertMomPart.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono text-slate-600">{passiveMomentPart.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.Ms.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-bold text-rose-700">{c.Mr.toFixed(2)}</td>
-                      <td className="p-3 text-right font-mono font-black text-sm">
+                      <td className="px-2 py-2 text-right font-mono text-slate-600">{vertMomPart.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono text-slate-600">{passiveMomentPart.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono font-bold text-indigo-700">{c.Ms.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono font-bold text-rose-700">{c.Mr.toFixed(2)}</td>
+                      <td className="px-2 py-2 text-right font-mono font-black text-sm">
                         <span className={c.type === 'SLS' ? 'text-slate-400' : c.status_overturning === 'NON VÉRIFIABLE' ? 'text-amber-600' : c.FOS_overturning >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
                           {c.type === 'SLS' ? '—' : c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(2)}
                         </span>
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="px-2 py-2 text-center">
                         {c.type === 'SLS' ? (<span className="text-slate-400 text-[11px]">sans objet (ÉLS)</span>) : c.status_overturning === 'NON VÉRIFIABLE' ? nvBadge : !c.stabApplicable && c.status_overturning !== 'NON' ? (<span className="text-slate-400 text-[11px]">— (sans objet)</span>) : c.status_overturning === 'OK' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                             <CheckCircle2 size={12} /> OK
@@ -348,52 +348,52 @@ export function StabilityTables({ result, soil, geo, onSelectCombination }: Stab
             <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200">
-                  <th className="p-3">Combinaison (CNB {result.cnbEdition})</th>
-                  <th className="p-3">Type</th>
-                  <th className="p-3 text-right">Réaction Rv (kN/m)</th>
-                  <th className="p-3 text-right">x₁ (m)</th>
-                  <th className="p-3 text-right">Excentr. e (m)</th>
-                  <th className="p-3 text-center">Cas Diagnostic</th>
-                  <th className="p-3 text-right font-bold text-slate-800">q₁ Orteil (kPa)</th>
-                  <th className="p-3 text-right font-bold text-slate-800">q₂ Talon (kPa)</th>
-                  <th className="p-3 text-right">Capacité (kPa)</th>
-                  <th className="p-3 text-right font-bold">Ratio (Cap/q₁)</th>
-                  <th className="p-3 text-center">Statut</th>
+                  <th className="px-2 py-2 whitespace-normal min-w-[8rem]">Combinaison<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(CNB {result.cnbEdition})</span></th>
+                  <th className="px-2 py-2 ">Type</th>
+                  <th className="px-2 py-2 text-right">Réaction Rv<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                  <th className="px-2 py-2 text-right">x₁<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(m)</span></th>
+                  <th className="px-2 py-2 text-right">Excentr. e<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(m)</span></th>
+                  <th className="px-2 py-2 text-center">Cas<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">diagnostic</span></th>
+                  <th className="px-2 py-2 text-right font-bold text-slate-800">q₁ orteil<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kPa)</span></th>
+                  <th className="px-2 py-2 text-right font-bold text-slate-800">q₂ talon<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kPa)</span></th>
+                  <th className="px-2 py-2 text-right">Capacité<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kPa)</span></th>
+                  <th className="px-2 py-2 text-right font-bold">Ratio<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">Cap / q₁</span></th>
+                  <th className="px-2 py-2 text-center">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredCombinations.map((c, i) => (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-3 font-bold text-slate-900">
+                    <td className="px-2 py-2 font-bold text-slate-900 whitespace-normal min-w-[8rem]">
                       <div>{c.combName}</div>
                       <div className="text-[10px] font-normal text-slate-400 font-mono">{c.formula}</div>
                     </td>
-                    <td className="p-3">
+                    <td className="px-2 py-2">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.type === 'ULS' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                         {c.type}
                       </span>
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-600">{c.sumV_max.toFixed(2)}</td>
-                    <td className="p-3 text-right font-mono text-slate-600">{c.x1.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono text-slate-600">
+                    <td className="px-2 py-2 text-right font-mono text-slate-600">{c.sumV_max.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-right font-mono text-slate-600">{c.x1.toFixed(3)}</td>
+                    <td className="px-2 py-2 text-right font-mono text-slate-600">
                       <span className={c.ecc > c.limitL6 ? 'text-amber-600 font-bold' : ''}>
                         {c.ecc.toFixed(3)} m
                       </span>
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="px-2 py-2 text-center">
                       <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${c.distributionCase === 'Cas 4' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>
                         {c.distributionCase}
                       </span>
                     </td>
-                    <td className="p-3 text-right font-mono font-bold text-indigo-700">{c.q_toe.toFixed(1)}</td>
-                    <td className="p-3 text-right font-mono font-bold text-slate-600">{c.q_heel.toFixed(1)}</td>
-                    <td className="p-3 text-right font-mono text-slate-500">{c.q_capacity.toFixed(1)}</td>
-                    <td className="p-3 text-right font-mono font-black text-sm">
+                    <td className="px-2 py-2 text-right font-mono font-bold text-indigo-700">{c.q_toe.toFixed(1)}</td>
+                    <td className="px-2 py-2 text-right font-mono font-bold text-slate-600">{c.q_heel.toFixed(1)}</td>
+                    <td className="px-2 py-2 text-right font-mono text-slate-500">{c.q_capacity.toFixed(1)}</td>
+                    <td className="px-2 py-2 text-right font-mono font-black text-sm">
                       <span className={c.FOS_bearing >= 1.0 ? 'text-emerald-600' : 'text-rose-600'}>
                         {c.FOS_bearing === Infinity ? '∞' : c.FOS_bearing.toFixed(2)}
                       </span>
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="px-2 py-2 text-center">
                       {c.status_bearing === 'OK' && c.status_ecc === 'OK' ? (
                         <span className="inline-flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                           <CheckCircle2 size={12} /> OK

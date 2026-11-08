@@ -128,11 +128,11 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
               {loads.additionalLoads && loads.additionalLoads.map((al, idx) => (
                 <tr key={idx}>
                   <td className="p-2.5 font-bold text-blue-700">{al.name}</td>
-                  <td className="p-2.5"><span className="px-2 py-0.5 rounded font-bold bg-blue-50 text-blue-700 border border-blue-200 text-[10px]">{al.caseType}</span></td>
-                  <td className="p-2.5 font-mono">{al.nature} {al.isDistributed ? '(Répartie)' : '(Ponctuelle)'}</td>
-                  <td className="p-2.5 text-right font-mono font-bold text-blue-900">{al.magnitude.toFixed(2)} {al.isDistributed ? 'kN/m' : 'kN'}</td>
-                  <td className="p-2.5 text-right font-mono">X={al.x.toFixed(2)}, Y={al.y.toFixed(2)}</td>
-                  <td className="p-2.5 text-slate-500">Charge additionnelle configurée</td>
+                  <td className="px-2 py-2"><span className="px-2 py-0.5 rounded font-bold bg-blue-50 text-blue-700 border border-blue-200 text-[10px]">{al.caseType}</span></td>
+                  <td className="px-2 py-2 font-mono">{al.nature} {al.isDistributed ? '(Répartie)' : '(Ponctuelle)'}</td>
+                  <td className="px-2 py-2 text-right font-mono font-bold text-blue-900">{al.magnitude.toFixed(2)} {al.isDistributed ? 'kN/m' : 'kN'}</td>
+                  <td className="px-2 py-2 text-right font-mono">X={al.x.toFixed(2)}, Y={al.y.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-slate-500">Charge additionnelle configurée</td>
                 </tr>
               ))}
             </tbody>
@@ -156,15 +156,15 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-2.5">Combinaison</th>
-                <th className="p-2.5">Type</th>
-                <th className="p-2.5 text-right">∑V min (kN/m)</th>
-                <th className="p-2.5 text-right">Butée Pp·Φ₄ (kN/m)</th>
-                <th className="p-2.5 text-right">Frottement (kN/m)</th>
-                <th className="p-2.5 text-right font-bold text-slate-800">Résistance Fs (kN/m)</th>
-                <th className="p-2.5 text-right font-bold text-slate-800">Poussée ∑Fh (kN/m)</th>
-                <th className="p-2.5 text-right font-bold">Ratio</th>
-                <th className="p-2.5 text-center">Statut</th>
+                <th className="px-2 py-2">Combinaison</th>
+                <th className="px-2 py-2">Type</th>
+                <th className="px-2 py-2 text-right">ΣV min<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                <th className="px-2 py-2 text-right">Butée Pp·Φ₄<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                <th className="px-2 py-2 text-right">Frottement<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                <th className="px-2 py-2 text-right font-bold text-slate-800">Force stab. Fs<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                <th className="px-2 py-2 text-right font-bold text-slate-800">Force déstab. ΣFh<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                <th className="px-2 py-2 text-right font-bold">Ratio<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">Fs / ΣFh</span></th>
+                <th className="px-2 py-2 text-center">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -219,14 +219,14 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-2.5">Combinaison</th>
-                <th className="p-2.5">Type</th>
-                <th className="p-2.5 text-right">∑Mv (Vert. min) (kNm/m)</th>
-                <th className="p-2.5 text-right">Moment Butée M_hp·Φ₃ (kNm/m)</th>
-                <th className="p-2.5 text-right font-bold text-slate-800">Moment Stab. Ms (kNm/m)</th>
-                <th className="p-2.5 text-right font-bold text-slate-800">Moment Renvers. Mr (kNm/m)</th>
-                <th className="p-2.5 text-right font-bold">Ratio</th>
-                <th className="p-2.5 text-center">Statut</th>
+                <th className="px-2 py-2">Combinaison</th>
+                <th className="px-2 py-2">Type</th>
+                <th className="px-2 py-2 text-right">ΣMv min<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                <th className="px-2 py-2 text-right">Butée M_hp·Φ₃<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                <th className="px-2 py-2 text-right font-bold text-slate-800">Moment stab. Ms<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                <th className="px-2 py-2 text-right font-bold text-slate-800">Moment renv. Mr<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN·m/m)</span></th>
+                <th className="px-2 py-2 text-right font-bold">Ratio<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">Ms / Mr</span></th>
+                <th className="px-2 py-2 text-center">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -279,17 +279,17 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
           <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
             <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
               <tr>
-                <th className="p-2.5">Combinaison</th>
-                <th className="p-2.5">Type</th>
-                <th className="p-2.5 text-right">Réaction Rv (kN/m)</th>
-                <th className="p-2.5 text-right">x₁ (m)</th>
-                <th className="p-2.5 text-right">Excentr. e (m)</th>
-                <th className="p-2.5 text-center">Diagnostic</th>
-                <th className="p-2.5 text-right font-bold text-slate-800">q₁ Orteil (kPa)</th>
-                <th className="p-2.5 text-right font-bold text-slate-800">q₂ Talon (kPa)</th>
-                <th className="p-2.5 text-right">Capacité (kPa)</th>
-                <th className="p-2.5 text-right font-bold">Ratio</th>
-                <th className="p-2.5 text-center">Statut</th>
+                <th className="px-2 py-2">Combinaison</th>
+                <th className="px-2 py-2">Type</th>
+                <th className="px-2 py-2 text-right">Réaction Rv<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kN/m)</span></th>
+                <th className="px-2 py-2 text-right">x₁<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(m)</span></th>
+                <th className="px-2 py-2 text-right">Excentr. e<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(m)</span></th>
+                <th className="px-2 py-2 text-center">Diagnostic</th>
+                <th className="px-2 py-2 text-right font-bold text-slate-800">q₁ orteil<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kPa)</span></th>
+                <th className="px-2 py-2 text-right font-bold text-slate-800">q₂ talon<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kPa)</span></th>
+                <th className="px-2 py-2 text-right">Capacité<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">(kPa)</span></th>
+                <th className="px-2 py-2 text-right font-bold">Ratio<span className="block text-[9px] font-normal normal-case tracking-normal text-slate-400">Cap / q₁</span></th>
+                <th className="px-2 py-2 text-center">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -350,16 +350,16 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
             <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
               <thead className="bg-slate-100 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
                 <tr>
-                  <th className="p-2.5">Composant Structurel</th>
-                  <th className="p-2.5">Armature Retenue</th>
-                  <th className="p-2.5 text-right">As Fournie (mm²/m)</th>
-                  <th className="p-2.5 text-right font-bold">Mf (kNm/m)</th>
-                  <th className="p-2.5 text-right font-bold text-indigo-700">Mr (kNm/m)</th>
-                  <th className="p-2.5 text-right font-bold">Vf (kN/m)</th>
-                  <th className="p-2.5 text-right font-bold text-indigo-700">Vc (kN/m)</th>
-                  <th className="p-2.5 text-center">Ductilité (c/d &le; {result.concreteDesign.mur_interieur.ductility_limit.toFixed(3)})</th>
-                  <th className="p-2.5 text-center">Fissuration Z (N/mm)</th>
-                  <th className="p-2.5 text-center">Statut</th>
+                  <th className="px-2 py-2">Composant Structurel</th>
+                  <th className="px-2 py-2">Armature Retenue</th>
+                  <th className="px-2 py-2 text-right">As Fournie (mm²/m)</th>
+                  <th className="px-2 py-2 text-right font-bold">Mf (kNm/m)</th>
+                  <th className="px-2 py-2 text-right font-bold text-indigo-700">Mr (kNm/m)</th>
+                  <th className="px-2 py-2 text-right font-bold">Vf (kN/m)</th>
+                  <th className="px-2 py-2 text-right font-bold text-indigo-700">Vc (kN/m)</th>
+                  <th className="px-2 py-2 text-center">Ductilité (c/d &le; {result.concreteDesign.mur_interieur.ductility_limit.toFixed(3)})</th>
+                  <th className="px-2 py-2 text-center">Fissuration Z (N/mm)</th>
+                  <th className="px-2 py-2 text-center">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -374,24 +374,24 @@ export function CalculationReport({ geo, soil, loads, result }: CalculationRepor
                   conc.semelle_retrait
                 ].map((elem, idx) => (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-2.5 font-bold text-slate-900">{elem.elementName}</td>
-                    <td className="p-2.5 font-mono font-bold text-indigo-800">{elem.bar_designation}</td>
-                    <td className="p-2.5 text-right font-mono">{elem.As_provided.toFixed(0)}</td>
-                    <td className="p-2.5 text-right font-mono font-bold">{elem.Mf > 0 ? elem.Mf.toFixed(1) : '-'}</td>
-                    <td className="p-2.5 text-right font-mono font-bold text-indigo-700">{elem.Mr > 0 ? elem.Mr.toFixed(1) : '-'}</td>
-                    <td className="p-2.5 text-right font-mono font-bold">{elem.Vf > 0 ? elem.Vf.toFixed(1) : '-'}</td>
-                    <td className="p-2.5 text-right font-mono font-bold text-indigo-700">{elem.Vc > 0 ? elem.Vc.toFixed(1) : '-'}</td>
-                    <td className="p-2.5 text-center font-mono">
+                    <td className="px-2 py-2 font-bold text-slate-900">{elem.elementName}</td>
+                    <td className="px-2 py-2 font-mono font-bold text-indigo-800">{elem.bar_designation}</td>
+                    <td className="px-2 py-2 text-right font-mono">{elem.As_provided.toFixed(0)}</td>
+                    <td className="px-2 py-2 text-right font-mono font-bold">{elem.Mf > 0 ? elem.Mf.toFixed(1) : '-'}</td>
+                    <td className="px-2 py-2 text-right font-mono font-bold text-indigo-700">{elem.Mr > 0 ? elem.Mr.toFixed(1) : '-'}</td>
+                    <td className="px-2 py-2 text-right font-mono font-bold">{elem.Vf > 0 ? elem.Vf.toFixed(1) : '-'}</td>
+                    <td className="px-2 py-2 text-right font-mono font-bold text-indigo-700">{elem.Vc > 0 ? elem.Vc.toFixed(1) : '-'}</td>
+                    <td className="px-2 py-2 text-center font-mono">
                       {elem.ductility_c_over_d > 0 ? `${elem.ductility_c_over_d.toFixed(3)} (${elem.ductility_ok ? 'OK' : 'NON'})` : '-'}
                     </td>
-                    <td className="p-2.5 text-center font-mono text-[11px]">
+                    <td className="px-2 py-2 text-center font-mono text-[11px]">
                       {elem.Z_factor ? (
                         <span className={elem.Z_ok ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}>
                           {elem.Z_factor.toFixed(0)} / {elem.Z_limit}
                         </span>
                       ) : '-'}
                     </td>
-                    <td className="p-2.5 text-center">
+                    <td className="px-2 py-2 text-center">
                       <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${elem.checks_ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
                         {elem.checks_ok ? 'CONFORME' : 'NON CONFORME'}
                       </span>
