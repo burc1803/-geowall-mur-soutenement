@@ -319,6 +319,8 @@ export interface CombinationResult {
   // Section des efforts au pied du mur et sur semelle
   mur_Mf: number;
   mur_Vf: number;
+  /** Forces latérales pondérées appliquées au voile dans cette combinaison (kN/m), par catégorie ; `total` = somme (= Vf à la base d'un mur en porte-à-faux). Lecture seule. */
+  stem_lateral: { terre: number; eau: number; surcharge: number; seisme: number; autres: number; total: number };
   mur_Vf_dv: number; // effort tranchant du voile à dv de la face de la semelle (information ; 11.3.2 À CONFIRMER)
   slab_ok: boolean; // au moins un état (Z, F, H) a la résultante dans la base : efforts du patin et du talon valides
   toe_Mf: number;

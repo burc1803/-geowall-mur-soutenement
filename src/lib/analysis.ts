@@ -1179,6 +1179,16 @@ export function analyzeRetainingWall(
 
     // Réaction(s) d'appui en tête (mur de sous-sol) : issue(s) des charges latérales du voile de CETTE combinaison (E10)
     const stemRes = stemAnalysis(comb.factors, comb.Dunfav, stemItemsC);
+    // Forces latérales NON pondérées puis pondérées (kN/m) réellement appliquées au voile dans CETTE combinaison, par catégorie (lecture seule, mêmes items et facteurs que stemAnalysis)
+    const stemLat = { terre: 0, eau: 0, surcharge: 0, seisme: 0, autres: 0, total: 0 };
+    for (const it of stemItemsC) {
+      if (it.kind === 'moment') continue;
+      const f = stemItemFactor(it, comb.factors, comb.Dunfav);
+      const F = f * (it.kind === 'point' ? it.F : linearSegmentEffect(it.a, it.b, it.z1, it.z2, geo.hMur).V);
+      const cat = it.type === 'E' ? 'seisme' : it.label.startsWith('Poussée des terres') ? 'terre' : it.label === "Pression d'eau" ? 'eau' : it.label === 'Poussée de la surcharge' ? 'surcharge' : 'autres';
+      stemLat[cat] += F;
+      stemLat.total += F;
+    }
     {
       const Rtop = propped && !customSupports ? proppedTopReaction(stemItemsC, comb.factors, geo.hMur, comb.Dunfav) : 0;
       stemVAtFns.push((dm: number) => customSupports ? stemRes.maxV : Math.abs(stemSectionEffort(stemItemsC, comb.factors, Math.min(Math.max(geo.hMur - dm, 0), geo.hMur), Rtop, comb.Dunfav).V));
@@ -1489,6 +1499,7 @@ export function analyzeRetainingWall(
       stabApplicable: comb.stabApplicable,
       mur_Mf: stemRes.maxM,
       mur_Vf: stemRes.maxV,
+      stem_lateral: stemLat,
       mur_Vf_dv: stemRes.maxV,
       toe_Mf: maxOf(toeEv, 'M'),
       toe_Vf: maxOf(toeEv, 'V'),

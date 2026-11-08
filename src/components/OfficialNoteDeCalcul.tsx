@@ -226,6 +226,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
   };
 
   const ulsCombs = result.combinations.filter(c => c.type === 'ULS');
+  const showOtherStem = ulsCombs.some(c => Math.abs(c.stem_lateral.autres) > 0.05); // charges de tête, charges linéaires, etc.
   const slsCombs = result.combinations.filter(c => c.type === 'SLS');
 
   const seismicOn = result.soilMethodConfig.seismicMethod !== 'none';
@@ -926,9 +927,11 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                 <tr className="bg-slate-800 text-white text-[10px]">
                   <th className="px-1 py-1.5 font-bold">No</th>
                   <th className="px-1 py-1.5 font-bold">Combinaison</th>
-                  <th className="px-1 py-1.5 font-bold text-right">Poussée terre<span className="block text-[9px] font-normal text-slate-300">(kN)</span></th>
-                  <th className="px-1 py-1.5 font-bold text-right">Surcharge<span className="block text-[9px] font-normal text-slate-300">(kN)</span></th>
-                  <th className="px-1 py-1.5 font-bold text-right">Séisme<span className="block text-[9px] font-normal text-slate-300">(kN)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Terres<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Eau<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Surcharge<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Séisme<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  {showOtherStem && <th className="px-1 py-1.5 font-bold text-right">Autres<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>}
                   <th className="px-1 py-1.5 font-bold text-right bg-indigo-900">Mf<span className="block text-[9px] font-normal text-slate-300">(kN·m/m)</span></th>
                   <th className="px-1 py-1.5 font-bold text-right">Vf<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
                   <th className="px-1 py-1.5 font-bold text-right">As fournie<span className="block text-[9px] font-normal text-slate-300">(mm²/m)</span></th>
@@ -954,9 +957,11 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                           </span>
                         )}
                       </td>
-                      <td className="px-1 py-1 text-right">{(result.earthPressures.P_active_nominal * c.factors.H).toFixed(1)}</td>
-                      <td className="px-1 py-1 text-right">{(result.earthPressures.P_surcharge_nominal * c.factors.L).toFixed(1)}</td>
-                      <td className="px-1 py-1 text-right">{(result.earthPressures.delta_Pae_seed * (c.factors.E || 0)).toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.stem_lateral.terre.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.stem_lateral.eau.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.stem_lateral.surcharge.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.stem_lateral.seisme.toFixed(1)}</td>
+                      {showOtherStem && <td className="px-1 py-1 text-right">{c.stem_lateral.autres.toFixed(1)}</td>}
                       <td className="px-1 py-1 text-right font-black text-indigo-900 bg-indigo-50/50">{c.mur_Mf.toFixed(1)}</td>
                       <td className="px-1 py-1 text-right">{c.mur_Vf.toFixed(1)}</td>
                       <td className="px-1 py-1 text-right">{result.concreteDesign.mur_interieur.As_provided.toFixed(0)}</td>
@@ -974,6 +979,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               </tbody>
             </table>
           </div>
+          <p className="text-[10px] text-slate-500">Forces latérales pondérées réellement appliquées au voile par le calcul (sol sec et déjaugé, hauteur remblayée h<sub>r</sub>, nappe, surcharge, séisme). Mur en porte-à-faux : leur somme égale V<sub>f</sub> à la base du voile.</p>
         </div>
 
         {/* TABLE 3: ELU - SEMELLE */}

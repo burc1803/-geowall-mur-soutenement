@@ -132,3 +132,34 @@ describe('MUR-04 (décision du 2026-11-08) : charge linéaire QL avec hr < h', (
     expect(c.lateral_nominal).toEqual(a.lateral_nominal);
   });
 });
+
+describe('Tableau 2 de la note : forces latérales appliquées au voile', () => {
+  const geoD: WallGeometry = { wallType: 'cantilever', hMur: 3.8, epStem: 0.35, ePiedAv: 0.8, ePiedAr: 1.75, epBase: 0.35 };
+  const base = (over: Partial<SoilProperties> = {}, method: object = {}): SoilProperties => ({
+    ...soilOf(bearing({ phi: 29, deltaB: 24 }), { gamma: 19, phi: 29, hSolAv: 1.5, hasWaterTable: true, waterTableHeight: 2.5, qAllowable_SLS: 130, qUltimate_ULS: 392 }),
+    ...over, methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'none', pga: 0.15, deltaFrictionRatio: 0.667, ...method }
+  });
+  const loads = { ...LOADS, surcharge: 12, surchargeAval: 0 } as LoadsConfig;
+  for (const [name, soil] of [
+    ['projet par défaut (nappe, surcharge)', base()],
+    ['avec séisme M-O (deux signes de kv)', base({}, { seismicMethod: 'mononobe_okabe' })],
+    ['hr = 3,0 m < h avec nappe', base({ hr: 3.0 })],
+  ] as [string, SoilProperties][]) {
+    it(`${name} : Σ des forces latérales du voile = Vf à la base, à 0,5 % près`, () => {
+      const r = analyzeRetainingWall(geoD, soil, loads, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
+      for (const c of r.combinations) {
+        const l = c.stem_lateral;
+        close(l.terre + l.eau + l.surcharge + l.seisme + l.autres, c.mur_Vf, 0.005, c.combName);
+        close(l.total, c.mur_Vf, 0.005, c.combName);
+      }
+    });
+  }
+  it('cas 2 (1,25D + 1,5L + 1,5H) du projet par défaut : ancienne et nouvelle poussée des terres sur le voile', () => {
+    const r = analyzeRetainingWall(geoD, base(), loads, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
+    const c = r.combinations.find(x => x.caseNo === 2 && x.factors.D === 1.25 && x.factors.L === 1.5 && x.factors.S === 0 && x.factors.W === 0)!;
+    const ancien = r.earthPressures.P_active_nominal * c.factors.H; // ancienne colonne : sol sec, hauteur totale, sans nappe
+    expect(c.stem_lateral.terre).toBeLessThan(ancien);
+    expect(c.stem_lateral.eau).toBeGreaterThan(0);
+    close(c.stem_lateral.terre + c.stem_lateral.eau + c.stem_lateral.surcharge, c.mur_Vf, 0.005); // ancien 85,15 -> nouveau 59,60 (terres) + 34,01 (eau) + 23,73 (surcharge) = Vf 117,34
+  });
+});
