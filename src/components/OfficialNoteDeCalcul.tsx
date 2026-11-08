@@ -4,6 +4,8 @@ import { BearingPressureDiagram } from './BearingPressureDiagram';
 import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
 import { directionOfComponent, type LoadDirection } from '../lib/loadDirection';
 import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass } from '../lib/rebarPlans';
+import { Fm } from './Fm';
+import { V } from './Eq';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
 interface OfficialNoteDeCalculProps {
@@ -32,6 +34,50 @@ function SubTitle({ n, title }: { n: string; title: string }) {
 const isNumeric = (s: string) => /^[−-]?\d+([.,]\d+)?$/.test(s.trim());
 
 /** Tableau compact, même mise en forme que le tableau 1 (en-tête foncé, lignes alternées, valeurs à chasse fixe). */
+type NoteCol = { name: string; unit?: string; align?: 'left' | 'right' | 'center'; title?: string };
+/** Tableau de la note, même style que 1a : en-tête foncé, colonne No, lignes alternées, nom puis unité en dessous. */
+function NoteTable({ cols, rows }: { cols: NoteCol[]; rows: React.ReactNode[][] }) {
+  const al = (a?: string) => (a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left');
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 break-inside-avoid print:break-inside-avoid">
+      <table className="w-full text-left text-[10px] border-collapse">
+        <thead>
+          <tr className="bg-slate-800 text-white text-[10px] align-bottom">
+            <th className="px-1 py-2 font-bold">No</th>
+            {cols.map(c => (
+              <th key={c.name} title={c.title ?? c.name} className={`px-1 py-2 font-bold leading-tight ${al(c.align)}`}>
+                {c.name}
+                {c.unit && <span className="block text-[9px] font-normal text-slate-300">{c.unit}</span>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200 font-mono text-[10px]">
+          {rows.map((r, i) => (
+            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+              <td className="px-1 py-1 text-slate-500 font-sans">{i + 1}</td>
+              {r.map((cell, j) => (
+                <td key={j} className={`px-1 py-1 ${al(cols[j]?.align)} ${j === 0 ? 'text-slate-800 font-sans font-bold min-w-[5.5rem]' : 'whitespace-nowrap'}`}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const StatusPill = ({ status, verifiable }: { status: string; verifiable: boolean }) => {
+  const nv = !verifiable || status === 'NON VÉRIFIABLE';
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${nv ? 'bg-amber-100 text-amber-800' : status === 'OK' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+      {nv ? 'non vérifiable' : status === 'OK' ? 'OK' : 'NON'}
+    </span>
+  );
+};
+const shortComb = (n: string) => n.replace(/^Combinaison\s+\S+\s+\d+\s*\((.*)\)$/, '$1');
+
+
 function DataTable({ head, rows }: { head: string[]; rows: string[][] }) {
   return (
     <div className="inline-block max-w-full overflow-x-auto rounded-xl border border-slate-200 align-top break-inside-avoid print:break-inside-avoid">
@@ -394,11 +440,13 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
               [result.geotech.quFactored ? 'Portance ultime saisie (ÉLU, déclarée déjà pondérée : φgu = 1)' : 'Portance ultime saisie (ÉLU, non pondérée : le programme applique Ψ·φgu)', 'qu', fmt(soil.qUltimate_ULS, 0), 'kPa'],
             ]}
           />
-          <DataTable
-            head={result.bearingSoil.cohesive ? ['Combinaison ÉLU', 'FS long terme (drainé)', 'FS court terme (non drainé)', 'Condition'] : ['Combinaison ÉLU', 'FS long terme (drainé)', 'Condition']}
-            rows={result.combinations.filter(c => c.type === 'ULS').map(c => result.bearingSoil.cohesive
-              ? [c.combName, fmt(c.FOS_drained, 2), c.FOS_undrained !== undefined ? fmt(c.FOS_undrained, 2) : '—', c.sliding_condition === 'undrained' ? 'CT (non drainée) gouverne' : 'LT (drainée) gouverne']
-              : [c.combName, fmt(c.FOS_drained, 2), 'LT (drainée)'])}
+          <NoteTable
+            cols={result.bearingSoil.cohesive
+              ? [{ name: 'Combinaison ÉLU' }, { name: 'FS long terme', unit: '(drainé)', align: 'right' }, { name: 'FS court terme', unit: '(non drainé)', align: 'right' }, { name: 'Condition', align: 'center' }]
+              : [{ name: 'Combinaison ÉLU' }, { name: 'FS long terme', unit: '(drainé)', align: 'right' }, { name: 'Condition', align: 'center' }]}
+            rows={result.combinations.filter(c => c.type === 'ULS' && c.stabApplicable).map(c => result.bearingSoil.cohesive
+              ? [shortComb(c.combName), fmt(c.FOS_drained, 2), c.FOS_undrained !== undefined ? fmt(c.FOS_undrained, 2) : '—', c.sliding_condition === 'undrained' ? 'CT gouverne' : 'LT gouverne']
+              : [shortComb(c.combName), fmt(c.FOS_drained, 2), 'LT'])}
           />
           <p className="text-[10px] text-slate-600">Sources : CFEM 5e éd., tableau 20.4, p. 691 (PDF 723) ; § 10.6, p. 351. δb proposé = borne inférieure du tableau, plafonnée à φ′. Butée nulle à court terme (MUR-04, R3, À CONFIRMER). qu saisi : il doit correspondre à la condition la plus défavorable (p. 344).</p>
         </div>
@@ -632,38 +680,34 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
         <div className="space-y-2">
           <SubTitle n="4.3" title="Tableau 1c : glissement Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·Pp] ≥ ΣHf et renversement Ψ·φ_ov·ΣM_stab ≥ ΣM_renv" />
           <p className="text-[10px] text-slate-600">Glissement et renversement : combinaisons ÉLU avec la charge permanente stabilisante (0,9D aux cas 2 à 4, 1,0D au cas 5 ; CNB 4.1.3.2.(5)) ; ÉLS sans objet (MUR-02 §12).</p>
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-[11px] border-collapse">
-              <thead>
-                <tr className="bg-slate-800 text-white">
-                  {['Combinaison', 'ΣV′ (kN/m)', 'Friction (kN/m)', 'Cohésion (kN/m)', 'Butée (kN/m)', 'Rf (kN/m)', 'ΣHf (kN/m)', 'Rf/ΣHf', 'Glissement', 'Ψφ_ov·ΣM_stab', 'ΣM_renv', 'Rapport', 'Renversement'].map(h => (
-                    <th key={h} className="px-1.5 py-2 font-bold whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 font-mono">
-                {result.combinations.filter(c => c.type === 'ULS' && c.stabApplicable).map((c, idx) => (
-                  <tr key={c.combName} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                    <td className="px-1.5 py-1 font-sans font-bold whitespace-nowrap">{c.combName}</td>
-                    <td className="px-1.5 py-1 text-right">{c.sumV_min.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right">{c.Rf_friction.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right">{c.Rf_cohesion.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right">{c.Rf_passive.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right font-bold">{c.Fs.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right">{c.Fh_destab.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right font-bold">{c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(3)}</td>
-                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable || c.status_sliding === 'NON VÉRIFIABLE' ? 'NON VÉRIFIABLE' : c.status_sliding === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
-                    <td className="px-1.5 py-1 text-right">{c.Ms.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right">{c.Mr.toFixed(1)}</td>
-                    <td className="px-1.5 py-1 text-right font-bold">{c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(3)}</td>
-                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable || c.status_overturning === 'NON VÉRIFIABLE' ? 'NON VÉRIFIABLE' : c.status_overturning === 'OK' ? 'CONFORME' : 'NON CONFORME'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <NoteTable
+            cols={[
+              { name: 'Combinaison' },
+              { name: 'ΣV′', unit: '(kN/m)', align: 'right' },
+              { name: 'Frottement', unit: '(kN/m)', align: 'right' },
+              { name: 'Cohésion', unit: '(kN/m)', align: 'right' },
+              { name: 'Butée', unit: '(kN/m)', align: 'right' },
+              { name: 'Rf', unit: '(kN/m)', align: 'right' },
+              { name: 'ΣHf', unit: '(kN/m)', align: 'right' },
+              { name: 'Rf/ΣHf', align: 'right' },
+              { name: 'Gliss.', title: 'Glissement', align: 'center' },
+              { name: 'Ψ·φov·ΣMstab', unit: '(kN·m/m)', align: 'right' },
+              { name: 'ΣMrenv', unit: '(kN·m/m)', align: 'right' },
+              { name: 'Ms/Mr', align: 'right' },
+              { name: 'Renv.', title: 'Renversement', align: 'center' },
+            ]}
+            rows={result.combinations.filter(c => c.type === 'ULS' && c.stabApplicable).map(c => [
+              shortComb(c.combName),
+              c.sumV_min.toFixed(1), c.Rf_friction.toFixed(1), c.Rf_cohesion.toFixed(1), c.Rf_passive.toFixed(1), c.Fs.toFixed(1), c.Fh_destab.toFixed(1),
+              <strong key="r1">{c.FOS_sliding === Infinity ? '∞' : c.FOS_sliding.toFixed(3)}</strong>,
+              <React.Fragment key="s1"><StatusPill status={c.status_sliding} verifiable={result.verifiable} /></React.Fragment>,
+              c.Ms.toFixed(1), c.Mr.toFixed(1),
+              <strong key="r2">{c.FOS_overturning === Infinity ? '∞' : c.FOS_overturning.toFixed(3)}</strong>,
+              <React.Fragment key="s2"><StatusPill status={c.status_overturning} verifiable={result.verifiable} /></React.Fragment>,
+            ])}
+          />
           <p className="text-[11px] text-slate-500">
-            ΣV′ : force verticale effective (poids déjaugé, sous-pression déduite). Terme cohésif sur B′ = B − 2e (À CONFIRMER). Facteurs : Ψ = {fmt(result.geotech.psi, 2)}, φgs = {fmt(result.geotech.phi_gs, 2)}, φcoh = {fmt(result.geotech.phi_coh, 2)}, φp = {fmt(result.geotech.phi_p, 2)}, φ_ov = {fmt(result.geotech.phi_ov, 2)}.
+            Σ<V n="V" prime /> : force verticale effective (poids déjaugé, sous-pression déduite). Terme d’adhérence à court terme sur <V n="B" prime /> = <V n="B" /> − 2<V n="e" /> (À CONFIRMER). Facteurs : <V n="Ψ" /> = {fmt(result.geotech.psi, 2)}, <V n="φ" s="gs" /> = {fmt(result.geotech.phi_gs, 2)}, <V n="φ" s="coh" /> = {fmt(result.geotech.phi_coh, 2)}, <V n="φ" s="p" /> = {fmt(result.geotech.phi_p, 2)}, <V n="φ" s="ov" /> = {fmt(result.geotech.phi_ov, 2)}.
             {result.stabilityCriterion === 'eccentricity' && ' Critère B′ = B − 2e : le renversement est en principe couvert par la portance et la limite de e (CFEM 20.7.3.4) ; la vérification Ψ·φ_ov·ΣM_stab est tout de même conservée et affichée.'}
           </p>
         </div>
@@ -683,30 +727,30 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-[11px] border-collapse">
+            <table className="w-full text-left text-[10px] border-collapse">
               <thead>
-                <tr className="bg-slate-800 text-white text-[11px]">
-                  <th className="px-1.5 py-2 font-bold">No</th>
-                  <th className="px-1.5 py-2 font-bold">Combinaison</th>
-                  <th className="px-1.5 py-2 font-bold text-center">D</th>
-                  <th className="px-1.5 py-2 font-bold text-center">L</th>
-                  <th className="px-1.5 py-2 font-bold text-center">S</th>
-                  <th className="px-1.5 py-2 font-bold text-center">W</th>
-                  <th className="px-1.5 py-2 font-bold text-center">E</th>
-                  <th className="px-1.5 py-2 font-bold text-center">H</th>
-                  <th className="px-1.5 py-2 font-bold text-right">Rv (kN/m)</th>
-                  <th className="px-1.5 py-2 font-bold text-right">e (m)</th>
-                  <th className="px-1.5 py-2 font-bold text-right">B/6 (m)</th>
-                  <th className="px-1.5 py-2 font-bold text-center">e ≤ B/6</th>
-                  <th className="px-1.5 py-2 font-bold text-right">x1 (m)</th>
-                  <th className="px-1.5 py-2 font-bold text-right bg-blue-900">q1 (kPa)</th>
-                  <th className="px-1.5 py-2 font-bold text-right">q2 (kPa)</th>
-                  <th className="px-1.5 py-2 font-bold text-right">Limite (kPa)</th>
-                  <th className="px-1.5 py-2 font-bold text-center">Ratio</th>
-                  <th className="px-1.5 py-2 font-bold text-center">Statut</th>
+                <tr className="bg-slate-800 text-white text-[10px]">
+                  <th className="px-1 py-2 font-bold">No</th>
+                  <th className="px-1 py-2 font-bold">Combinaison</th>
+                  <th className="px-1 py-2 font-bold text-center">D</th>
+                  <th className="px-1 py-2 font-bold text-center">L</th>
+                  <th className="px-1 py-2 font-bold text-center">S</th>
+                  <th className="px-1 py-2 font-bold text-center">W</th>
+                  <th className="px-1 py-2 font-bold text-center">E</th>
+                  <th className="px-1 py-2 font-bold text-center">H</th>
+                  <th className="px-1 py-2 font-bold text-right">Rv (kN/m)</th>
+                  <th className="px-1 py-2 font-bold text-right">e (m)</th>
+                  <th className="px-1 py-2 font-bold text-right">B/6 (m)</th>
+                  <th className="px-1 py-2 font-bold text-center">e ≤ B/6</th>
+                  <th className="px-1 py-2 font-bold text-right">x1 (m)</th>
+                  <th className="px-1 py-2 font-bold text-right bg-blue-900">q1 (kPa)</th>
+                  <th className="px-1 py-2 font-bold text-right">q2 (kPa)</th>
+                  <th className="px-1 py-2 font-bold text-right">Limite (kPa)</th>
+                  <th className="px-1 py-2 font-bold text-center">Ratio</th>
+                  <th className="px-1 py-2 font-bold text-center">Statut</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+              <tbody className="divide-y divide-slate-200 font-mono text-[10px]">
                 {combs.map((c, idx) => {
                   const qLimit = c.q_capacity; // Psi.phi_gu.qu (ELU) ou q_adm (ELS), calcule par le moteur
                   const isExceeded = c.status_bearing === 'NON';
@@ -720,33 +764,33 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                       key={c.combName}
                       className={`${isGoverning ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
                     >
-                      <td className="px-1.5 py-1 text-slate-500 font-sans">{idx + 1}</td>
-                      <td className="px-1.5 py-1 text-slate-800 font-sans font-bold min-w-[10rem]">
+                      <td className="px-1 py-1 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="px-1 py-1 text-slate-800 font-sans font-bold min-w-[5.5rem]">
                         {/* « Combinaison ELS 1 (1D + 1H + 1L) » → « 1D + 1H + 1L » : l'en-tête dit déjà « Combinaison » */}
                         {c.combName.replace(/^Combinaison\s+\S+\s+\d+\s*\((.*)\)$/, '$1')}
                         {isGoverning && (
-                          <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-bold">
+                          <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-bold">
                             Gouvernant
                           </span>
                         )}
                       </td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.D}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.L}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.S}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.W}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.E || 0}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.H}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.sumV_max.toFixed(1)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{Math.abs(c.ecc).toFixed(3)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right text-slate-500">{B_over_6.toFixed(3)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center font-sans font-bold">{!result.verifiable ? 'n. v.' : c.status_ecc === 'OK' ? 'OK' : 'NON'}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.x1.toFixed(3)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right font-black text-blue-900 bg-blue-50/50">{c.outside_base ? 'n. v.' : c.q_toe.toFixed(1)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right">{c.outside_base ? 'n. v.' : c.q_heel.toFixed(1)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-right text-slate-600 font-semibold">{qLimit.toFixed(1)}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center">{c.outside_base ? '—' : `${(ratio * 100).toFixed(0)} %`}</td>
-                      <td className="px-1.5 py-1 whitespace-nowrap text-center">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
+                      <td className="px-1 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.D}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.L}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.S}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.W}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.E || 0}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center text-slate-600">{c.factors.H}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right">{c.sumV_max.toFixed(1)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right">{Math.abs(c.ecc).toFixed(3)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right text-slate-500">{B_over_6.toFixed(3)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center font-sans font-bold">{!result.verifiable ? 'n. v.' : c.status_ecc === 'OK' ? 'OK' : 'NON'}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right">{c.x1.toFixed(3)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right font-black text-blue-900 bg-blue-50/50">{c.outside_base ? 'n. v.' : c.q_toe.toFixed(1)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right">{c.outside_base ? 'n. v.' : c.q_heel.toFixed(1)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-right text-slate-600 font-semibold">{qLimit.toFixed(1)}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center">{c.outside_base ? '—' : `${(ratio * 100).toFixed(0)} %`}</td>
+                      <td className="px-1 py-1 whitespace-nowrap text-center">
+                        <span className={`px-1 py-0.5 rounded text-[10px] font-bold font-sans ${
                           !isExceeded ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}>
                           {!isExceeded ? 'OK' : (c.stability_message ? 'NON' : 'Surcharge')}
@@ -768,12 +812,19 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
         <div className="space-y-2">
           <SubTitle n="4.4" title="Béton armé : vérifications CSA A23.3-19 (valeurs du moteur)" />
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-[11px] border-collapse">
+            <table className="w-full text-left text-[10px] border-collapse">
               <thead>
                 <tr className="bg-slate-800 text-white">
-                  {['Élément', 'Armature', 'As / As,min (mm²/m) — article', 'Espacement / max (mm)', 'Mr / Mf (kN·m/m)', 'c/d ≤ limite (10.5.2)', 'Vf / min(Vc ; Vr,max) (kN/m)', 'z / limite (N/mm) — 10.6.1', 'ld / ldh (mm)', 'Statut'].map(h => (
-                    <th key={h} className="px-1.5 py-2 font-bold whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">Élément</th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">Armature</th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">As / As,min<span className="block text-[9px] font-normal text-slate-300">(mm²/m) — article</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">Espacement / max<span className="block text-[9px] font-normal text-slate-300">(mm)</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">Mr / Mf<span className="block text-[9px] font-normal text-slate-300">(kN·m/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">c/d ≤ limite<span className="block text-[9px] font-normal text-slate-300">(10.5.2)</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">Vf / min(Vc ; Vr,max)<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">z / limite<span className="block text-[9px] font-normal text-slate-300">(N/mm) — 10.6.1</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">ld / ldh<span className="block text-[9px] font-normal text-slate-300">(mm)</span></th>
+                  <th className="px-1 py-1.5 font-bold align-bottom leading-tight">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-mono">
@@ -788,18 +839,18 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                   result.concreteDesign.semelle_retrait
                 ]).map((d, idx) => (
                   <tr key={d.elementName} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                    <td className="px-1.5 py-1 font-sans font-bold whitespace-nowrap">{d.elementName}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.bar_designation}</td>
-                    <td className="px-1.5 py-1 max-w-[16rem]">{/horizontales (ext|int)\./.test(d.elementName)
-                      ? <>{d.As_provided.toFixed(0)} (face) ; Σ A3 + A4 = {result.concreteDesign.mur_horizontal.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="font-sans text-slate-500">(14.1.8.6)</span></>
-                      : <>{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="font-sans text-slate-500">({d.As_min_basis})</span></>}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.spacing.toFixed(0)} / {d.spacing_max.toFixed(0)} {d.spacing_ok ? '' : '(dépassé)'}{d.db_max !== undefined ? ` ; db ${d.db.toFixed(1)} / ${d.db_max.toFixed(0)}` : ''}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.Mr.toFixed(1)} / ${d.Mf.toFixed(1)}` : '—'}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.ductility_c_over_d.toFixed(3)} ≤ ${d.ductility_limit.toFixed(3)}` : '—'}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Vf > 0 ? `${d.Vf.toFixed(1)} / ${Math.min(d.Vc, d.Vr_max).toFixed(1)}` : '—'}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.Z_factor !== undefined && d.Z_limit !== undefined ? `${d.Z_factor.toFixed(0)} / ${d.Z_limit.toFixed(0)}` : '—'}</td>
-                    <td className="px-1.5 py-1 whitespace-nowrap">{d.ld.toFixed(0)} / {d.ldh_required !== undefined ? d.ldh_required.toFixed(0) : '—'}</td>
-                    <td className="px-1.5 py-1 font-sans font-bold">{!result.verifiable ? 'NON VÉRIFIABLE' : !d.checks_ok ? 'NON CONFORME' : d.ld_status === 'À CONFIRMER' ? 'CONFORME sauf ld : À CONFIRMER' : 'CONFORME'}</td>
+                    <td className="px-1 py-1 font-sans font-bold min-w-[6rem]">{d.elementName}</td>
+                    <td className="px-1 py-1">{d.bar_designation}</td>
+                    <td className="px-1 py-1 max-w-[11rem] whitespace-normal">{/horizontales (ext|int)\./.test(d.elementName)
+                      ? <>{d.As_provided.toFixed(0)} (face) ; Σ A3 + A4 = {result.concreteDesign.mur_horizontal.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="block font-sans text-[9px] text-slate-500">(14.1.8.6)</span></>
+                      : <>{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="block font-sans text-[9px] leading-tight text-slate-500">({d.As_min_basis})</span></>}</td>
+                    <td className="px-1 py-1 whitespace-normal">{d.spacing.toFixed(0)} / {d.spacing_max.toFixed(0)} {d.spacing_ok ? '' : '(dépassé)'}{d.db_max !== undefined ? ` ; db ${d.db.toFixed(1)} / ${d.db_max.toFixed(0)}` : ''}</td>
+                    <td className="px-1 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.Mr.toFixed(1)} / ${d.Mf.toFixed(1)}` : '—'}</td>
+                    <td className="px-1 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.ductility_c_over_d.toFixed(3)} ≤ ${d.ductility_limit.toFixed(3)}` : '—'}</td>
+                    <td className="px-1 py-1 whitespace-nowrap">{d.Vf > 0 ? `${d.Vf.toFixed(1)} / ${Math.min(d.Vc, d.Vr_max).toFixed(1)}` : '—'}</td>
+                    <td className="px-1 py-1 whitespace-nowrap">{d.Z_factor !== undefined && d.Z_limit !== undefined ? `${d.Z_factor.toFixed(0)} / ${d.Z_limit.toFixed(0)}` : '—'}</td>
+                    <td className="px-1 py-1 whitespace-nowrap">{d.ld.toFixed(0)} / {d.ldh_required !== undefined ? d.ldh_required.toFixed(0) : '—'}</td>
+                    <td className="px-1 py-1 font-sans font-bold max-w-[6rem] whitespace-normal leading-tight">{!result.verifiable ? 'NON VÉRIFIABLE' : !d.checks_ok ? 'NON CONFORME' : d.ld_status === 'À CONFIRMER' ? 'CONFORME sauf ld : À CONFIRMER' : 'CONFORME'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -828,22 +879,22 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-[10px] border-collapse">
               <thead>
-                <tr className="bg-slate-800 text-white text-[11px]">
-                  <th className="p-2.5 font-bold">No</th>
-                  <th className="p-2.5 font-bold">Combinaison</th>
-                  <th className="p-2.5 font-bold text-right">Poussée Terre (kN)</th>
-                  <th className="p-2.5 font-bold text-right">Surcharge (kN)</th>
-                  <th className="p-2.5 font-bold text-right">Séisme (kN)</th>
-                  <th className="p-2.5 font-bold text-right bg-indigo-900">Mf (kNm/m)</th>
-                  <th className="p-2.5 font-bold text-right">Vf (kN/m)</th>
-                  <th className="p-2.5 font-bold text-right">As fournie (mm²/m)</th>
-                  <th className="p-2.5 font-bold text-center">Ratio Mf/Mr</th>
-                  <th className="p-2.5 font-bold text-center">Statut</th>
+                <tr className="bg-slate-800 text-white text-[10px]">
+                  <th className="px-1 py-1.5 font-bold">No</th>
+                  <th className="px-1 py-1.5 font-bold">Combinaison</th>
+                  <th className="px-1 py-1.5 font-bold text-right">Poussée terre<span className="block text-[9px] font-normal text-slate-300">(kN)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Surcharge<span className="block text-[9px] font-normal text-slate-300">(kN)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Séisme<span className="block text-[9px] font-normal text-slate-300">(kN)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right bg-indigo-900">Mf<span className="block text-[9px] font-normal text-slate-300">(kN·m/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Vf<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">As fournie<span className="block text-[9px] font-normal text-slate-300">(mm²/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-center">Ratio<span className="block text-[9px] font-normal text-slate-300">Mf/Mr</span></th>
+                  <th className="px-1 py-1.5 font-bold text-center">Statut</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+              <tbody className="divide-y divide-slate-200 font-mono text-[10px]">
                 {ulsCombs.map((c, idx) => {
                   const mr = result.concreteDesign.mur_interieur.Mr;
                   const ratio = mr > 0 ? (c.mur_Mf / mr) : 0;
@@ -852,23 +903,23 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
                   return (
                     <tr key={c.combName} className={`${isGovStem ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
-                      <td className="p-2 text-slate-500 font-sans">{idx + 1}</td>
-                      <td className="p-2 text-slate-800 font-sans font-bold whitespace-nowrap">
-                        {c.combName}
+                      <td className="px-1 py-1 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="px-1 py-1 text-slate-800 font-sans font-bold min-w-[5.5rem]">
+                        {shortComb(c.combName)}
                         {isGovStem && (
                           <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-amber-200 text-amber-900 font-bold">
                             Gouvernant Mf
                           </span>
                         )}
                       </td>
-                      <td className="p-2 text-right">{(result.earthPressures.P_active_nominal * c.factors.H).toFixed(1)}</td>
-                      <td className="p-2 text-right">{(result.earthPressures.P_surcharge_nominal * c.factors.L).toFixed(1)}</td>
-                      <td className="p-2 text-right">{(result.earthPressures.delta_Pae_seed * (c.factors.E || 0)).toFixed(1)}</td>
-                      <td className="p-2 text-right font-black text-indigo-900 bg-indigo-50/50">{c.mur_Mf.toFixed(1)}</td>
-                      <td className="p-2 text-right">{c.mur_Vf.toFixed(1)}</td>
-                      <td className="p-2 text-right">{result.concreteDesign.mur_interieur.As_provided.toFixed(0)}</td>
-                      <td className="p-2 text-center">{(ratio * 100).toFixed(0)} %</td>
-                      <td className="p-2 text-center">
+                      <td className="px-1 py-1 text-right">{(result.earthPressures.P_active_nominal * c.factors.H).toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{(result.earthPressures.P_surcharge_nominal * c.factors.L).toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{(result.earthPressures.delta_Pae_seed * (c.factors.E || 0)).toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right font-black text-indigo-900 bg-indigo-50/50">{c.mur_Mf.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.mur_Vf.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{result.concreteDesign.mur_interieur.As_provided.toFixed(0)}</td>
+                      <td className="px-1 py-1 text-center">{(ratio * 100).toFixed(0)} %</td>
+                      <td className="px-1 py-1 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
                           isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}>
@@ -896,21 +947,21 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full text-left text-[10px] border-collapse">
               <thead>
-                <tr className="bg-slate-800 text-white text-[11px]">
-                  <th className="p-2.5 font-bold">No</th>
-                  <th className="p-2.5 font-bold">Combinaison</th>
-                  <th className="p-2.5 font-bold text-right bg-emerald-900">Patin Mf (kNm)</th>
-                  <th className="p-2.5 font-bold text-right">Patin Vf (kN)</th>
-                  <th className="p-2.5 font-bold text-right bg-emerald-900">Talon Mf (kNm)</th>
-                  <th className="p-2.5 font-bold text-right">Talon Vf (kN)</th>
-                  <th className="p-2.5 font-bold text-center">Ratio Patin</th>
-                  <th className="p-2.5 font-bold text-center">Ratio Talon</th>
-                  <th className="p-2.5 font-bold text-center">Statut Semelle</th>
+                <tr className="bg-slate-800 text-white text-[10px]">
+                  <th className="px-1 py-1.5 font-bold">No</th>
+                  <th className="px-1 py-1.5 font-bold">Combinaison</th>
+                  <th className="px-1 py-1.5 font-bold text-right bg-emerald-900">Patin Mf<span className="block text-[9px] font-normal text-slate-300">(kN·m/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Patin Vf<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right bg-emerald-900">Talon Mf<span className="block text-[9px] font-normal text-slate-300">(kN·m/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-right">Talon Vf<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
+                  <th className="px-1 py-1.5 font-bold text-center">Ratio<span className="block text-[9px] font-normal text-slate-300">Patin</span></th>
+                  <th className="px-1 py-1.5 font-bold text-center">Ratio<span className="block text-[9px] font-normal text-slate-300">Talon</span></th>
+                  <th className="px-1 py-1.5 font-bold text-center">Statut</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+              <tbody className="divide-y divide-slate-200 font-mono text-[10px]">
                 {ulsCombs.map((c, idx) => {
                   const mrToe = result.concreteDesign.semelle_orteil.Mr;
                   const mrHeel = result.concreteDesign.semelle_talon.Mr;
@@ -922,9 +973,9 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
                   return (
                     <tr key={c.combName} className={`${isGovToe || isGovHeel ? 'bg-amber-50/80 font-bold' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
-                      <td className="p-2 text-slate-500 font-sans">{idx + 1}</td>
-                      <td className="p-2 text-slate-800 font-sans font-bold whitespace-nowrap">
-                        {c.combName}
+                      <td className="px-1 py-1 text-slate-500 font-sans">{idx + 1}</td>
+                      <td className="px-1 py-1 text-slate-800 font-sans font-bold min-w-[5.5rem]">
+                        {shortComb(c.combName)}
                         {isGovToe && (
                           <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-emerald-200 text-emerald-900 font-bold">
                             Gov. Patin
@@ -936,13 +987,13 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                           </span>
                         )}
                       </td>
-                      <td className="p-2 text-right font-black text-emerald-900 bg-emerald-50/40">{c.toe_Mf.toFixed(1)}</td>
-                      <td className="p-2 text-right">{c.toe_Vf.toFixed(1)}</td>
-                      <td className="p-2 text-right font-black text-emerald-900 bg-emerald-50/40">{c.heel_Mf.toFixed(1)}</td>
-                      <td className="p-2 text-right">{c.heel_Vf.toFixed(1)}</td>
-                      <td className="p-2 text-center">{(ratioToe * 100).toFixed(0)} %</td>
-                      <td className="p-2 text-center">{(ratioHeel * 100).toFixed(0)} %</td>
-                      <td className="p-2 text-center">
+                      <td className="px-1 py-1 text-right font-black text-emerald-900 bg-emerald-50/40">{c.toe_Mf.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.toe_Vf.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right font-black text-emerald-900 bg-emerald-50/40">{c.heel_Mf.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-right">{c.heel_Vf.toFixed(1)}</td>
+                      <td className="px-1 py-1 text-center">{(ratioToe * 100).toFixed(0)} %</td>
+                      <td className="px-1 py-1 text-center">{(ratioHeel * 100).toFixed(0)} %</td>
+                      <td className="px-1 py-1 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans ${
                           isOk ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                         }`}>
@@ -968,27 +1019,76 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
         {/* 5. HYPOTHÈSES ET LIMITES */}
         <SectionTitle n="5" title="Hypothèses et limites" />
-        <div className="text-xs text-slate-700 space-y-2">
-          <ul className="list-disc pl-5 space-y-1">
-            <li><strong>Non vérifié :</strong> stabilité d'ensemble (glissement profond), gel et profondeur de la semelle, drainage, tassement calculé, pression de compactage.</li>
-            <li>Sous-pression sous la semelle uniforme γw·hw sur la largeur B (hypothèse conservatrice, drainage non défini) ; facteur 1,5 appliqué à l'eau : classement À CONFIRMER.</li>
-            <li>γ′ du sol sous la nappe = γ − γw (le γ saisi est pris comme poids volumique saturé ; hypothèse).</li>
-            <li>Limite d'excentricité e ≤ B/6 à l'ÉLU et à l'ÉLS (CFEM 5e, p. 348 et 20.7.3.4-20.7.3.5) : statut calculé pour chaque combinaison. Une limite plus large (par ex. B/3) n'a aucune source lue : non appliquée.</li>
-            <li>Commentaire 2025 sur le facteur de H au cas 5 : À CONFIRMER. Augmentations de 4.1.8.16.(3) non appliquées (le mur ne fait pas partie du SFRS) : À CONFIRMER.</li>
-            <li>Cisaillement par frottement (A23.3-19, 11.5) : c = 0,25 MPa et μ = 0,60 (surface non rendue rugueuse, D14) ; N = charge permanente non pondérée (11.5.4) ; cumul avec l'armature tendue en flexion : À CONFIRMER.</li>
-            <li>Béton, A23.3-19 : définition de dv, tableau 12.1 (coefficient 0,45 ou 0,6), 12.5.4 (confinement), 10.5.1.1 (Mr ≥ 1,2·Mcr, module de rupture 8.6.4) et correspondance avec l'édition :24 : À CONFIRMER. Enrobages selon la CSA A23.1 (absente) : NON VÉRIFIÉS ; l'enrobage reste saisi par l'utilisateur. L'effort tranchant est vérifié à la face de la semelle (conservateur), non à dv.</li>
-            <li>Charges linéaires derrière le mur : fig. 20.8 du CFEM 5e (p. 694), distance mesurée depuis la face arrière du voile et H = hauteur totale : À CONFIRMER. Charges ponctuelles de la fig. 20.8 et charges réparties assimilées à leur résultante : non implémentées / approximation À CONFIRMER. Compactage (fig. 20.9) : non vérifié.</li>
-            <li><strong>Éléments NON VÉRIFIÉS :</strong> stabilité d'ensemble, gel (hors profondeur déduite de la butée), drainage, tassement calculé, liquéfaction, enrobages (A23.1), Code de construction du Québec (édition et modifications : À CONFIRMER).</li>
-            <li>
-              Eau à l'avant (scénario {result.earthPressures.frontWaterScenario}) :{' '}
-              {result.earthPressures.frontWaterScenario === 'A'
-                ? 'eau à l\'avant non comptée (scénario conservateur) ; butée du sol calculée avec γ′ sous la nappe.'
-                : `eau à l'avant comptée : niveau hw,av = ${result.earthPressures.hw_av.toFixed(2)} m déclaré fiable par l'utilisateur ; Pw,a reçoit les mêmes facteurs que la butée (φp au glissement, φ de renversement : À CONFIRMER).`}
-              {' '}La sous-pression est prise uniforme (γw·hw·B) ; une sous-pression trapézoïdale est à traiter avec MUR-02.
-            </li>
-            <li>Géométrie : remblai horizontal, voile sans fruit, sans clé de cisaillement.</li>
-          </ul>
-        </div>
+        {(() => {
+          type Pill = 'applique' | 'confirmer' | 'nonverifie';
+          const pill = (k: Pill) => (
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-sans whitespace-nowrap ${k === 'applique' ? 'bg-emerald-100 text-emerald-800' : k === 'confirmer' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`}>
+              {k === 'applique' ? 'appliqué' : k === 'confirmer' ? 'À CONFIRMER' : 'NON VÉRIFIÉ'}
+            </span>
+          );
+          const frontB = result.earthPressures.frontWaterScenario !== 'A';
+          const groups: { title: string; rows: [string, React.ReactNode, Pill][] }[] = [
+            { title: 'Géotechnique', rows: [
+              ['Éléments non vérifiés', <>Stabilité d’ensemble (glissement profond), gel et profondeur de la semelle (hors profondeur déduite de la butée), drainage, tassement calculé, pression de compactage (fig. 20.9), liquéfaction.</>, 'nonverifie'],
+              ['Poids volumique sous la nappe', <><V n="γ" prime /> = <V n="γ" /> − <V n="γ" s="w" /> : le <V n="γ" /> saisi est pris comme poids volumique saturé.</>, 'applique'],
+              ['Limite d’excentricité', <><V n="e" /> ≤ <V n="B" />/6 à l’ÉLU et à l’ÉLS (CFEM 5e, p. 348 et 20.7.3.4-20.7.3.5), statut calculé pour chaque combinaison. Une limite plus large (par ex. <V n="B" />/3) n’a aucune source lue : non appliquée.</>, 'applique'],
+              ['Frottement et adhérence de la base (MUR-04)', <>tan <V n="δ" s="b" /> du sol d’assise (tableau 20.4(a), CFEM 5e, p. 691 : borne inférieure, plafonnée à <V n="φ" prime />), <V n="c" s="a" prime /> = 0 à long terme (p. 351). Assise cohérente (CL) : adhérence <V n="c" s="a" /> du tableau 20.4(b) interpolée linéairement, <V n="B" prime /> = <V n="B" /> − 2<V n="e" />, butée nulle à court terme ; le plus défavorable des deux conditions gouverne.</>, 'confirmer'],
+              ['Frottement δ de Coulomb', <>Actif : δ = <V n="r" />·<V n="φ" /> du remblai (<V n="r" /> = {fmt(result.coulombRatio, 3)}), sans plafond par la base. Butée de Coulomb : δ = min(<V n="r" /> ; 0,5)·<V n="φ" prime /> (CFEM 5e, § 20.2.6).</>, 'confirmer'],
+              ['Portance', <><V n="q" s="u" /> saisi par le géotechnicien ; il doit correspondre à la condition la plus défavorable (CFEM 5e, p. 344).</>, 'applique'],
+            ] },
+            { title: 'Eau', rows: [
+              ['Sous-pression', <>Uniforme <V n="γ" s="w" />·<V n="h" s="w" />·<V n="B" /> sur la largeur <V n="B" /> (hypothèse conservatrice, drainage non défini) ; une sous-pression trapézoïdale est à traiter avec MUR-02. Facteur 1,5 appliqué à l’eau : classement À CONFIRMER.</>, 'confirmer'],
+              [`Eau à l’avant (scénario ${result.earthPressures.frontWaterScenario})`, frontB
+                ? <>Eau à l’avant comptée : niveau <V n="h" s="w,av" /> = {result.earthPressures.hw_av.toFixed(2)} m déclaré fiable par l’utilisateur ; <V n="P" s="w,a" /> reçoit les mêmes facteurs que la butée (<V n="φ" s="p" /> au glissement, <V n="φ" s="ov" /> au renversement).</>
+                : <>Eau à l’avant non comptée (scénario conservateur) ; butée du sol calculée avec <V n="γ" prime /> sous la nappe.</>, frontB ? 'confirmer' : 'applique'],
+            ] },
+            { title: 'Séisme', rows: [
+              ['Coefficients sismiques', <><V n="k" s="h" /> = <V n="a" s="h" /> (D6) ; <V n="k" s="v" /> = ⅔·<V n="k" s="h" /> à défaut d’étude du site (CFEM 5e, p. 629), deux signes étudiés ; option « négliger <V n="k" s="v" /> » (<V n="k" s="v" /> = 0) : choix de l’utilisateur.</>, 'applique'],
+              ['Facteur de H au cas 5', <>Commentaire 2025 : À CONFIRMER. Augmentations de 4.1.8.16.(3) non appliquées (le mur ne fait pas partie du SFRS) : À CONFIRMER.</>, 'confirmer'],
+            ] },
+            { title: 'Béton (A23.3-19)', rows: [
+              ['Cisaillement par frottement (11.5)', <><V n="c" /> = 0,25 MPa et <V n="μ" /> = 0,60 (surface non rendue rugueuse, D14) ; <V n="N" /> = charge permanente non pondérée (11.5.4) ; cumul avec l’armature tendue en flexion : À CONFIRMER.</>, 'confirmer'],
+              ['Définitions et correspondance', <>Définition de <V n="d" s="v" />, tableau 12.1 (coefficient 0,45 ou 0,6), 12.5.4 (confinement), 10.5.1.1 (<V n="M" s="r" /> ≥ 1,2<V n="M" s="cr" />, module de rupture 8.6.4) et correspondance avec l’édition :24 : À CONFIRMER.</>, 'confirmer'],
+              ['Enrobages', <>Selon la CSA A23.1 (absente) : NON VÉRIFIÉS ; l’enrobage reste saisi par l’utilisateur.</>, 'nonverifie'],
+              ['Effort tranchant', <>Vérifié à la face de la semelle (conservateur), non à <V n="d" s="v" />.</>, 'applique'],
+            ] },
+            { title: 'Charges', rows: [
+              ['Charges linéaires derrière le mur', <>CFEM 5e, fig. 20.8 (p. 694) : <V n="H" /> = <V n="H" s="p" /> = <V n="h" s="r" /> + <V n="t" s="s" />, distance mesurée depuis la face arrière du voile, origine à la surface du remblai (décision de l’utilisateur du 2026-11-08) ; aucune pression au-dessus du remblai.</>, 'applique'],
+              ['Charges ponctuelles et réparties', <>Charges ponctuelles de la fig. 20.8 non implémentées ; charges réparties assimilées à leur résultante : approximation À CONFIRMER.</>, 'confirmer'],
+            ] },
+            { title: 'Géométrie', rows: [
+              ['Remblai et voile', <>Remblai horizontal (<V n="β" /> = 0), voile sans fruit, sans clé de cisaillement. Hauteur de poussée <V n="H" s="p" /> = <V n="h" s="r" /> + <V n="t" s="s" /> (<V n="h" s="r" /> = {fmt(result.soilHeight.hr, 2)} m).</>, 'applique'],
+            ] },
+            { title: 'Juridiction', rows: [
+              ['Code de construction du Québec', <>Chapitre I – Bâtiment : édition et modifications non vérifiées.</>, 'confirmer'],
+            ] },
+          ];
+          return (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 break-inside-avoid print:break-inside-avoid">
+              <table className="w-full text-left text-[10px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="px-1.5 py-1.5 font-bold w-[22%]">Sujet</th>
+                    <th className="px-1.5 py-1.5 font-bold">Hypothèse retenue</th>
+                    <th className="px-1.5 py-1.5 font-bold text-center w-[11%]">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-serif">
+                  {groups.flatMap(g => [
+                    <tr key={g.title} className="bg-slate-100"><td colSpan={3} className="px-1.5 py-1 font-sans font-black uppercase tracking-wide text-slate-700">{g.title}</td></tr>,
+                    ...g.rows.map(([subject, text, st], i) => (
+                      <tr key={g.title + i} className="align-top">
+                        <td className="px-1.5 py-1 font-sans font-bold text-slate-800">{subject}</td>
+                        <td className="px-1.5 py-1 text-slate-700 leading-snug">{text}</td>
+                        <td className="px-1.5 py-1 text-center">{pill(st)}</td>
+                      </tr>
+                    ))
+                  ])}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
 
         {/* 6. ARMATURES (PLAN) : mêmes fonctions que l'onglet « Plans » */}
         {(() => {
@@ -1014,11 +1114,18 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                     !result.verifiable ? 'NON VÉRIFIABLE' : r.ok ? 'OK' : `NON : ${r.reasons.join(' ; ')}`
                   ])}
                 />
-                <p className="text-[11px] text-slate-600">
-                  As,min : {zoneRows.map(r => `${r.zone.id} ${r.As_min_basis}`).join(' ; ')}.
-                  {pair && ` Paire A3 + A4 : total requis ${fmt(pair.required, 0)} mm²/m, somme fournie ${fmt(pair.provided, 0)} mm²/m ; 14.1.8.6 : aire totale ; répartition entre faces non prescrite par la norme. Statut de A3 et A4 : Σ (A3 + A4) ≥ 0,002Ag et espacement par nappe.`}
-                  {' '}As,req = armature pour Mr = Mf (inverse exact de la formule de Mr, bloc rectangulaire 10.1.7) ; « — » : aucun effort de flexion. A7 : 2 lits. Statut : As,fourni ≥ max(As,req ; As,min) et espacement ≤ espacement maximal.
-                </p>
+                <NoteTable
+                  cols={[{ name: 'Zone' }, { name: 'Règle d’As,min' }, { name: 'Article' }]}
+                  rows={zoneRows.map(r => {
+                    const arts = Array.from(new Set(r.As_min_basis.match(/\b\d+\.\d+(?:\.\d+)*(?:\s[a-z]\))?/g) ?? []));
+                    return [r.zone.id, <span key="b" className="font-serif"><Fm>{r.As_min_basis}</Fm></span>, arts.length ? arts.join(' ; ') : '—'];
+                  })}
+                />
+                <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-600">
+                  {pair && <li>Paire A3 + A4 : total requis {fmt(pair.required, 0)} mm²/m, somme fournie {fmt(pair.provided, 0)} mm²/m ; 14.1.8.6 : aire totale, répartition entre faces non prescrite par la norme. Statut de A3 et A4 : Σ(A3 + A4) ≥ 0,002<V n="A" s="g" /> et espacement par nappe.</li>}
+                  <li><V n="A" s="s,req" /> = armature pour <V n="M" s="r" /> = <V n="M" s="f" /> (inverse exact de la formule de <V n="M" s="r" />, bloc rectangulaire 10.1.7) ; « — » : aucun effort de flexion. A7 : 2 lits.</li>
+                  <li>Statut : <V n="A" s="s,fourni" /> ≥ max(<V n="A" s="s,req" /> ; <V n="A" s="s,min" />) et espacement ≤ espacement maximal.</li>
+                </ul>
                 <SubTitle n="6.2" title="Nomenclature des barres (par mètre de mur)" />
                 <DataTable
                   head={['Repère', 'Barre', 'Esp. (mm)', 'Forme', 'Longueur unitaire (m)', 'Nombre par m de mur', 'Masse (kg/m de mur)']}
