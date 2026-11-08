@@ -6,6 +6,10 @@ import { V } from './Eq';
  * par leurs formes avec vrais indices. Aucune valeur n'est modifiée : seul le rendu change.
  */
 const TOKENS: [RegExp, () => React.ReactNode][] = [
+  [/H_p/, () => <V n="H" s="p" />],
+  [/\bts\b/, () => <V n="t" s="s" />],
+  [/γc/, () => <V n="γ" s="c" />],
+  [/lhb/, () => <V n="l" s="hb" />],
   [/γ′/, () => <V n="γ" prime />],
   [/γw/, () => <V n="γ" s="w" />],
   [/hw,av/, () => <V n="h" s="w,av" />],

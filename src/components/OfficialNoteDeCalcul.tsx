@@ -5,6 +5,7 @@ import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
 import { directionOfComponent, type LoadDirection } from '../lib/loadDirection';
 import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass } from '../lib/rebarPlans';
 import { Fm } from './Fm';
+import { Eq } from './Eq';
 import { V } from './Eq';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
@@ -95,7 +96,7 @@ function DataTable({ head, rows }: { head: string[]; rows: string[][] }) {
                   key={j}
                   className={`px-2.5 py-1 ${isNumeric(c) ? 'text-right font-mono whitespace-nowrap' : j === 0 && head[0] === 'N°' ? 'text-slate-500' : 'max-w-[22rem]'}`}
                 >
-                  {c}
+                  {isNumeric(c) ? c : <Fm>{c}</Fm>}
                 </td>
               ))}
             </tr>
@@ -678,7 +679,14 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
         {/* 4.3 GLISSEMENT ET RENVERSEMENT : tableau 1c */}
         <div className="space-y-2">
-          <SubTitle n="4.3" title="Tableau 1c : glissement Ψ·[φgs·ΣV′·tanδb + φcoh·c′a·B′ + φp·Pp] ≥ ΣHf et renversement Ψ·φ_ov·ΣM_stab ≥ ΣM_renv" />
+          <SubTitle n="4.3" title="Tableau 1c : glissement et renversement (ÉLU)" />
+          <Eq
+            general={<>
+              <div>Glissement, long terme (drainé) : <V n="Ψ" />·[ <V n="φ" s="gs" />·Σ<V n="V" prime />·tan <V n="δ" s="b" /> + <V n="φ" s="p" />·(<V n="P" s="p" prime /> + <V n="P" s="w,a" />) ] ≥ Σ<V n="H" s="f" /> ; <V n="c" s="a" prime /> = 0</div>
+              <div>Glissement, court terme (assise CL) : <V n="Ψ" />·<V n="φ" s="coh" />·<V n="c" s="a" />·<V n="B" prime /> ≥ Σ<V n="H" s="f" /> (butée nulle) ; le plus défavorable gouverne</div>
+              <div>Renversement : <V n="Ψ" />·<V n="φ" s="ov" />·Σ<V n="M" s="stab" /> ≥ Σ<V n="M" s="renv" /></div>
+            </>}
+          />
           <p className="text-[10px] text-slate-600">Glissement et renversement : combinaisons ÉLU avec la charge permanente stabilisante (0,9D aux cas 2 à 4, 1,0D au cas 5 ; CNB 4.1.3.2.(5)) ; ÉLS sans objet (MUR-02 §12).</p>
           <NoteTable
             cols={[
@@ -843,27 +851,46 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
                     <td className="px-1 py-1">{d.bar_designation}</td>
                     <td className="px-1 py-1 max-w-[11rem] whitespace-normal">{/horizontales (ext|int)\./.test(d.elementName)
                       ? <>{d.As_provided.toFixed(0)} (face) ; Σ A3 + A4 = {result.concreteDesign.mur_horizontal.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="block font-sans text-[9px] text-slate-500">(14.1.8.6)</span></>
-                      : <>{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="block font-sans text-[9px] leading-tight text-slate-500">({d.As_min_basis})</span></>}</td>
-                    <td className="px-1 py-1 whitespace-normal">{d.spacing.toFixed(0)} / {d.spacing_max.toFixed(0)} {d.spacing_ok ? '' : '(dépassé)'}{d.db_max !== undefined ? ` ; db ${d.db.toFixed(1)} / ${d.db_max.toFixed(0)}` : ''}</td>
+                      : <>{d.As_provided.toFixed(0)} {d.As_ok ? '≥' : '<'} {d.As_min.toFixed(0)} <span className="block font-serif text-[9px] leading-tight text-slate-500"><Fm>{`(${d.As_min_basis})`}</Fm></span></>}</td>
+                    <td className="px-1 py-1 whitespace-normal">{d.spacing.toFixed(0)} / {d.spacing_max.toFixed(0)} {d.spacing_ok ? '' : '(dépassé)'}{d.db_max !== undefined ? <Fm>{` ; db ${d.db.toFixed(1)} / ${d.db_max.toFixed(0)}`}</Fm> : ''}</td>
                     <td className="px-1 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.Mr.toFixed(1)} / ${d.Mf.toFixed(1)}` : '—'}</td>
                     <td className="px-1 py-1 whitespace-nowrap">{d.Mr > 0 ? `${d.ductility_c_over_d.toFixed(3)} ≤ ${d.ductility_limit.toFixed(3)}` : '—'}</td>
                     <td className="px-1 py-1 whitespace-nowrap">{d.Vf > 0 ? `${d.Vf.toFixed(1)} / ${Math.min(d.Vc, d.Vr_max).toFixed(1)}` : '—'}</td>
                     <td className="px-1 py-1 whitespace-nowrap">{d.Z_factor !== undefined && d.Z_limit !== undefined ? `${d.Z_factor.toFixed(0)} / ${d.Z_limit.toFixed(0)}` : '—'}</td>
                     <td className="px-1 py-1 whitespace-nowrap">{d.ld.toFixed(0)} / {d.ldh_required !== undefined ? d.ldh_required.toFixed(0) : '—'}</td>
-                    <td className="px-1 py-1 font-sans font-bold max-w-[6rem] whitespace-normal leading-tight">{!result.verifiable ? 'NON VÉRIFIABLE' : !d.checks_ok ? 'NON CONFORME' : d.ld_status === 'À CONFIRMER' ? 'CONFORME sauf ld : À CONFIRMER' : 'CONFORME'}</td>
+                    <td className="px-1 py-1 font-sans max-w-[6rem] whitespace-normal leading-tight">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${!result.verifiable ? 'bg-amber-100 text-amber-800' : !d.checks_ok ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                        {!result.verifiable ? 'non vérifiable' : !d.checks_ok ? 'NON' : 'OK'}
+                      </span>
+                      {result.verifiable && d.checks_ok && d.ld_status === 'À CONFIRMER' && <span className="block text-[9px] text-amber-800 font-bold mt-0.5"><Fm>ld : À CONFIRMER</Fm></span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-600">
-            <li>Voile (face intérieure) : β = {result.concreteDesign.mur_interieur.beta.toFixed(4)} [{result.concreteDesign.mur_interieur.beta_rule}] ; Vr,max = 0,25·φc·f′c·bw·dv (11.3.3) ; Vf à dv = {result.concreteDesign.cisaillement_friction.Vf_dv.toFixed(1)} kN/m (information).</li>
-            <li>ld : {[result.concreteDesign.mur_interieur, result.concreteDesign.semelle_talon, result.concreteDesign.semelle_orteil].some(d => d.ld_eq12_1_required) ? 'tableau 12.1 : enrobage ≥ db et espacement ≥ 1,4db non remplis pour au moins un élément : éq. 12.1 requise : statut de ld À CONFIRMER (non vérifié ; valeur à 0,6 indicative). Condition « espacement ≥ 1,4db » comparée en axe en axe ; espacement d’axe en axe ou libre : À CONFIRMER (A23.3 12.2.3).' : 'conditions du tableau 12.1 remplies (enrobage ≥ db, espacement ≥ 1,4db).'}</li>
-            <li>Talon : β = {result.concreteDesign.semelle_talon.beta.toFixed(4)} [{result.concreteDesign.semelle_talon.beta_rule}] ; patin : β = {result.concreteDesign.semelle_orteil.beta.toFixed(4)} [{result.concreteDesign.semelle_orteil.beta_rule}].</li>
-            <li>Ductilité : {result.concreteDesign.mur_interieur.ductility_rule} (ancienne limite 700/(700 + fy) non sécuritaire, retirée).</li>
-            <li>ld : coefficient {result.concreteDesign.mur_interieur.ld_coeff?.toFixed(2)} · k1 · k4 · fy/√f′c · db ≥ 300 mm (12.2). Talon : k1 = {result.concreteDesign.semelle_talon.ld_k1?.toFixed(1)}. ldh (12.5) : {result.concreteDesign.mur_interieur.ldh_factors}.</li>
-            <li>Joint voile-semelle (11.5) : Vr = {result.concreteDesign.cisaillement_friction.Vr.toFixed(1)} kN/m {result.concreteDesign.cisaillement_friction.status_ok ? '≥' : '<'} Vf = {result.concreteDesign.cisaillement_friction.Vf.toFixed(1)} kN/m (N non pondéré = {result.concreteDesign.cisaillement_friction.N.toFixed(1)} kN/m ; σ = {result.concreteDesign.cisaillement_friction.sigma.toFixed(3)} MPa ; {result.concreteDesign.cisaillement_friction.surface}{result.concreteDesign.cisaillement_friction.capped ? ' ; limite 0,25·φc·f′c atteinte' : ''}) : {!result.verifiable ? 'NON VÉRIFIABLE' : result.concreteDesign.cisaillement_friction.status_ok ? 'CONFORME' : 'NON CONFORME'}.</li>
-          </ul>
+          {(() => {
+            const cdz = result.concreteDesign;
+            const fr_ = cdz.cisaillement_friction;
+            const eq121 = [cdz.mur_interieur, cdz.semelle_talon, cdz.semelle_orteil].some(d => d.ld_eq12_1_required);
+            const rows: [string, React.ReactNode, React.ReactNode][] = [
+              ['Voile (face intérieure)', <>Facteur <V n="β" /> (11.3.6) [{cdz.mur_interieur.beta_rule}]</>, <><V n="β" /> = {cdz.mur_interieur.beta.toFixed(4)}</>],
+              ['Voile (face intérieure)', <><V n="V" s="r,max" /> = 0,25·<V n="φ" s="c" />·<i>f</i>′<sub className="text-[0.75em]">c</sub>·<V n="b" s="w" />·<V n="d" s="v" /> (11.3.3) ; <V n="V" s="f" /> à <V n="d" s="v" /> (information)</>, <><V n="V" s="f" /> = {fr_.Vf_dv.toFixed(1)} kN/m</>],
+              ['Talon', <>Facteur <V n="β" /> [{cdz.semelle_talon.beta_rule}]</>, <><V n="β" /> = {cdz.semelle_talon.beta.toFixed(4)}</>],
+              ['Patin', <>Facteur <V n="β" /> [{cdz.semelle_orteil.beta_rule}]</>, <><V n="β" /> = {cdz.semelle_orteil.beta.toFixed(4)}</>],
+              ['Ductilité (10.5.2)', <>{<Fm>{cdz.mur_interieur.ductility_rule}</Fm>} ; l’ancienne limite 700/(700 + <V n="f" s="y" />) non sécuritaire est retirée</>, <>c/d ≤ limite (colonne du tableau)</>],
+              ['Longueur d’ancrage (12.2)', <><V n="l" s="d" /> = {cdz.mur_interieur.ld_coeff?.toFixed(2)}·<V n="k" s="1" />·<V n="k" s="4" />·<V n="f" s="y" />/√<i>f</i>′<sub className="text-[0.75em]">c</sub>·<V n="d" s="b" /> ≥ 300 mm</>, <>talon : <V n="k" s="1" /> = {cdz.semelle_talon.ld_k1?.toFixed(1)}</>],
+              ['Tableau 12.1', eq121 ? <>Enrobage ≥ <V n="d" s="b" /> et espacement ≥ 1,4<V n="d" s="b" /> non remplis pour au moins un élément : éq. 12.1 requise. Statut de <V n="l" s="d" /> À CONFIRMER (non vérifié ; valeur à 0,6 indicative). Espacement comparé d’axe en axe ; axe en axe ou libre : À CONFIRMER (A23.3 12.2.3).</> : <>Conditions remplies (enrobage ≥ <V n="d" s="b" />, espacement ≥ 1,4<V n="d" s="b" />).</>, eq121 ? 'À CONFIRMER' : 'remplies'],
+              ['Crochet (12.5)', <><V n="l" s="dh" /> : <Fm>{cdz.mur_interieur.ldh_factors}</Fm></>, '—'],
+              ['Joint voile-semelle (11.5)', <><V n="V" s="r" /> {fr_.status_ok ? '≥' : '<'} <V n="V" s="f" /> ; <V n="N" /> non pondéré ; <V n="σ" /> ; <V n="c" /> et <V n="μ" /> : {fr_.surface}{fr_.capped ? ' ; limite 0,25·φc·f′c atteinte' : ''}</>, <><V n="V" s="r" /> = {fr_.Vr.toFixed(1)} kN/m ; <V n="V" s="f" /> = {fr_.Vf.toFixed(1)} kN/m ; <V n="N" /> = {fr_.N.toFixed(1)} kN/m ; <V n="σ" /> = {fr_.sigma.toFixed(3)} MPa — {!result.verifiable ? 'NON VÉRIFIABLE' : fr_.status_ok ? 'OK' : 'NON'}</>],
+            ];
+            return (
+              <NoteTable
+                cols={[{ name: 'Élément' }, { name: 'Vérification' }, { name: 'Valeur' }]}
+                rows={rows.map(([e, v, val]) => [e, <span key="v" className="font-serif whitespace-normal">{v}</span>, <span key="x" className="font-serif whitespace-normal">{val}</span>])}
+              />
+            );
+          })()}
         </div>
 
         {/* TABLE 2: ELU - MUR */}
