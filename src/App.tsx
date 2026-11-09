@@ -589,7 +589,7 @@ export default function App() {
                             />
                             <span className="font-bold">Compter aussi les forces horizontales et les moments variables stabilisants (L, S, W)</span>
                           </label>
-                          <p className="text-[10px] text-slate-500">Compter le poids d'une charge vive comme stabilisant suppose qu'il est présent en même temps que la poussée qu'il produit. Pour une surcharge qui peut n'occuper qu'une bande derrière le talon (camion, entreposage partiel), la poussée peut exister sans le poids sur le talon : dans ce cas, décocher l'option. Décochée : facteur 0 (option prudente, CNB 4.1.3.2.(3)). Le séisme E est inchangé.</p>
+                          <p className="text-[10px] text-slate-500">Compter le poids d'une charge vive comme stabilisant suppose qu'il est présent en même temps que la poussée qu'il produit. Pour une surcharge qui peut n'occuper qu'une bande derrière le talon (camion, entreposage partiel), la poussée peut exister sans le poids sur le talon : dans ce cas, décocher l'option. Décochée : facteur 0 (option prudente), conforme au Commentaire A du CNB 2020, ¶40 : « Pour les combinaisons de charges 2 à 5 dans le tableau 4.1.3.2.-A du CNB […], les charges variables contraires sont donc considérées être égales à zéro ». Cochée : s’écarte de ce Commentaire (choix de l’utilisateur, signalé dans la note). Le séisme E est inchangé.</p>
                         </div>
 
                         {/* Facteurs géotechniques : CFEM 5e, tableau 6.2 (p. 199) et tableau 6.4 (p. 200) — MUR-02 §1 */}
