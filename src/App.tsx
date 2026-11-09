@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Settings, 
   BarChart2, 
@@ -17,11 +17,16 @@ import {
   Sliders,
   Sparkles,
   Droplets,
-  Activity
+  Activity,
+  Save,
+  FolderOpen,
+  FilePlus2,
+  SaveAll,
+  Printer
 } from 'lucide-react';
 import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment, SiteSeismicValues } from './lib/types';
 import { StemDeflectionCard } from './components/StemDeflectionCard';
-import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
+import { analyzeRetainingWall, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
 import { Visualizer } from './components/Visualizer';
 import { ForceCharts } from './components/ForceCharts';
 import { ChargesManager } from './components/ChargesManager';
@@ -34,58 +39,13 @@ import { SoilAndSeismicMethodModal } from './components/SoilAndSeismicMethodModa
 import { OfficialNoteDeCalcul } from './components/OfficialNoteDeCalcul';
 import { FoundationSoilCards } from './components/FoundationSoilCards';
 import { SiteSeismicCard } from './components/SiteSeismicCard';
+import { FileMenu, type FileMenuItem } from './components/FileMenu';
 import { sourceAfterManualAh } from './lib/siteSeismic';
+import { defaultProject, loadAutosave, saveAutosave, parseProjectText, projectToJson, projectFileName, type ProjectState } from './lib/projectFile';
 
 type TabId = 'geom' | 'criteres' | 'charges' | 'pressures' | 'stability' | 'efforts' | 'rebar' | 'plans' | 'eau' | 'seisme' | 'theory' | 'report';
 
 const DEFAULT_SITE: SiteSeismicValues = { locality: '', siteClass: '', sa02: 0, pga: 0, pgv: 0 };
-
-const INITIAL_GEO: WallGeometry = {
-  wallType: 'cantilever',
-  hMur: 3.80,
-  epStem: 0.35,
-  ePiedAv: 0.80,
-  ePiedAr: 1.75,
-  epBase: 0.35,
-};
-
-const INITIAL_SOIL: SoilProperties = {
-  gamma: 19.0,
-  gamma_prime: 9.2,
-  phi: 29.0,
-  cohesion: 0.0,
-  hSolAv: 1.50,
-  qAllowable_SLS: 130.0,
-  qUltimate_ULS: 392.0,
-  // MUR-04 : sol d'assise (classe SW, béton coulé contre le sol -> δb = 24° par le tableau 20.4(a)) ; à confirmer par le rapport géotechnique
-  bearingSoil: { uscs: 'SW', phi: 29.0, contact: 'cast' },
-  methodConfig: DEFAULT_SOIL_METHOD_CONFIG,
-  hasWaterTable: true,
-  waterTableHeight: 2.50,
-  gamma_w: 9.81,
-  // MUR-02 §1 : φ du tableau 6.2 du CFEM 5e selon le degré de compréhension ; Ψ du tableau 6.4
-  geotechLevel: 'typical',
-  psi: 1.0,
-  quFactored: false,
-  // MUR-02 D9 / §11 : case « déduire la profondeur de gel » cochée ; df à saisir ; df non saisie -> butée nulle (défaut)
-  frost: { deduct: true, df: 0, noDf: 'zero' }
-};
-
-const INITIAL_LOADS: LoadsConfig = {
-  surcharge: 12.0,
-  surchargeType: 'L',
-  surchargeAval: 0.0,
-  pointLoadTop: {
-    enabled: true,
-    Fy: 12.0,
-    Fx: 0.0,
-    name: 'Charge Tête'
-  },
-  gammaM: 1.0,
-  gammaF: 1.0,
-  additionalLoads: []
-  // kv absent : kv = 2/3·kh par défaut (MUR-02 D6), tant que l'utilisateur n'a pas saisi de valeur
-};
 
 function StatBox({ label, value, unit, status, nonVerifiable }: { label: string, value: string, unit: string, status?: 'ok' | 'warning' | 'error', nonVerifiable?: boolean }) {
     // Données invalides (alerte) : aucun statut de conformité n'est affiché
@@ -109,12 +69,76 @@ function StatBox({ label, value, unit, status, nonVerifiable }: { label: string,
 }
 
 export default function App() {
-  const [geo, setGeo] = useState<WallGeometry>(INITIAL_GEO);
-  const [soil, setSoil] = useState<SoilProperties>(INITIAL_SOIL);
-  const [loads, setLoads] = useState<LoadsConfig>(INITIAL_LOADS);
-  const [rebarConfig, setRebarConfig] = useState<RebarCustomConfig>(DEFAULT_REBAR_CONFIG);
+  // Dernier état local (sauvegarde automatique) ou valeurs par défaut ; calculé une seule fois au chargement
+  const [init] = useState<ProjectState>(() => loadAutosave() ?? defaultProject());
+  const [projectName, setProjectName] = useState<string>(init.name);
+  const [geo, setGeo] = useState<WallGeometry>(init.geo);
+  const [soil, setSoil] = useState<SoilProperties>(init.soil);
+  const [loads, setLoads] = useState<LoadsConfig>(init.loads);
+  const [rebarConfig, setRebarConfig] = useState<RebarCustomConfig>(init.rebarConfig);
   // Béton et armature saisissables (MUR-01 §3.2) : DEFAULT_CONCRETE_PROPS ne sert plus que de valeurs initiales
-  const [conc, setConc] = useState<ConcreteProperties>(DEFAULT_CONCRETE_PROPS);
+  const [conc, setConc] = useState<ConcreteProperties>(init.conc);
+  const [localSaved, setLocalSaved] = useState<boolean>(false);
+  const [fileMessage, setFileMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const openInputRef = useRef<HTMLInputElement>(null);
+
+  const applyProject = (st: ProjectState) => {
+    setProjectName(st.name); setGeo(st.geo); setSoil(st.soil); setLoads(st.loads); setConc(st.conc); setRebarConfig(st.rebarConfig);
+  };
+
+  // Sauvegarde locale automatique (commodité ; échec silencieux -> indicateur masqué)
+  useEffect(() => {
+    const t = setTimeout(() => setLocalSaved(saveAutosave({ name: projectName, geo, soil, loads, conc, rebarConfig })), 400);
+    return () => clearTimeout(t);
+  }, [projectName, geo, soil, loads, conc, rebarConfig]);
+
+  const handleSaveFile = (nameOverride?: string) => {
+    const name = nameOverride ?? projectName;
+    try {
+      const blob = new Blob([projectToJson({ name, geo, soil, loads, conc, rebarConfig })], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = projectFileName(name);
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setFileMessage({ kind: 'ok', text: `Projet enregistré : ${a.download}` });
+    } catch {
+      setFileMessage({ kind: 'error', text: 'Échec de l’enregistrement du fichier.' });
+    }
+  };
+
+  const handleOpenFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permet de rouvrir le même fichier
+    if (!file) return;
+    let text: string;
+    try { text = await file.text(); } catch { setFileMessage({ kind: 'error', text: 'Lecture du fichier impossible. État inchangé.' }); return; }
+    const r = parseProjectText(text);
+    if ("error" in r) { setFileMessage({ kind: "error", text: `${r.error} État inchangé.` }); return; }
+    applyProject(r.state);
+    setFileMessage({ kind: 'ok', text: `Projet ouvert : ${r.state.name}` });
+  };
+
+  const handleSaveAs = () => {
+    const n = window.prompt('Nom du projet :', projectName);
+    if (n === null) return; // annulé
+    const name = n.trim() || projectName;
+    setProjectName(name);
+    handleSaveFile(name);
+  };
+
+  const handlePrintNote = () => {
+    setActiveTab('report');
+    setTimeout(() => window.print(), 150);
+  };
+
+  const handleNewProject = () => {
+    if (!window.confirm('Nouveau projet : toutes les valeurs reviennent aux valeurs par défaut. Les données non enregistrées seront perdues. Continuer ?')) return;
+    applyProject(defaultProject());
+    setFileMessage({ kind: 'ok', text: 'Nouveau projet (valeurs par défaut).' });
+  };
+
   const [isSoilModalOpen, setIsSoilModalOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabId>('geom');
 
@@ -127,6 +151,15 @@ export default function App() {
   const handleChangeSoil = (key: keyof SoilProperties, value: number) => setSoil(prev => ({ ...prev, [key]: value }));
   const handleChangeConc = (key: keyof ConcreteProperties, value: number) => setConc(prev => ({ ...prev, [key]: value }));
   const handleChangeLoads = (key: keyof LoadsConfig, value: number) => setLoads(prev => ({ ...prev, [key]: value }));
+
+  const fileMenuItems: FileMenuItem[] = [
+    { label: 'Nouveau', icon: <FilePlus2 size={14} />, shortcut: 'Ctrl+N', key: 'n', onSelect: handleNewProject },
+    { label: 'Ouvrir…', icon: <FolderOpen size={14} />, shortcut: 'Ctrl+O', key: 'o', onSelect: () => openInputRef.current?.click() },
+    { label: 'Enregistrer', icon: <Save size={14} />, shortcut: 'Ctrl+S', key: 's', onSelect: () => handleSaveFile() },
+    { label: 'Enregistrer sous…', icon: <SaveAll size={14} />, shortcut: 'Ctrl+Maj+S', key: 's', shift: true, onSelect: handleSaveAs },
+    { separator: true },
+    { label: 'Imprimer la note / PDF', icon: <Printer size={14} />, shortcut: 'Ctrl+P', key: 'p', onSelect: handlePrintNote },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900 font-sans">
@@ -180,7 +213,7 @@ export default function App() {
               className="flex items-center gap-1.5 bg-slate-800 text-blue-300 px-3 py-2 rounded-xl border border-slate-700 shadow-sm"
               title="Édition du CNB pour les combinaisons du tableau 4.1.3.2.-A. H = 1,0 au cas 5 dans les deux éditions."
             >
-              <span className="hidden md:inline">Combinaisons :</span>
+              <span className="hidden 2xl:inline whitespace-nowrap">Combinaisons :</span>
               <select
                 value={loads.cnbEdition ?? '2020'}
                 onChange={e => setLoads(prev => ({ ...prev, cnbEdition: e.target.value as '2020' | '2025' }))}
@@ -198,7 +231,7 @@ export default function App() {
               title="Configurer les théories de poussée (Ka, Kp) et séisme"
             >
               <Sliders size={14} className="text-amber-400" />
-              <span className="hidden md:inline">Sol & Séisme :</span>
+              <span className="hidden 2xl:inline whitespace-nowrap">Sol & Séisme :</span>
               <span className="font-mono text-[11px] text-white bg-slate-900 px-1.5 py-0.5 rounded">
                 {result.soilMethodConfig.activeMethod === 'rankine' ? 'Rankine' : (result.soilMethodConfig.activeMethod === 'coulomb' ? 'Coulomb' : 'K0')} | {result.soilMethodConfig.seismicMethod === 'seed_whitman' ? 'Seed' : (result.soilMethodConfig.seismicMethod === 'mononobe_okabe' ? 'M-O' : 'Stat')}
               </span>
@@ -214,21 +247,41 @@ export default function App() {
               }`}
             >
               <ShieldCheck size={14} />
-              <span className="hidden sm:inline">Choix Barres & Mr</span>
+              <span className="hidden sm:inline whitespace-nowrap">Choix Barres & Mr</span>
             </button>
 
+            {/* Projet : menu Fichier, nom du projet, indicateur de sauvegarde locale */}
+            <input ref={openInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleOpenFile} />
+            <div className="flex items-center gap-1.5" role="group" aria-label="Fichier de projet">
+              <input
+                type="text"
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                aria-label="Nom du projet"
+                title="Nom du projet (utilisé pour le nom du fichier et la note de calcul)"
+                placeholder="Nom du projet"
+                className="w-28 2xl:w-40 bg-slate-800 border border-slate-700 text-white font-mono text-[11px] px-2 py-2 rounded-xl"
+              />
+              <FileMenu items={fileMenuItems} />
+              {localSaved && <span className="hidden 2xl:inline text-[10px] font-normal text-slate-400" title="Copie automatique dans ce navigateur ; ne remplace pas le fichier">Enregistré localement</span>}
+            </div>
+
             <button 
-                onClick={() => {
-                   setActiveTab('report');
-                   setTimeout(() => window.print(), 150);
-                }}
+                onClick={handlePrintNote}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-blue-900/20"
             >
                 <FileCheck size={16} />
-                <span className="hidden sm:inline">Note de Calcul</span>
+                <span className="hidden sm:inline whitespace-nowrap">Note de Calcul</span>
             </button>
         </div>
       </header>
+
+      {fileMessage && (
+        <div role={fileMessage.kind === 'error' ? 'alert' : 'status'} className={`px-6 py-2 text-xs font-bold flex items-center justify-between print:hidden ${fileMessage.kind === 'error' ? 'bg-rose-100 text-rose-800 border-b border-rose-300' : 'bg-emerald-50 text-emerald-800 border-b border-emerald-200'}`}>
+          <span>{fileMessage.text}</span>
+          <button onClick={() => setFileMessage(null)} className="underline">Fermer</button>
+        </div>
+      )}
 
       {/* Main Grid */}
       <main className="flex-1 flex flex-col lg:flex-row max-w-screen-2xl mx-auto w-full overflow-hidden">
@@ -1084,7 +1137,7 @@ export default function App() {
 
                 {activeTab === 'report' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <OfficialNoteDeCalcul geo={geo} soil={soil} conc={conc} result={result} loads={loads} />
+                        <OfficialNoteDeCalcul projectName={projectName} geo={geo} soil={soil} conc={conc} result={result} loads={loads} />
                     </div>
                 )}
             </div>

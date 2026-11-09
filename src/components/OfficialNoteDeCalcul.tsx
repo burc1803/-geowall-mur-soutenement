@@ -12,6 +12,7 @@ import { fr as frc } from '../lib/theoryEquations';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
 interface OfficialNoteDeCalculProps {
+  projectName?: string; // nom du projet saisi dans l'en-tête
   geo: WallGeometry;
   soil: SoilProperties;
   conc: ConcreteProperties;
@@ -220,7 +221,7 @@ function WallSketch({ geo, B, totalHeight, hSolAv, hPass, hr }: { geo: WallGeome
   );
 }
 
-export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: OfficialNoteDeCalculProps) {
+export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loads }: OfficialNoteDeCalculProps) {
   const [engineerComment, setEngineerComment] = useState<string>(
     'Commentaire de l\'ingénieur : à compléter.'
   );
@@ -284,6 +285,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
 
           <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div className="col-span-2 font-semibold text-slate-700">Projet au Québec — code applicable : Code de construction du Québec, Chapitre I – Bâtiment (CNB adopté avec modifications) ; référence de calcul : CNB {result.cnbEdition}</div>
+            <div className="col-span-2"><strong>Nom du projet :</strong> {projectName?.trim() || 'projet-mur'}</div>
             <div><strong>Date :</strong> {new Date().toLocaleDateString('fr-CA')}</div>
             <div><strong>Logiciel :</strong> GeoWall PRO v2.4</div>
             <div><strong>Type d'Écran :</strong> {geo.wallType === 'cantilever' ? 'Mur Cantilever Autostable' : 'Mur de Sous-sol Bloqué'}</div>
