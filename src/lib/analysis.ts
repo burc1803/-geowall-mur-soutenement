@@ -123,7 +123,8 @@ export const DEFAULT_CONCRETE_PROPS: ConcreteProperties = {
  * 4.1.3.2.(5) : la charge permanente qui s'oppose vaut 0,9D (cas 2, 3, 4) ou 1,0D (cas 5) : variantes 0,9D générées
  *   explicitement, seules ces variantes (et le cas 5) sont soumises au glissement et au renversement.
  * Une combinaison = un seul jeu de facteurs. Une charge variable qui stabilise reçoit le facteur 0 dans
- * les vérifications où elle est favorable (voir analyzeRetainingWall).
+ * les vérifications où elle est favorable (voir analyzeRetainingWall), sauf le poids vertical des charges L, S, W
+ * si l'option MUR-06 (loads.countStabilizingVariable, cochée par défaut) est cochée ; le séisme E reste à 0.
  */
 export const FACTEUR_H = 1.5; // 4.1.3.2.(4)
 // Facteur de H au cas 5 (amendement A1, décision D16 option A) : 1,0 dans les deux éditions.
@@ -1224,9 +1225,10 @@ export function analyzeRetainingWall(
     if (comb.caseNo === 1) R_top_default = sumRt;
 
     // Agrégation des actions pour une combinaison. zeroFav = true : les charges variables (et E) qui stabilisent
-    // reçoivent le facteur 0 (CNB, 4.1.3.2.(3)). La charge permanente garde le facteur de la combinaison.
+    // reçoivent le facteur 0 (CNB, 4.1.3.2.(3)), sauf le poids vertical (Fy > 0) des charges L, S, W si l'option MUR-06 est cochée (E reste à 0). La charge permanente garde le facteur de la combinaison.
     // heelMode = true : basculement vers le talon. Les actions D qui poussent la résultante vers le talon (Fx < 0, Mz < 0)
     // ne sont pas des charges « qui s'opposent » à ce basculement : facteur maximal Dunfav (4.1.3.2.(5)); poids à 0,9D.
+    const countVar = loads.countStabilizingVariable !== false; // MUR-06 D5 : absent = true
     const aggregate = (zeroFav: boolean, heelMode = false) => {
       let sumV = 0;
       let sumH = 0;
@@ -1241,7 +1243,9 @@ export function analyzeRetainingWall(
           return comp.soil ? soilWeightFactor(comb, comp.soil.saturated, comp.soil.hs) : comb.factors.D;
         }
         // H (poids et poussée de l'eau, terres) n'est jamais mis à zéro ; seules les charges variables et E le sont
-        return favourable && zeroFav && comp.type !== 'H' ? 0 : (comb.factors[comp.type] || 0);
+        // MUR-06 D1/D4 : option cochée -> le poids vertical (Fy > 0) d'une charge L, S, W garde le facteur de la combinaison ; E reste à 0
+        const countedVertical = countVar && vertical && (comp.type === 'L' || comp.type === 'S' || comp.type === 'W');
+        return favourable && zeroFav && comp.type !== 'H' && !countedVertical ? 0 : (comb.factors[comp.type] || 0);
       };
       for (const comp of allComps) {
         if (comp.Fy > 0) {
@@ -1274,7 +1278,7 @@ export function analyzeRetainingWall(
       return { sumV, sumH, Mres, Mover };
     };
 
-    const stab = aggregate(true); // glissement, renversement : stabilisants variables à 0
+    const stab = aggregate(true); // glissement, renversement : stabilisants variables à 0, sauf L, S, W verticales si l'option MUR-06 est cochée
     const full = aggregate(false); // portance : tous les facteurs de la combinaison
     const heel = aggregate(false, true); // basculement vers le talon : poids à 0,9D, actions D vers le talon à Dunfav
 
@@ -1404,6 +1408,7 @@ export function analyzeRetainingWall(
     // Efforts dans la semelle au nu du voile : distribution réelle de la pression, mêmes facteurs (E11, E11b)
     const fH = comb.factors['H'] || 0;
     const fSur = comb.factors[surType] || 0;
+    const fSurAv = comb.factors[surAvalType] || 0;
     const fSoil = (saturated: boolean, hs: number) => soilWeightFactor(comb, saturated, hs);
     // Efforts de la semelle (MUR-02 §5) : intégration EXACTE de la pression linéaire par morceaux (trapèze ou triangle, longueur de contact exacte),
     // plus les charges verticales constantes. u = distance depuis l'extrémité libre ; V et M à la distance xLen (face du voile).
@@ -1421,7 +1426,9 @@ export function analyzeRetainingWall(
         down = comb.factors.D * conc.gamma_c * geo.epBase
           + fSoil(false, soil.hSolAv) * foundation.gamma * hDryToe
           + fSoil(true, soil.hSolAv) * gamma_prime_f * hSubToe
-          + fH * gamma_w * hSubToe; // charge variable à l'avant : favorable, facteur 0
+          + fH * gamma_w * hSubToe
+          // MUR-06 D6 : surcharge aval sur le patin, facteur de la combinaison si l'option est cochée ; sinon facteur 0 (charge variable à l'avant : favorable)
+          + (countVar ? (loads.surchargeAval ?? 0) * fSurAv : 0);
       }
       const k = uplift - down;
       let V = k * xLen;
@@ -1928,6 +1935,7 @@ export function analyzeRetainingWall(
     eccentricity_ok_ULS: results.filter(r => r.type === 'ULS').every(r => r.status_ecc === 'OK'),
     eccentricity_ok_SLS: results.filter(r => r.type === 'SLS').every(r => r.status_ecc === 'OK'),
     lateral_nominal: components.concat(seismicComps[0] ?? []).filter(c => c.Fx !== 0).map(c => ({ name: c.name, type: c.type, Fx: c.Fx, y: c.y, applied: !!c.stemApplied })),
+    surchargeWeights_nominal: components.filter(c => c.name.startsWith('W_surcharge_')).map(c => ({ side: c.name.startsWith('W_surcharge_amont') ? 'amont' as const : 'aval' as const, type: c.type as LoadCaseType, Fy: c.Fy, x: c.x })),
     weights_nominal: {
       stem: components.filter(c => c.name === 'Wb1_Mur').reduce((s, c) => s + c.Fy, 0),
       base: components.filter(c => c.name === 'Wb2_Semelle').reduce((s, c) => s + c.Fy, 0),

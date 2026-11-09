@@ -133,7 +133,7 @@ describe('MUR-05 D6 : changement de résultats ÉLS sur le projet par défaut (a
     methodConfig: { activeMethod: 'rankine', passiveMethod: 'rankine', seismicMethod: 'mononobe_okabe', pga: 0.15, deltaFrictionRatio: 0.667 },
     hasWaterTable: true, waterTableHeight: 2.5, gamma_w: 9.81, geotechLevel: 'typical', psi: 1.0, quFactored: false, frost: { deduct: true, df: 0, noDf: 'zero' }
   };
-  const loads: LoadsConfig = { surcharge: 12, surchargeType: 'L', surchargeAval: 0, pointLoadTop: { enabled: true, Fy: 12, Fx: 0, name: 'Charge Tête' }, gammaM: 1, gammaF: 1, additionalLoads: [] };
+  const loads: LoadsConfig = { surcharge: 12, surchargeType: 'L', surchargeAval: 0, pointLoadTop: { enabled: true, Fy: 12, Fx: 0, name: 'Charge Tête' }, gammaM: 1, gammaF: 1, additionalLoads: [], countStabilizingVariable: false /* MUR-06 : valeurs de MUR-05 = option décochée */ };
   const r = run(soil, geo, loads);
   const q = (id: string) => r.combinations.find(c => c.type === 'SLS' && c.combName.includes(`ELS ${id} `))!.q_design;
   it('portance ÉLS : 1D + 1L + 1H inchangée (ancienne ELS 1 = nouvelle S1 = 123,69 kPa) ; qadm = 130 respecté', () => {

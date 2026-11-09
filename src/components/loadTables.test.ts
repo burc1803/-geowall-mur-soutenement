@@ -50,15 +50,56 @@ const dflt = check('projet par défaut (nappe)', SOIL, LOADS);
 check('sans nappe', { ...SOIL, hasWaterTable: false, waterTableHeight: 0 }, LOADS);
 check('sans nappe, butée active (df = 1,0 m)', { ...SOIL, hasWaterTable: false, waterTableHeight: 0, frost: { deduct: true, df: 1.0, noDf: 'zero' } }, LOADS);
 
-describe('surcharges uniformes : poids vertical non compté dans ΣV par le moteur', () => {
+const off = check('projet par défaut, option décochée (MUR-06)', SOIL, { ...LOADS, countStabilizingVariable: false });
+describe('surcharges uniformes, option MUR-06 décochée : poids vertical non compté dans ΣV par le moteur', () => {
   it('ΣV de S1 = ΣV de S0 (sumV_min et sumV_max) ; lignes « donnée » sans force ni moment', () => {
-    const c = dflt.result.combinations;
+    const c = off.result.combinations;
     const s0 = c.find(x => x.combName.includes('ELS S0'))!, s1 = c.find(x => x.combName.includes('ELS S1 '))!;
     expect(s1.sumV_min).toBeCloseTo(s0.sumV_min, 9);
     expect(s1.sumV_max).toBeCloseTo(s0.sumV_max, 9);
-    const sur = dflt.t.stabilizing.find(r => r.desc.startsWith('Surcharge amont'))!;
+    const sur = off.t.stabilizing.find(r => r.desc.startsWith('Surcharge amont'))!;
     expect(sur.kind).toBe('data');
     expect(sur.fv).toBeNull();
     expect(sur.moment).toBeNull();
   });
+});
+
+describe('surcharges uniformes, option MUR-06 cochée (défaut) : poids compté dans Σ L', () => {
+  const on = dflt; // LOADS sans countStabilizingVariable = cochée
+  const offR = off.result;
+  const sumV = (r: typeof offR, tag: string) => r.combinations.find(x => x.combName.includes(tag))!;
+  it('ligne « Surcharge amont » : Fv = q·L_talon, bras = x du talon, moment = Fv·x, kind force', () => {
+    const sur = on.t.stabilizing.find(r => r.desc.startsWith('Surcharge amont'))!;
+    expect(sur.kind).toBe('force');
+    expect(sur.fv).toBeCloseTo(12 * GEO.ePiedAr, 9);
+    expect(sur.arm).toBeCloseTo(GEO.ePiedAv + GEO.epStem + GEO.ePiedAr / 2, 9);
+    expect(sur.moment).toBeCloseTo(sur.fv! * sur.arm!, 9);
+  });
+  it('Σ L (Fv, tableau 2a) = q·L_talon + charge de tête Fy ; ΣV de S1 (cochée) − ΣV de S0 (cochée) = cette valeur', () => {
+    const sumL = sumsByType(on.t.stabilizing).find(g => g.label === 'Σ L')!;
+    expect(sumL.fv).toBeCloseTo(12 * GEO.ePiedAr + 12, 9);
+    const s0 = sumV(on.result, 'ELS S0'), s1 = sumV(on.result, 'ELS S1 ');
+    // S1 = 1D + 1L : ΣV(S1) − ΣV(S0) = Σ L vertical (surcharge + charge de tête) ; avec l'option décochée la différence est nulle
+    expect(s1.sumV_max - s0.sumV_max).toBeCloseTo(sumL.fv, 6);
+    expect(sumV(offR, 'ELS S1 ').sumV_max - sumV(offR, 'ELS S0').sumV_max).toBeCloseTo(0, 9);
+  });
+  it('Σ D + H inchangé par l’option : = Ms_nominal de S0', () => {
+    expect(sumsByType(on.t.stabilizing)[0].moment).toBeCloseTo(sumV(on.result, 'ELS S0').Ms_nominal, 2);
+  });
+});
+
+describe('surcharge amont de type D : poids compté par le moteur quelle que soit l’option', () => {
+  for (const on of [true, false]) {
+    it(`option ${on ? 'cochée' : 'décochée'} : ligne force dans Σ D + H, Fv = q·L_talon, Σ D + H = Ms_nominal de S0 (S0 inclut D)`, () => {
+      const loadsD: LoadsConfig = { ...LOADS, surchargeType: 'D', countStabilizingVariable: on };
+      const r = analyzeRetainingWall(GEO, SOIL, loadsD, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
+      const t = buildLoadTables(GEO, SOIL, r, loadsD);
+      const sur = t.stabilizing.find(x => x.desc.startsWith('Surcharge amont'))!;
+      expect(sur.kind).toBe('force');
+      expect(sur.type).toBe('D');
+      expect(sur.fv).toBeCloseTo(12 * GEO.ePiedAr, 9);
+      const s0 = r.combinations.find(c => c.combName.includes('ELS S0'))!;
+      expect(sumsByType(t.stabilizing)[0].moment).toBeCloseTo(s0.Ms_nominal, 2);
+    });
+  }
 });

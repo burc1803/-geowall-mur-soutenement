@@ -1,8 +1,8 @@
-# MUR-06 — Charges variables stabilisantes (poids de la surcharge)          Statut : PROPOSÉE (2026-11-08)
+# MUR-06 — Charges variables stabilisantes (poids de la surcharge)          Statut : APPROUVÉE (2026-11-08)
 
 | Champ | Valeur |
 |---|---|
-| Statut | **PROPOSÉE** le 2026-11-08. Seul l'utilisateur peut la passer à APPROUVÉE. |
+| Statut | **APPROUVÉE** par l'utilisateur le 2026-11-08 (« J'approuve MUR-06 »). |
 | Demande | « il faut tenir en compte toutes les charges » ; choix explicite de l'utilisateur : **option B** — « son poids est compté partout, y compris comme force stabilisante ». |
 | Base | MUR-01 (combinaisons CNB 4.1.3.2), MUR-02 §2–§5 et §12 (stabilité à l'ÉLU, portance ÉLU/ÉLS, efforts de la semelle), MUR-04 (glissement). |
 | Fichiers visés | `src/lib/analysis.ts` (fonction `aggregate`, paramètre `zeroFav`, efforts du patin), `src/lib/types.ts`, interface Critères, note (sections 2, 3, 5). |

@@ -57,7 +57,7 @@ describe('CNB 2025 (option) - combinaisons', () => {
   });
   it('charge variable stabilisante (surcharge sur le talon) : facteur 0 au glissement, facteur plein à la portance', () => {
     const base = analyzeRetainingWall(GEO_R, soilR(), loadsR(), DEFAULT_CONCRETE_PROPS, rebarR);
-    const withSur = analyzeRetainingWall(GEO_R, soilR(), loadsR({ surcharge: 10 }), DEFAULT_CONCRETE_PROPS, rebarR);
+    const withSur = analyzeRetainingWall(GEO_R, soilR(), loadsR({ surcharge: 10, countStabilizingVariable: false }), DEFAULT_CONCRETE_PROPS, rebarR); // MUR-06 : ce test décrit l'option décochée
     const pick = (r: typeof base) => r.combinations.find(c => c.caseNo === 2 && c.factors.D === 0.9 && c.factors.S === 0 && c.factors.W === 0)!;
     // ΣV de stabilité identique : la surcharge ne stabilise pas
     close(pick(withSur).sumV_min, pick(base).sumV_min, 1e-9);

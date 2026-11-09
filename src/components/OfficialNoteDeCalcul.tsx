@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AnalysisResult, WallGeometry, SoilProperties, ConcreteProperties, LoadsConfig } from '../lib/types';
 import { BearingPressureDiagram } from './BearingPressureDiagram';
 import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
-import { buildLoadTables, sumsByType } from './loadTables';
+import { buildLoadTables, countStabilizingVariable, sumsByType } from './loadTables';
 import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass } from '../lib/rebarPlans';
 import { Fm } from './Fm';
 import { Eq } from './Eq';
@@ -241,6 +241,8 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
   const seismicOn = result.soilMethodConfig.seismicMethod !== 'none';
   const ep = result.earthPressures;
   const loadTables = buildLoadTables(geo, soil, result, loads);
+  const countVar = countStabilizingVariable(loads); // MUR-06 D5/D7
+  const MUR06_MENTION = 'Choix de l’utilisateur, moins prudent que le facteur 0 ; CNB 4.1.3.2.(3) n’impose pas le facteur 0 à une charge principale (lu) ; pratique CFEM : À CONFIRMER.';
 
   return (
     <div id="note-officielle" className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-2 md:p-6 print:p-0 print:max-w-none text-slate-800">
@@ -441,7 +443,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
                     { name: 'Bras de levier', unit: '(m)', align: 'center' },
                     { name: 'Moment / orteil', unit: '(kN·m/m)', align: 'center' },
                   ]}
-                  rows={rowsR.map(r => [r.desc, r.type + ((r.type === 'L' || r.type === 'S') && n === '2a' ? ' *' : ''), num(r.fh), r.kind === 'data' ? 'non comptée' : num(r.fv), num(r.arm), r.moment === null ? '—' : fmt(r.moment, 2)])}
+                  rows={rowsR.map(r => [r.desc, r.type + (!countVar && (r.type === 'L' || r.type === 'S') && n === '2a' ? ' *' : ''), num(r.fh), r.kind === 'data' ? 'non comptée' : num(r.fv), num(r.arm), r.moment === null ? '—' : fmt(r.moment, 2)])}
                   footer={sums.map(t => ({ shaded: t.shaded, cells: [t.label, '', fmt(t.fh, 2), fmt(t.fv, 2), '', fmt(t.moment, 2)] }))}
                 />
               </div>
@@ -450,8 +452,12 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
           {loadTables.dataNotes.length > 0 && (
             <p className="text-[10px] text-slate-600">Données hors force : {loadTables.dataNotes.join(' ; ')}.</p>
           )}
-          <p className="text-[10px] text-slate-500">Classement par rapport au glissement et au renversement autour de l’orteil. * Une charge variable stabilisante (L, S) est prise à 0 dans les vérifications de stabilité (CNB 4.1.3.2.(3)).</p>
-          <p className="text-[10px] text-slate-500">Fh : force horizontale, Fv : force verticale (valeurs absolues). Bras de levier : x depuis l’orteil pour Fv, y depuis la sous-face de la semelle pour Fh ; « — » pour un moment saisi (moment direct). Moment = force × bras, positif dans son tableau. Les moments saisis, la butée et l’eau à l’avant sont inclus ; le type CNB H désigne ici les terres et l’eau. Surcharges uniformes (kPa) : leur poids vertical n’est pas compté dans ΣV par le moteur (charge variable stabilisante prise à 0, CNB 4.1.3.2.(3)) ; il n’entre donc pas dans les sommes, et leur poussée horizontale figure au tableau 2b.</p>
+          <p className="text-[10px] text-slate-500">Classement par rapport au glissement et au renversement autour de l’orteil. {countVar
+            ? `Les charges variables verticales stabilisantes (L, S, W) sont comptées avec le facteur de la combinaison (MUR-06). ${MUR06_MENTION}`
+            : '* Une charge variable stabilisante (L, S) est prise à 0 dans les vérifications de stabilité (CNB 4.1.3.2.(3)) : option « Compter les charges variables stabilisantes » décochée.'}</p>
+          <p className="text-[10px] text-slate-500">Fh : force horizontale, Fv : force verticale (valeurs absolues). Bras de levier : x depuis l’orteil pour Fv, y depuis la sous-face de la semelle pour Fh ; « — » pour un moment saisi (moment direct). Moment = force × bras, positif dans son tableau. Les moments saisis, la butée et l’eau à l’avant sont inclus ; le type CNB H désigne ici les terres et l’eau. {countVar
+            ? 'Surcharges uniformes (kPa) : leur poids vertical Fv = q × longueur (talon ou patin) est compté dans Σ L, avec son bras et son moment ; leur poussée horizontale figure au tableau 2b.'
+            : 'Surcharges uniformes (kPa) : leur poids vertical n’est pas compté dans ΣV par le moteur (charge variable stabilisante prise à 0, CNB 4.1.3.2.(3)) ; il n’entre donc pas dans les sommes, et leur poussée horizontale figure au tableau 2b.'}</p>
         </div>
 
         {/* 3. COMBINAISONS DE CHARGES */}
@@ -461,7 +467,9 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
             <li><strong>Édition retenue :</strong> CNB {result.cnbEdition}, 4.1.3.2 et tableau 4.1.3.2.-A (défaut : 2020 ; option : 2025).</li>
             <li><strong>Cas 5 :</strong> {result.cnbEdition === '2020' ? '1,0D + 1,0E + 1,0H + 0,5L + 0,25S' : '1,0D + 1,0E + 1,0H + 0,5L + 0,15S'}.</li>
             <li><strong>Facteur 1,0H au cas 5 :</strong> note A-4.1.3.2.(4) (1,5H pour les cas 2, 3 et 4) et tableau A-3 du Commentaire A du CNB 2020 (1,0 pour D, H, T et P avec E). Commentaire 2025 : À CONFIRMER.</li>
-            <li>Charges variables favorables prises à zéro ; 0,9D ou 1,0D (cas 5) pour la charge permanente qui s'oppose ; poids du sol porté selon 4.1.3.2.(8) et (9).</li>
+            <li>{countVar
+              ? <>Charges variables verticales (L, S, W) stabilisantes comptées avec le facteur de la combinaison (poids de la surcharge, charge de tête, charges verticales saisies) ; le séisme E garde son traitement. {MUR06_MENTION} </>
+              : <>Charges variables favorables prises à zéro (option « Compter les charges variables stabilisantes » décochée) ; </>}0,9D ou 1,0D (cas 5) pour la charge permanente qui s'oppose ; poids du sol porté selon 4.1.3.2.(8) et (9).</li>
             <li><strong>ÉLS (portance, e ≤ B/6, flèche) :</strong> tableau 4.1.3.4 du CNB (identique en 2020 et 2025), H = 1,0 (4.1.3.4. 4)) : S0 = 1,0D + 1,0H ; charges principales seules S1, S2, S3 ; accompagnements 0,35L, 0,35S, 0,3W (MUR-05 D6). Le séisme n'en fait pas partie. 0,5L (stockage, équipement, locaux techniques) : usage non connu du moteur, 0,35L retenu, À CONFIRMER.</li>
           </ul>
           <DataTable
@@ -1104,6 +1112,9 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
               ['Effort tranchant', <>Vérifié à la face de la semelle (conservateur), non à <V n="d" s="v" />.</>, 'applique'],
             ] },
             { title: 'Charges', rows: [
+              ['Charges variables stabilisantes (MUR-06)', countVar
+                ? <>Option « Compter les charges variables stabilisantes (L, S, W) » cochée : le poids de la surcharge (amont sur le talon, aval sur le patin), la charge de tête Fy et les charges verticales saisies reçoivent le facteur de la combinaison dans toutes les vérifications ; la poussée garde le même facteur ; le séisme E est inchangé. {MUR06_MENTION} Hypothèse : la surcharge est présente en même temps que la poussée qu’elle produit ; pour une surcharge qui peut n’occuper qu’une bande derrière le talon (camion, entreposage partiel), décocher l’option.</>
+                : <>Option décochée : charges variables verticales stabilisantes prises à 0 en stabilité (option prudente, CNB 4.1.3.2.(3)) ; leur poussée garde le facteur de la combinaison.</>, 'confirmer'],
               ['Charges linéaires derrière le mur', <>CFEM 5e, fig. 20.8 (p. 694) : <V n="H" /> = <V n="H" s="p" /> = <V n="h" s="r" /> + <V n="t" s="s" />, distance mesurée depuis la face arrière du voile, origine à la surface du remblai (décision de l’utilisateur du 2026-11-08) ; aucune pression au-dessus du remblai.</>, 'applique'],
               ['Charges ponctuelles et réparties', <>Charges ponctuelles de la fig. 20.8 non implémentées ; charges réparties assimilées à leur résultante : approximation À CONFIRMER.</>, 'confirmer'],
             ] },

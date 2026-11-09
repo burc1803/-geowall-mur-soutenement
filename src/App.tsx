@@ -568,6 +568,20 @@ export default function App() {
                           <p className="text-[10px] text-slate-500">Limite d'excentricité e ≤ B/6 à l'ÉLU et à l'ÉLS (CFEM 5e p. 348 et 20.7.3.4-20.7.3.5, MUR-02 D3) : statut calculé pour chaque combinaison. Le renversement Ψ·φ_ov·ΣM_stab ≥ ΣM_renv est vérifié dans tous les cas (forme d'application À CONFIRMER).</p>
                         </div>
 
+                        {/* Charges variables stabilisantes — MUR-06 D5 : cochée par défaut (choix de l'utilisateur) */}
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col gap-2 mt-1">
+                          <label className="flex items-start gap-2 text-[11px] text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={loads.countStabilizingVariable !== false}
+                              onChange={e => setLoads(prev => ({ ...prev, countStabilizingVariable: e.target.checked }))}
+                            />
+                            <span className="font-bold">Compter les charges variables stabilisantes (L, S, W) en stabilité</span>
+                          </label>
+                          <p className="text-[10px] text-slate-500">Compter le poids d'une charge vive comme stabilisant suppose qu'il est présent en même temps que la poussée qu'il produit. Pour une surcharge qui peut n'occuper qu'une bande derrière le talon (camion, entreposage partiel), la poussée peut exister sans le poids sur le talon : dans ce cas, décocher l'option. Décochée : facteur 0 (option prudente, CNB 4.1.3.2.(3)). Le séisme E est inchangé.</p>
+                        </div>
+
                         {/* Facteurs géotechniques : CFEM 5e, tableau 6.2 (p. 199) et tableau 6.4 (p. 200) — MUR-02 §1 */}
                         <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100 flex flex-col gap-2 mt-1">
                           <span className="text-[10px] font-black uppercase text-indigo-900 tracking-wider flex items-center justify-between">

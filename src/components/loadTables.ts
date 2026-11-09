@@ -40,6 +40,9 @@ export function sumsByType(rows: LoadTableRow[]): { label: string; shaded: boole
   return out;
 }
 
+/** MUR-06 D5 : option « compter les charges variables stabilisantes (L, S, W) » ; absent = true (comme le moteur). */
+export const countStabilizingVariable = (loads?: LoadsConfig) => loads?.countStabilizingVariable !== false;
+
 const f2 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : 'non disponible');
 
 export function latLabel(n: string): string {
@@ -78,14 +81,21 @@ export function buildLoadTables(geo: WallGeometry, soil: SoilProperties, result:
     else rows.push({ desc, type, role, fh: null, fv: null, arm: null, moment: Math.abs(Mz), kind: 'moment' });
   };
 
-  /** Ligne « donnée » : poids vertical d'une surcharge (kPa) que le moteur ne compte pas dans ΣV (charge variable stabilisante prise à 0,
-   *  CNB 4.1.3.2.(3) : ΣV identique en ÉLS S0 et S1, vérifié). Aucune force ni aucun moment ajoutés aux sommes. */
+  /** Ligne « donnée » (option MUR-06 décochée seulement) : poids vertical d'une surcharge (kPa) que le moteur ne compte pas dans ΣV (charge variable
+   *  stabilisante prise à 0, CNB 4.1.3.2.(3) : ΣV identique en ÉLS S0 et S1, vérifié). Aucune force ni aucun moment ajoutés aux sommes. */
   const addData = (desc: string, type: string) => rows.push({ desc, type, role: 'stabilizing', fh: null, fv: null, arm: null, moment: null, kind: 'data' });
 
   if (loads) {
-    // Surcharges uniformes : poussée horizontale = composante de lateral_nominal ci-dessous ; poids vertical non compté dans ΣV
-    if (loads.surcharge > 0) addData(`Surcharge amont q = ${f2(loads.surcharge)} kPa`, loads.surchargeType);
-    if ((loads.surchargeAval ?? 0) > 0) addData(`Surcharge aval q = ${f2(loads.surchargeAval ?? 0)} kPa`, loads.surchargeAvalType ?? 'L');
+    // Surcharges uniformes : poussée horizontale = composante de lateral_nominal ci-dessous.
+    // MUR-06 D7 : option cochée -> poids Fv = q × longueur (talon / patin), bras x du moteur, compté dans Σ L ; décochée -> ligne « donnée » non comptée.
+    // Fv, bras et type viennent du moteur (result.surchargeWeights_nominal) ; type D : le moteur compte le poids au facteur D dans tous les cas -> force comptée (Σ D + H).
+    const surRow = (side: 'amont' | 'aval', d: string, where: string, fallbackType: string) => {
+      const w = result.surchargeWeights_nominal.find(x => x.side === side);
+      if (w && (w.type === 'D' || countStabilizingVariable(loads))) add(`${d} ${where}`, w.type, { Fy: w.Fy, x: w.x });
+      else addData(d, w?.type ?? fallbackType);
+    };
+    if (loads.surcharge > 0) surRow('amont', `Surcharge amont q = ${f2(loads.surcharge)} kPa`, 'sur le talon (Fv = q·L_talon)', loads.surchargeType);
+    if ((loads.surchargeAval ?? 0) > 0) surRow('aval', `Surcharge aval q = ${f2(loads.surchargeAval ?? 0)} kPa`, 'sur le patin (Fv = q·L_patin)', loads.surchargeAvalType ?? 'L');
     const pt = loads.pointLoadTop;
     if (pt?.enabled) {
       const ty = pt.loadType ?? 'L';

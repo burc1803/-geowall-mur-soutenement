@@ -63,7 +63,8 @@ export const INITIAL_LOADS: LoadsConfig = {
   },
   gammaM: 1.0,
   gammaF: 1.0,
-  additionalLoads: []
+  additionalLoads: [],
+  countStabilizingVariable: true, // MUR-06 D5 : poids des charges variables compté comme stabilisant (défaut cochée ; validé comme booléen)
   // kv absent : kv = 2/3·kh par défaut (MUR-02 D6), tant que l'utilisateur n'a pas saisi de valeur
 };
 

@@ -241,6 +241,9 @@ export interface LoadsConfig {
   deflectionLimitDivisor?: number;
   /** MUR-05 D4 : fraction Ls de la surcharge de type L considérée soutenue pour la flèche différée (0 à 1 ; 0 par défaut). */
   sustainedLiveFraction?: number;
+  /** MUR-06 D5 : compter le poids des charges variables verticales L, S, W (surcharge amont/aval, charge de tête Fy, charges saisies) avec le facteur
+   *  de la combinaison, y compris comme force stabilisante. Absent = true (choix de l'utilisateur) ; false = facteur 0 (comportement antérieur, prudent). Le séisme E est inchangé (D4). */
+  countStabilizingVariable?: boolean;
 }
 
 export interface VisualizerDisplayOptions {
@@ -516,6 +519,8 @@ export interface AnalysisResult {
   // Poids propres NON pondérés (kN/m), lecture seule : exposés pour la note de calcul
   // Composantes horizontales NON pondérées réellement utilisées (celles qui entrent dans ΣH), lecture seule
   lateral_nominal: { name: string; type: LoadCaseType; Fx: number; y: number; applied: boolean }[];
+  /** MUR-06 D7 : poids nominaux des surcharges uniformes (composantes W_surcharge_amont / W_surcharge_aval du moteur : Fy, x depuis l'orteil, type), lecture seule pour la note. */
+  surchargeWeights_nominal: { side: 'amont' | 'aval'; type: LoadCaseType; Fy: number; x: number }[];
   weights_nominal: { stem: number; base: number; heelSoil: number; toeSoil: number; waterHeel: number; waterToe: number };
   warnings: string[]; // alertes de validation des données (ex. γ ≤ γw avec nappe)
   notices: string[]; // avis non bloquants (n'affectent pas `verifiable`)

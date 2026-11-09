@@ -20,7 +20,7 @@ const SOIL_D: SoilProperties = {
   methodConfig: DEFAULT_SOIL_METHOD_CONFIG, hasWaterTable: true, waterTableHeight: 2.5, gamma_w: 9.81, geotechLevel: 'typical', psi: 1.0, quFactored: false,
   frost: { deduct: true, df: 0, noDf: 'zero' }
 };
-const LOADS_D: LoadsConfig = { surcharge: 12, surchargeType: 'L', surchargeAval: 0, additionalLoads: [], gammaM: 1, gammaF: 1, kv: 0 };
+const LOADS_D: LoadsConfig = { surcharge: 12, surchargeType: 'L', surchargeAval: 0, additionalLoads: [], gammaM: 1, gammaF: 1, kv: 0, countStabilizingVariable: false /* MUR-06 : valeurs d'origine = option décochée */ };
 
 const run = (geo: WallGeometry, soil: SoilProperties, loads: LoadsConfig) => analyzeRetainingWall(geo, soil, loads, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG);
 const close = (a: number, b: number, tol: number, label = '') => expect(Math.abs(a - b), `${label} obtenu ${a}, attendu ${b}`).toBeLessThanOrEqual(Math.abs(b) * tol);
