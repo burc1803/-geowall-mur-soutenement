@@ -54,6 +54,8 @@ export interface FEMResult {
   reactions: { y: number; Fx: number; Mz: number }[];
   maxShear: number;
   maxMoment: number;
+  /** MUR-05 : déplacement horizontal des nœuds (unités de E, I et des charges : m si E en kPa, I en m⁴, charges en kN/m) ; y depuis le pied. */
+  displacements: { y: number; v: number }[];
 }
 
 export function solveBeamFEM(
@@ -217,5 +219,7 @@ export function solveBeamFEM(
   // Add the final node
   forcesData.push({ depth: 0, shear: 0, moment: 0 }); // Roughly zero at top
 
-  return { forces: forcesData, reactions, maxShear, maxMoment };
+  const displacements = Array.from({ length: numNodes }, (_, i) => ({ y: i * L, v: d[i * 2] }));
+
+  return { forces: forcesData, reactions, maxShear, maxMoment, displacements };
 }

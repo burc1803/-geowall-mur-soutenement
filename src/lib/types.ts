@@ -237,6 +237,10 @@ export interface LoadsConfig {
   kh?: number;
   /** Coefficient vertical saisi (valeur absolue ; les deux signes sont étudiés). Absent : kv = 2/3·kh (CFEM p. 629, MUR-02 D6), suit kh. Option CSA S6 : forcé à 0. */
   kv?: number;
+  /** MUR-05 D7 : diviseur k de la limite de flèche h/k du voile (critère de l'utilisateur, 300 par défaut). */
+  deflectionLimitDivisor?: number;
+  /** MUR-05 D4 : fraction Ls de la surcharge de type L considérée soutenue pour la flèche différée (0 à 1 ; 0 par défaut). */
+  sustainedLiveFraction?: number;
 }
 
 export interface VisualizerDisplayOptions {
@@ -562,6 +566,8 @@ export interface AnalysisResult {
 
   // CSA A23.3 Concrete Design Results
   concreteDesign: ConcreteDesignSummary;
+  /** MUR-05 : flèche du voile en service (ÉLS) ; la rotation de la semelle est NON VÉRIFIÉE (D8). */
+  stemDeflection: import('./wallDeflection').WallDeflectionResult;
 
   // Arrays for charts
   stemForces: { depth: number; shear: number; moment: number }[];

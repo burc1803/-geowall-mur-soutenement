@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eq, V, Frac, Sqrt, Tx } from './Eq';
+import { DeflectionGoverningSteps, DeflectionMentions } from './StemDeflectionSteps';
 import { buildSlidingEq, buildOverturningEq, buildBearingEq, buildDeltaPaeEq, inertiaStrings, fr } from '../lib/theoryEquations';
 import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, ConcreteProperties } from '../lib/types';
 import { 
@@ -27,7 +28,7 @@ interface CalculationStepsTheoryProps {
   initialSection?: SectionKey; // section ouverte au départ (utile aux tests de rendu)
 }
 
-export type SectionKey = 'poussee' | 'seisme' | 'stabilite' | 'conception_omar' | 'ancrage';
+export type SectionKey = 'poussee' | 'seisme' | 'stabilite' | 'conception_omar' | 'ancrage' | 'fleche';
 
 export function CalculationStepsTheory({ geo, soil, loads, result, conc, initialSection }: CalculationStepsTheoryProps) {
   const [activeSection, setActiveSection] = useState<SectionKey>(initialSection ?? 'poussee');
@@ -72,6 +73,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
             { id: 'stabilite', label: '3. Stabilité (Glissement, Renversement, Q)', icon: Scale },
             { id: 'conception_omar', label: '4. Conception Omar Chaallal (Flexion & Cisaillement)', icon: ShieldCheck },
             { id: 'ancrage', label: '5. Ancrage & Crochets (CSA Chap. 7 & 12)', icon: ArrowRightLeft },
+            { id: 'fleche', label: '6. Flèche du voile (ÉLS)', icon: Activity },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeSection === tab.id;
@@ -595,6 +597,26 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 6: FLÈCHE DU VOILE (ÉLS), combinaison qui gouverne — MUR-05 */}
+      {activeSection === 'fleche' && (
+        <div className="flex flex-col gap-6 animate-in fade-in duration-300">
+          <div className="bg-white p-6 sm:p-7 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-700 flex items-center justify-center font-black text-sm">6</div>
+                <div>
+                  <h2 className="text-base font-black text-slate-900">Flèche du voile (ÉLS)</h2>
+                  <p className="text-xs text-slate-500">CSA A23.3 9.8.2.2 à 9.8.2.5 ; Chaallal (2012) §3.4.2, p. 33 à 36 ; détail de la combinaison qui gouverne</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono font-bold bg-pink-50 text-pink-800 px-2.5 py-1 rounded border border-pink-200">MUR-05</span>
+            </div>
+            <DeflectionGoverningSteps sd={result.stemDeflection} />
+            <div className="mt-4"><DeflectionMentions sd={result.stemDeflection} /></div>
           </div>
         </div>
       )}

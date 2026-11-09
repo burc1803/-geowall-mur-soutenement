@@ -71,7 +71,8 @@ describe('MUR-02 §7.1 - Cas G1 (statique)', () => {
   });
   it('ELS D + H : e = 0,073 ≤ B/6 ; q = 64,1 / 44,3 kPa (distribution linéaire)', () => {
     const rm = run(soilG({ stabilityCriterion: 'moments' }));
-    const els = rm.combinations.find(x => x.combName.includes('ELS 11'))!;
+    // MUR-05 D6 : « ELS 11 » (ancienne liste) = S0 du tableau 4.1.3.4 du CNB (1,0D + 1,0H) ; valeurs inchangées (e = 0,073 ; 64,1 ; 44,3)
+    const els = rm.combinations.find(x => x.combName.includes('ELS S0 '))!;
     close(els.ecc, 0.073, 0.02, 'e'); close(els.q_toe, 64.1, 0.005, 'q_toe'); close(els.q_heel, 44.3, 0.005, 'q_heel');
     expect(els.status_ecc).toBe('OK');
     expect(rm.eccentricity_ok_SLS).toBe(true);

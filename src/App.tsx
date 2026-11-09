@@ -20,6 +20,7 @@ import {
   Activity
 } from 'lucide-react';
 import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, RebarCustomConfig, ConcreteProperties, StabilityCriterion, GeotechLevel, FrostNoDfTreatment, SiteSeismicValues } from './lib/types';
+import { StemDeflectionCard } from './components/StemDeflectionCard';
 import { analyzeRetainingWall, DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, GEOTECH_LEVEL_LABEL, PSI_CHOICES } from './lib/analysis';
 import { Visualizer } from './components/Visualizer';
 import { ForceCharts } from './components/ForceCharts';
@@ -562,6 +563,24 @@ export default function App() {
                           <p className="text-[9px] text-slate-500">Valeurs lues du moteur. Aucune réduction supplémentaire de Kp (l'option « Kp réduit » est supprimée).</p>
                         </div>
 
+                        {/* Flèche du voile (ÉLS) — MUR-05 D4, D7 : critère de l'utilisateur */}
+                        <div className="bg-pink-50/60 p-3.5 rounded-xl border border-pink-100 flex flex-col gap-2 mt-1">
+                          <span className="text-[10px] font-black uppercase text-pink-900 tracking-wider">Flèche du voile (ÉLS)</span>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <label className="flex flex-col">
+                              <span className="text-[9px] text-slate-500 font-bold">Limite de flèche h/… (défaut 300)</span>
+                              <input type="number" min="1" step="10" className="p-1.5 border rounded bg-white font-mono text-xs" value={loads.deflectionLimitDivisor ?? 300}
+                                onChange={e => { const v = parseFloat(e.target.value); setLoads(prev => ({ ...prev, deflectionLimitDivisor: Number.isFinite(v) && v > 0 ? v : undefined })); }} />
+                            </label>
+                            <label className="flex flex-col">
+                              <span className="text-[9px] text-slate-500 font-bold">Part soutenue de L (Ls), fraction de 0 à 1</span>
+                              <input type="number" min="0" max="1" step="0.05" className="p-1.5 border rounded bg-white font-mono text-xs" value={loads.sustainedLiveFraction ?? 0}
+                                onChange={e => { const v = parseFloat(e.target.value); setLoads(prev => ({ ...prev, sustainedLiveFraction: Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : 0 })); }} />
+                            </label>
+                          </div>
+                          <p className="text-[10px] text-slate-500">Limite h/k (h = hauteur du voile) : critère de l'utilisateur, aucune limite de la CSA A23.3 (tableau 9.3) pour un mur. Ls = 0 : la surcharge de type L est transitoire (D toujours soutenue). Rotation de la semelle : NON VÉRIFIÉE.</p>
+                        </div>
+
                     </section>
                 )}
 
@@ -882,12 +901,13 @@ export default function App() {
          <section className="flex-1 overflow-y-auto bg-slate-50/50 p-6 lg:p-10 flex flex-col gap-6 print:p-0 print:bg-white print:gap-0">
             
             {/* Dashboard Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-2 print:hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-2 print:hidden">
                 <StatBox label="Crit. Glissement ELU" nonVerifiable={!result.verifiable || result.governingSliding.status_sliding === 'NON VÉRIFIABLE'} value={result.critical_sliding_ULS === Infinity ? '∞' : result.critical_sliding_ULS.toFixed(2)} unit="FS (Req > 1.0)" status={result.critical_sliding_ULS >= 1.0 ? 'ok' : 'error'} />
                 <StatBox label="Crit. Renvers. ELU" nonVerifiable={!result.verifiable || result.governingOverturning.status_overturning === 'NON VÉRIFIABLE'} value={result.governingOverturning.outside_base ? 'hors base' : result.critical_overturning_ULS === Infinity ? '∞' : result.critical_overturning_ULS.toFixed(2)} unit={result.governingOverturning.outside_base ? '(résultante hors base)' : 'FS (Req > 1.0)'} status={result.critical_overturning_ULS >= 1.0 && result.governingOverturning.status_overturning === 'OK' ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELS)' : 'Pression Max (ELS)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_SLS.toFixed(0)} unit={result.combinations.some(c => c.type === 'SLS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.critical_q_toe_SLS <= soil.qAllowable_SLS ? 'ok' : 'error'} />
                 <StatBox label="Excentricité e ≤ B/6 (ELU+ELS)" nonVerifiable={!result.verifiable} value={result.eccentricity_ok_ULS && result.eccentricity_ok_SLS ? 'respectée' : `non respectée (${[!result.eccentricity_ok_ULS ? 'ÉLU' : '', !result.eccentricity_ok_SLS ? 'ÉLS' : ''].filter(Boolean).join(', ')})`} unit="" status={result.eccentricity_ok_ULS && result.eccentricity_ok_SLS ? 'ok' : 'error'} />
                 <StatBox label={result.stabilityCriterion === 'eccentricity' ? 'Pression Max B′ (ELU)' : 'Pression Max (ELU)'} nonVerifiable={!result.verifiable} value={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? 'non vérifiable' : result.critical_q_toe_ULS.toFixed(0)} unit={result.combinations.some(c => c.type === 'ULS' && c.outside_base) ? '(résultante hors base)' : 'kPa'} status={result.governingBearing.status_bearing === 'OK' ? 'ok' : 'error'} />
+                <StatBox label={`Flèche voile ÉLS (h/${loads.deflectionLimitDivisor ?? 300})`} nonVerifiable={result.stemDeflection.status === 'NON VÉRIFIABLE'} value={result.stemDeflection.governingIndex >= 0 ? result.stemDeflection.rows[result.stemDeflection.governingIndex].deltaLT.toFixed(1) : '—'} unit={'mm (limite ' + result.stemDeflection.limit.toFixed(1) + ')'} status={result.stemDeflection.status === 'OK' ? 'ok' : 'error'} />
             </div>
 
             {result.notices.length > 0 && (
@@ -1024,6 +1044,9 @@ export default function App() {
                         </div>
                         <div className="w-full">
                             <ForceCharts result={result} />
+                        </div>
+                        <div className="w-full">
+                            <StemDeflectionCard result={result} />
                         </div>
                     </div>
                 )}

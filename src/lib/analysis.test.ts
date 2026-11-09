@@ -315,8 +315,8 @@ describe('Note de calcul - composantes horizontales exposées', () => {
   it('somme des composantes = ΣH non pondéré du moteur, avec et sans nappe', () => {
     for (const water of [false, true]) {
       const r = analyzeRetainingWall(GEO_R, soilR(water ? { hasWaterTable: true, waterTableHeight: 2.0 } : {}), loadsR({ surcharge: 10, surchargeType: 'H' }), DEFAULT_CONCRETE_PROPS, rebarR);
-      // ELS 11 : 1,0D + 1,0H, sans appui en tête -> ΣH = somme des Fx non pondérées de type H
-      const els11 = r.combinations.find(c => c.combName.includes('ELS 11'))!;
+      // MUR-05 D6 : l'ancienne « ELS 11 » (1,0D + 1,0H) est devenue S0 du tableau 4.1.3.4 (mêmes facteurs, mêmes valeurs) ; sans appui en tête -> ΣH = somme des Fx non pondérées de type H
+      const els11 = r.combinations.find(c => c.combName.includes('ELS S0 '))!;
       const sum = r.lateral_nominal.reduce((s, c) => s + c.Fx, 0);
       close(sum, els11.sumH, 1e-9);
       if (water) expect(r.lateral_nominal.some(c => c.name === 'Pw_eau_hydrostatique')).toBe(true);

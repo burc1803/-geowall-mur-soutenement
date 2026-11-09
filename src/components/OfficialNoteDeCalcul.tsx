@@ -7,6 +7,8 @@ import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass
 import { Fm } from './Fm';
 import { Eq } from './Eq';
 import { V } from './Eq';
+import { DeflectionPropEqs, DeflectionMentions, combId, fmtInt } from './StemDeflectionSteps';
+import { fr as frc } from '../lib/theoryEquations';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
 interface OfficialNoteDeCalculProps {
@@ -508,6 +510,7 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
             <li><strong>Cas 5 :</strong> {result.cnbEdition === '2020' ? '1,0D + 1,0E + 1,0H + 0,5L + 0,25S' : '1,0D + 1,0E + 1,0H + 0,5L + 0,15S'}.</li>
             <li><strong>Facteur 1,0H au cas 5 :</strong> note A-4.1.3.2.(4) (1,5H pour les cas 2, 3 et 4) et tableau A-3 du Commentaire A du CNB 2020 (1,0 pour D, H, T et P avec E). Commentaire 2025 : À CONFIRMER.</li>
             <li>Charges variables favorables prises à zéro ; 0,9D ou 1,0D (cas 5) pour la charge permanente qui s'oppose ; poids du sol porté selon 4.1.3.2.(8) et (9).</li>
+            <li><strong>ÉLS (portance, e ≤ B/6, flèche) :</strong> tableau 4.1.3.4 du CNB (identique en 2020 et 2025), H = 1,0 (4.1.3.4. 4)) : S0 = 1,0D + 1,0H ; charges principales seules S1, S2, S3 ; accompagnements 0,35L, 0,35S, 0,3W (MUR-05 D6). Le séisme n'en fait pas partie. 0,5L (stockage, équipement, locaux techniques) : usage non connu du moteur, 0,35L retenu, À CONFIRMER.</li>
           </ul>
           <DataTable
             head={['Cas', 'Charges principales', 'Charges d\'accompagnement']}
@@ -1064,6 +1067,54 @@ export function OfficialNoteDeCalcul({ geo, soil, conc, result, loads }: Officia
           </h3>
           <BearingPressureDiagram geo={geo} soil={soil} result={result} />
         </div>
+
+        {/* 4.5 FLÈCHE DU VOILE (ÉLS) — MUR-05 */}
+        {(() => {
+          const sd = result.stemDeflection;
+          const gi = sd.governingIndex;
+          return (
+            <div className="space-y-3 pt-2">
+              <SubTitle n="4.5" title="Flèche du voile (ÉLS)" />
+              <p className="text-xs text-slate-700">
+                Combinaisons ÉLS du tableau 4.1.3.4 du CNB {result.cnbEdition} (H = 1,0) ; CSA A23.3 9.8.2.2 à 9.8.2.5 ; Chaallal (2012) §3.4.2, p. 33 à 36, éq. 3.22, 3.25 à 3.27, tableau 3.3 ; fiche MUR-05.
+                Mode : {sd.mode === 'cantilever' ? 'mur libre (flèche en tête)' : 'mur de sous-sol (flèche maximale entre les appuis)'}. Limite h/{frc(sd.divisor, 0)} = {frc(sd.limit, 2)} mm.
+              </p>
+              {!sd.valid || !sd.props || gi < 0 ? (
+                <div className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-300 rounded-lg p-3">Flèche du voile NON VÉRIFIABLE : {sd.reason ?? 'données insuffisantes'}.</div>
+              ) : (
+                <>
+                  <DeflectionPropEqs sd={sd} row={sd.rows[gi]} />
+                  <p className="text-[11px] text-slate-500">I<sub>e</sub> ci-dessus : combinaison qui gouverne ({combId(sd.rows[gi].combName)}). Le tableau donne I<sub>e</sub> de chaque combinaison.</p>
+                  <NoteTable
+                    cols={[
+                      { name: 'Comb.', title: 'Combinaison ÉLS du tableau 4.1.3.4' },
+                      { name: 'D', align: 'right' }, { name: 'L', align: 'right' }, { name: 'S', align: 'right' }, { name: 'W', align: 'right' }, { name: 'H', align: 'right' },
+                      { name: 'Ma', unit: 'kN·m/m', align: 'right', title: 'Moment ÉLS au pied (mur libre) ou maximal (sous-sol)' },
+                      { name: 'Ie', unit: '10⁹ mm⁴/m', align: 'right', title: 'Inertie effective, éq. 9.1' },
+                      { name: '|Δi|', unit: 'mm', align: 'right', title: 'Flèche immédiate' },
+                      { name: '|Δdiff|', unit: 'mm', align: 'right', title: 'Flèche différée (ζs − 1)·Δi,sus' },
+                      { name: '|ΔLT|', unit: 'mm', align: 'right', title: 'Flèche totale = |Δi| + |Δdiff|' },
+                      { name: 'h/Δ', align: 'right' },
+                      { name: 'Limite', unit: 'mm', align: 'right', title: "h/diviseur, critère de l'utilisateur" },
+                      { name: 'Statut', align: 'center' }
+                    ]}
+                    rows={sd.rows.map((r, i) => [
+                      <span key="n" className={i === gi ? 'underline' : ''}>{combId(r.combName)}{i === gi ? ' *' : ''}</span>,
+                      frc(r.factors.D, 2), frc(r.factors.L, 2), frc(r.factors.S, 2), frc(r.factors.W, 2), frc(r.factors.H, 2),
+                      frc(r.Ma, 1), frc(r.Ie / 1e9, 3), frc(r.deltaI, 2), frc(r.deltaLT - r.deltaI, 2), frc(r.deltaLT, 2), fmtInt(r.hOverDelta), frc(r.limit, 1),
+                      <span key="s"><StatusPill status={r.status} verifiable={r.status !== "NON VÉRIFIABLE"} /></span>
+                    ])}
+                  />
+                  <p className="text-[11px] text-slate-600">
+                    * Combinaison qui gouverne (plus grand |Δ<sub>LT</sub>|/limite = {frc(sd.rows[gi].utilization, 3)}). Conclusion au critère de l'utilisateur :{' '}
+                    <strong>{sd.status === 'OK' ? 'CONFORME' : sd.status === 'NON' ? 'NON CONFORME' : 'NON VÉRIFIABLE'}</strong>.
+                  </p>
+                </>
+              )}
+              <DeflectionMentions sd={sd} />
+            </div>
+          );
+        })()}
 
         {/* 5. HYPOTHÈSES ET LIMITES */}
         <SectionTitle n="5" title="Hypothèses et limites" />

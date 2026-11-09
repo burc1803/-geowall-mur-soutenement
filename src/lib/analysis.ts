@@ -25,6 +25,7 @@ import {
 } from './types';
 import { resolveBearingSoil, resolveFrontSoil } from './bearingSoil';
 import { solveBeamFEM, SupportBoundary } from './fem';
+import { computeWallDeflection, sustainedFactors, integrateDeflection, DEFAULT_DEFLECTION_DIVISOR, WallDeflectionCombInput } from './wallDeflection';
 import { coulombKp, linearSegmentEffect, StemItem, stemItemFactor, stemSectionEffort, proppedTopReaction, mononobeOkabeKae, mononobeOkabeKpe, lineLoadThrust } from './wallMechanics';
 
 export const DEFAULT_SOIL_METHOD_CONFIG: SoilMethodConfig = {
@@ -172,24 +173,41 @@ function buildULSCombinations(edition: CnbEdition): LoadCombination[] {
   return out;
 }
 
-const SLS_COMBINATIONS: LoadCombination[] = [
-  // --- ÉLTS / SLS COMBINATIONS (inchangées) ---
-  { name: 'Combinaison ELS 1 (1D + 1H + 1L)', formula: '1.0D + 1.0H + 1.0L', type: 'SLS', factors: { D: 1.0, L: 1.0, S: 0, W: 0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 2 (1D + 0.5S + 1H + 1L)', formula: '1.0D + 0.5S + 1.0H + 1.0L', type: 'SLS', factors: { D: 1.0, L: 1.0, S: 0.5, W: 0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 3 (1D + 0.5W + 1H + 1L)', formula: '1.0D + 0.5W + 1.0H + 1.0L', type: 'SLS', factors: { D: 1.0, L: 1.0, S: 0, W: 0.5, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 4 (1D + 1S + 1H)', formula: '1.0D + 1.0S + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 1.0, W: 0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 5 (1D + 1S + 1H + 0.5L)', formula: '1.0D + 1.0S + 1.0H + 0.5L', type: 'SLS', factors: { D: 1.0, L: 0.5, S: 1.0, W: 0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 6 (1D + 1S + 0.5W + 1H)', formula: '1.0D + 1.0S + 0.5W + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 1.0, W: 0.5, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 7 (1D + 1W + 1H)', formula: '1.0D + 1.0W + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 0, W: 1.0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 8 (1D + 1W + 1H + 0.5L)', formula: '1.0D + 1.0W + 1.0H + 0.5L', type: 'SLS', factors: { D: 1.0, L: 0.5, S: 0, W: 1.0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 9 (1D + 0.5S + 1W + 1H)', formula: '1.0D + 0.5S + 1.0W + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 0.5, W: 1.0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 10 (1D + 1S + 1W + 1H)', formula: '1.0D + 1.0S + 1.0W + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 1.0, W: 1.0, E: 0, H: 1.0 } },
-  { name: 'Combinaison ELS 11 (1D + 1H)', formula: '1.0D + 1.0H', type: 'SLS', factors: { D: 1.0, L: 0, S: 0, W: 0, E: 0, H: 1.0 } },
-].map(c => ({ ...c, type: 'SLS' as const, caseNo: 0, stabApplicable: false, // MUR-02 §12 : glissement et renversement à l'ÉLU seulement
-     soilRule: 'same' as const, Dunfav: 1.0 }));
+/**
+ * Combinaisons ÉLS — CNB 2020 et CNB 2025, 4.1.3.4 et tableau 4.1.3.4 (MUR-05 §5, décision D6 du 2026-11-08).
+ * Le tableau est identique dans les deux éditions (MUR-05 C6). H = 1,0 dans toutes les lignes (4.1.3.4. 4)) ;
+ * charges principales seules (4.1.3.4. 3)) puis avec accompagnements 0,35L, 0,35S et 0,3W. Le séisme (E) n'en fait pas partie.
+ * 0,35L : le renvoi (2) du tableau porte ce facteur à 0,5 pour les aires de stockage, d'équipement et les locaux techniques ;
+ * le moteur ne connaît pas l'usage du local, donc 0,35 est retenu (À CONFIRMER par le concepteur).
+ * Ces combinaisons servent à la portance ÉLS (q ≤ qadm), au tiers central (e ≤ B/6) et à la flèche du voile (MUR-05).
+ * Glissement et renversement restent à l'ÉLU seulement (MUR-02 §12).
+ */
+function buildSLSCombinations(_edition: CnbEdition): LoadCombination[] {
+  const rows: { id: string; f: Partial<Record<LoadCaseType, number>> }[] = [
+    { id: 'S0', f: {} },
+    { id: 'S1', f: { L: 1.0 } },
+    { id: 'S1a', f: { L: 1.0, W: 0.3 } },
+    { id: 'S1b', f: { L: 1.0, S: 0.35 } },
+    { id: 'S2', f: { W: 1.0 } },
+    { id: 'S2a', f: { W: 1.0, L: 0.35 } },
+    { id: 'S2b', f: { W: 1.0, S: 0.35 } },
+    { id: 'S3', f: { S: 1.0 } },
+    { id: 'S3a', f: { S: 1.0, W: 0.3 } },
+    { id: 'S3b', f: { S: 1.0, L: 0.35 } }
+  ];
+  return rows.map(({ id, f }) => {
+    const factors: Record<LoadCaseType, number> = { D: 1.0, L: 0, S: 0, W: 0, E: 0, H: 1.0, ...f };
+    const formula = formatFormula(factors);
+    return {
+      name: `Combinaison ELS ${id} (${formula})`, formula, type: 'SLS' as const, factors,
+      caseNo: 0, stabApplicable: false, // MUR-02 §12 : glissement et renversement à l'ÉLU seulement
+      soilRule: 'same' as const, Dunfav: 1.0
+    };
+  });
+}
 
-export const CNB_2020_COMBINATIONS: LoadCombination[] = [...buildULSCombinations('2020'), ...SLS_COMBINATIONS];
-export const CNB_2025_COMBINATIONS: LoadCombination[] = [...buildULSCombinations('2025'), ...SLS_COMBINATIONS];
+export const CNB_2020_COMBINATIONS: LoadCombination[] = [...buildULSCombinations('2020'), ...buildSLSCombinations('2020')];
+export const CNB_2025_COMBINATIONS: LoadCombination[] = [...buildULSCombinations('2025'), ...buildSLSCombinations('2025')];
 export const DEFAULT_CNB_EDITION: CnbEdition = '2020';
 export const getCnbCombinations = (edition: CnbEdition): LoadCombination[] =>
   edition === '2025' ? CNB_2025_COMBINATIONS : CNB_2020_COMBINATIONS;
@@ -1097,7 +1115,7 @@ export function analyzeRetainingWall(
   const I_fem = 1.0 * Math.pow(geo.epStem, 3) / 12;
 
   // Efforts du voile pour un jeu de facteurs : sections de 0 à hMur, réaction(s) en tête (mur de sous-sol)
-  const stemAnalysis = (factors: Record<LoadCaseType, number>, dUnfav: number, stemItems: StemItem[]) => {
+  const stemAnalysis = (factors: Record<LoadCaseType, number>, dUnfav: number, stemItems: StemItem[], femE = E_fem, femI = I_fem) => {
     const nSec = 40;
     if (customSupports) {
       // appuis intermédiaires saisis : poutre MEF avec les mêmes charges factorisées (charges nodales comprises)
@@ -1117,11 +1135,12 @@ export function analyzeRetainingWall(
         if (it.kind === 'point') nodal.push({ y: geo.hMur - it.z, Fx: f * it.F });
         else if (it.kind === 'moment') nodal.push({ y: geo.hMur - it.z, Fx: 0, Mz: f * it.M });
       }
-      const fem = solveBeamFEM(geo.hMur, E_fem, I_fem, supportsFEM, loadFns, 40, nodal);
+      const fem = solveBeamFEM(geo.hMur, femE, femI, supportsFEM, loadFns, 40, nodal);
       return {
         maxM: fem.maxMoment, maxV: fem.maxShear,
         Rt: fem.reactions.filter(r => r.y > 1e-9).map(r => ({ y: r.y, F: -r.Fx })),
-        sections: fem.forces.map(f => ({ depth: f.depth, shear: f.shear, moment: f.moment })).reverse()
+        sections: fem.forces.map(f => ({ depth: f.depth, shear: f.shear, moment: f.moment })).reverse(),
+        disp: fem.displacements
       };
     }
     const R = propped ? proppedTopReaction(stemItems, factors, geo.hMur, dUnfav) : 0;
@@ -1135,7 +1154,7 @@ export function analyzeRetainingWall(
       maxM = Math.max(maxM, Math.abs(e.M));
       maxV = Math.max(maxV, Math.abs(e.V));
     }
-    return { maxM, maxV, Rt: propped ? [{ y: geo.hMur, F: R }] : [], sections };
+    return { maxM, maxV, Rt: propped ? [{ y: geo.hMur, F: R }] : [], sections, disp: undefined as { y: number; v: number }[] | undefined };
   };
 
   const results: CombinationResult[] = [];
@@ -1158,6 +1177,8 @@ export function analyzeRetainingWall(
     else expanded.push({ comb, scIdx: -1 });
   }
   const stemVAtFns: ((dm: number) => number)[] = [];
+  // MUR-05 : charges latérales du voile des combinaisons ÉLS, réutilisées pour la flèche (mêmes items que les efforts)
+  const slsStem: { comb: LoadCombination; items: StemItem[] }[] = [];
   for (const { comb: comb0, scIdx } of expanded) {
     const sc = scIdx >= 0 ? scenarios[scIdx] : null;
     const kvSign: 0 | 1 | -1 = sc ? sc.sign : 0;
@@ -1179,6 +1200,7 @@ export function analyzeRetainingWall(
 
     // Réaction(s) d'appui en tête (mur de sous-sol) : issue(s) des charges latérales du voile de CETTE combinaison (E10)
     const stemRes = stemAnalysis(comb.factors, comb.Dunfav, stemItemsC);
+    if (comb.type === 'SLS') slsStem.push({ comb, items: stemItemsC });
     // Forces latérales NON pondérées puis pondérées (kN/m) réellement appliquées au voile dans CETTE combinaison, par catégorie (lecture seule, mêmes items et facteurs que stemAnalysis)
     const stemLat = { terre: 0, eau: 0, surcharge: 0, seisme: 0, autres: 0, total: 0 };
     for (const it of stemItemsC) {
@@ -1523,7 +1545,7 @@ export function analyzeRetainingWall(
     }
   }
 
-  const defaultComb = results.find(r => r.combName.includes('ELS 1')) || results[0];
+  const defaultComb = results.find(r => r.combName.includes('ELS S1 ')) || results[0];
 
   // Diagrammes d'efforts : combinaison ELU qui gouverne (même jeu de facteurs que le calcul, E11b)
   let iMaxStem = -1;
@@ -1832,6 +1854,40 @@ export function analyzeRetainingWall(
     }
   };
 
+  // --- MUR-05 : flèche du voile en service (ÉLS), combinaisons du tableau 4.1.3.4 (D6) ---
+  // As et d : armature tendue du voile (face intérieure, côté remblai), comme la vérification de flexion (MUR-02 §7.1).
+  const defLsRaw = loads.sustainedLiveFraction ?? 0;
+  const defLs = Number.isFinite(defLsRaw) ? Math.min(Math.max(defLsRaw, 0), 1) : 0;
+  if (defLs !== defLsRaw) notices.push(`Part soutenue de L (Ls) = ${defLsRaw} hors de [0 ; 1] : valeur ramenée à ${defLs} (MUR-05 D4).`);
+  const defDivRaw = loads.deflectionLimitDivisor ?? DEFAULT_DEFLECTION_DIVISOR;
+  const defDiv = Number.isFinite(defDivRaw) && defDivRaw > 0 ? defDivRaw : DEFAULT_DEFLECTION_DIVISOR;
+  if (defDiv !== defDivRaw) notices.push(`Diviseur de la limite de flèche = ${defDivRaw} invalide : ${DEFAULT_DEFLECTION_DIVISOR} retenu (MUR-05 D7).`);
+  const hMurM = geo.hMur;
+  const stemDeflection = computeWallDeflection({
+    mode: propped ? 'basement' : 'cantilever',
+    h: hMurM, hr, t: hm_mm, d: designMurInterieur.d, As: designMurInterieur.As_provided, fc: conc.fc_mur,
+    Ls: defLs, divisor: defDiv,
+    combos: slsStem.map(({ comb, items }): WallDeflectionCombInput => {
+      const sus = sustainedFactors(comb.factors, defLs);
+      const full = stemAnalysis(comb.factors, comb.Dunfav, items);
+      const base = full.sections.reduce((m, s) => (s.depth >= hMurM - 1e-9 ? Math.abs(s.moment) : m), 0); // section au pied (d = h)
+      const solve = (sustained: boolean, EI: number) => {
+        const fct = sustained ? sus : comb.factors;
+        if (customSupports) {
+          // appuis saisis : la poutre MEF est résolue avec Ec·Ie (E = EI en kN·m², I = 1 ; v en m -> mm)
+          const r = stemAnalysis(fct, comb.Dunfav, items, EI * 1e-9, 1);
+          const v = r.disp ?? [];
+          let max = 0; let yMax = 0;
+          for (const p of v) if (Math.abs(p.v) > max) { max = Math.abs(p.v); yMax = p.y; }
+          return { tip: (v.length ? v[v.length - 1].v : NaN) * 1000, max: max * 1000, yMax };
+        }
+        const R = propped ? proppedTopReaction(items, fct, hMurM, comb.Dunfav) : 0;
+        return integrateDeflection(hMurM, y => stemSectionEffort(items, fct, hMurM - y, R, comb.Dunfav).M, EI);
+      };
+      return { name: comb.name, formula: comb.formula, factors: comb.factors, MaBase: base, MaMax: full.maxM, solve };
+    })
+  });
+
   // Governing Combinations
   const ulsCombs = results.filter(r => r.type === 'ULS');
   const slsCombs = results.filter(r => r.type === 'SLS');
@@ -1915,6 +1971,7 @@ export function analyzeRetainingWall(
     heelMaxShear: Math.max(0, ...heelForces.map(f => Math.abs(f.shear))),
     heelMaxMoment: Math.max(0, ...heelForces.map(f => Math.abs(f.moment))),
     concreteDesign,
+    stemDeflection,
     stemForces,
     toeForces,
     heelForces,
