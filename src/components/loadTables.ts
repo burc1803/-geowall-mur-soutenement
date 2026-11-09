@@ -43,6 +43,9 @@ export function sumsByType(rows: LoadTableRow[]): { label: string; shaded: boole
 /** MUR-06 D5 : option « compter les charges variables stabilisantes (L, S, W) » ; absent = true (comme le moteur). */
 export const countStabilizingVariable = (loads?: LoadsConfig) => loads?.countStabilizingVariable !== false;
 
+/** MUR-06 M6-A1 : option « compter aussi Fx et Mz variables stabilisants » ; absent = true ; sans effet si D5 est décochée (comme le moteur). */
+export const countStabilizingHM = (loads?: LoadsConfig) => countStabilizingVariable(loads) && loads?.countStabilizingVariableHM !== false;
+
 const f2 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : 'non disponible');
 
 export function latLabel(n: string): string {

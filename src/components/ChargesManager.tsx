@@ -124,7 +124,7 @@ export function ChargesManager({ loads, onChange, geo }: ChargesManagerProps) {
                     </div>
 
                     <span className="text-[10px] text-slate-500">
-                        Poids stabilisant vertical sur le patin avant (orteil) et majoration de la butée passive.
+                        Poids stabilisant vertical sur le patin avant (orteil).
                     </span>
                 </div>
             </div>
@@ -188,7 +188,7 @@ export function ChargesManager({ loads, onChange, geo }: ChargesManagerProps) {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {/* Fy */}
                 <div className="flex flex-col gap-1">
                     <span className="text-xs font-bold text-slate-600">Verticale Fy (↓)</span>
@@ -209,9 +209,9 @@ export function ChargesManager({ loads, onChange, geo }: ChargesManagerProps) {
                                     name: 'Charge Tête'
                                 }
                             })}
-                            className="flex-1 p-2 bg-rose-50 border border-rose-200 rounded-lg text-sm font-black text-rose-700 disabled:opacity-40"
+                            className="flex-1 min-w-0 w-full p-2 bg-rose-50 border border-rose-200 rounded-lg text-sm font-black text-rose-700 disabled:opacity-40"
                         />
-                        <span className="text-xs font-bold text-slate-500">kN</span>
+                        <span className="text-xs font-bold text-slate-500 w-10 shrink-0">kN</span>
                     </div>
                 </div>
 
@@ -235,9 +235,9 @@ export function ChargesManager({ loads, onChange, geo }: ChargesManagerProps) {
                                     name: 'Charge Tête'
                                 }
                             })}
-                            className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black text-slate-700 disabled:opacity-40"
+                            className="flex-1 min-w-0 w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black text-slate-700 disabled:opacity-40"
                         />
-                        <span className="text-xs font-bold text-slate-500">kN</span>
+                        <span className="text-xs font-bold text-slate-500 w-10 shrink-0">kN</span>
                     </div>
                 </div>
 
@@ -261,9 +261,9 @@ export function ChargesManager({ loads, onChange, geo }: ChargesManagerProps) {
                                     name: 'Charge Tête'
                                 }
                             })}
-                            className="flex-1 p-2 bg-purple-50 border border-purple-200 rounded-lg text-sm font-black text-purple-700 disabled:opacity-40"
+                            className="flex-1 min-w-0 w-full p-2 bg-purple-50 border border-purple-200 rounded-lg text-sm font-black text-purple-700 disabled:opacity-40"
                         />
-                        <span className="text-xs font-bold text-slate-500">kNm</span>
+                        <span className="text-xs font-bold text-slate-500 w-10 shrink-0">kNm</span>
                     </div>
                 </div>
 

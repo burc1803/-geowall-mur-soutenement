@@ -1229,12 +1229,13 @@ export function analyzeRetainingWall(
     // heelMode = true : basculement vers le talon. Les actions D qui poussent la résultante vers le talon (Fx < 0, Mz < 0)
     // ne sont pas des charges « qui s'opposent » à ce basculement : facteur maximal Dunfav (4.1.3.2.(5)); poids à 0,9D.
     const countVar = loads.countStabilizingVariable !== false; // MUR-06 D5 : absent = true
+    const countHM = countVar && loads.countStabilizingVariableHM !== false; // MUR-06 M6-A1 : absent = true ; sans effet si D5 décochée
     const aggregate = (zeroFav: boolean, heelMode = false) => {
       let sumV = 0;
       let sumH = 0;
       let Mres = 0;
       let Mover = 0;
-      const fOf = (comp: ForceComp, favourable: boolean, vertical = false, opposesHeel = false): number => {
+      const fOf = (comp: ForceComp, favourable: boolean, vertical = false, opposesHeel = false, horizMoment = false): number => {
         if (comp.type === 'D') {
           // D qui s'oppose : 0,9D / 1,0D (4.1.3.2.(5)) ; D défavorable : facteur maximal de la combinaison
           // Fx > 0 et Mz > 0 s'opposent au basculement vers le talon : ils gardent le facteur de la variante (0,9)
@@ -1245,7 +1246,9 @@ export function analyzeRetainingWall(
         // H (poids et poussée de l'eau, terres) n'est jamais mis à zéro ; seules les charges variables et E le sont
         // MUR-06 D1/D4 : option cochée -> le poids vertical (Fy > 0) d'une charge L, S, W garde le facteur de la combinaison ; E reste à 0
         const countedVertical = countVar && vertical && (comp.type === 'L' || comp.type === 'S' || comp.type === 'W');
-        return favourable && zeroFav && comp.type !== 'H' && !countedVertical ? 0 : (comb.factors[comp.type] || 0);
+        // M6-A1 : Fx < 0 et Mz < 0 (stabilisants) de type L, S, W gardent aussi le facteur de la combinaison si la case est cochée
+        const countedHM = countHM && horizMoment && (comp.type === 'L' || comp.type === 'S' || comp.type === 'W');
+        return favourable && zeroFav && comp.type !== 'H' && !countedVertical && !countedHM ? 0 : (comb.factors[comp.type] || 0);
       };
       for (const comp of allComps) {
         if (comp.Fy > 0) {
@@ -1262,14 +1265,14 @@ export function analyzeRetainingWall(
           sumH += comp.Fx * f;
           Mover += comp.Fx * comp.y * f;
         } else if (comp.Fx < 0) {
-          const f = fOf(comp, true);
+          const f = fOf(comp, true, false, false, true);
           sumH += comp.Fx * f;
           Mres += (-comp.Fx * comp.y) * f;
         }
         if (comp.Mz > 0) {
           Mover += comp.Mz * fOf(comp, false, false, true);
         } else if (comp.Mz < 0) {
-          Mres += (-comp.Mz) * fOf(comp, true);
+          Mres += (-comp.Mz) * fOf(comp, true, false, false, true);
         }
       }
       // appui(s) en tête : réduit la poussée à reprendre par la base

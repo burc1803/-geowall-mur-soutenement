@@ -95,3 +95,45 @@ describe('MUR-06 D6 : surcharge aval, efforts du patin (ÉLS S1 = 1D + 1L + 1H, 
     expect(c.sumV_max - s1(mk(true, 0)).sumV_max).toBeCloseTo(QAV * GEO.ePiedAv, 6);
   });
 });
+
+describe('MUR-06 M6-A1 : Fx et Mz variables stabilisants (charge de tête L : Fy 12, Fx -5, Mz -4)', () => {
+  const mk = (fx: number, mz: number, d5: boolean | undefined, hm: boolean | undefined) => analyzeRetainingWall(
+    GEO, SOIL,
+    {
+      ...loads(d5), pointLoadTop: { enabled: true, Fy: 12, Fx: fx, Mz: mz, loadType: 'L', name: 'Charge Tête' },
+      ...(hm === undefined ? {} : { countStabilizingVariableHM: hm }),
+    },
+    conc, DEFAULT_REBAR_CONFIG,
+  );
+  const YTOP = GEO.hMur + GEO.epBase; // 4,35 m : y de la charge de tête dans le moteur
+  const pick = (r: ReturnType<typeof mk>) => nonSeis(r, 0.9);
+  // Calcul à la main, 0,9D + 1,5L : le facteur de L est 1,5 ; Fx = -5 stabilise (glissement) : -5 x 1,5 = -7,5 kN/m sur ΣH ;
+  // moment stabilisant : 1,5 x (5 x 4,35 + 4) = 1,5 x 25,75 = 38,625 kN·m/m.
+  const dH = -1.5 * 5;
+  const dM = 1.5 * (5 * YTOP + 4);
+  it('valeurs à la main', () => {
+    expect(dH).toBeCloseTo(-7.5, 9);
+    expect(dM).toBeCloseTo(38.625, 9);
+  });
+  it('cochée (champ absent ou true) vs décochée : ΣH -7,5 et Ms +38,625 dans 0,9D + 1,5L', () => {
+    const off = pick(mk(-5, -4, true, false));
+    for (const hm of [undefined, true]) {
+      const on = pick(mk(-5, -4, true, hm));
+      console.log('A1', hm, 'ΣH', off.sumH, '->', on.sumH, 'Ms', off.Ms_nominal, '->', on.Ms_nominal);
+      expect(on.sumH - off.sumH).toBeCloseTo(dH, 6);
+      expect(on.Ms_nominal - off.Ms_nominal).toBeCloseTo(dM, 6);
+      expect(on.sumV_min).toBeCloseTo(off.sumV_min, 9); // Fy inchangé (D1)
+    }
+  });
+  it('décochée = MUR-06 initial : Fx et Mz stabilisants à 0 (identique à un projet sans Fx ni Mz)', () => {
+    const off = pick(mk(-5, -4, true, false)), none = pick(mk(0, 0, true, undefined));
+    expect(off.sumH).toBeCloseTo(none.sumH, 9);
+    expect(off.Ms_nominal).toBeCloseTo(none.Ms_nominal, 9);
+  });
+  it('D5 décochée : la case A1 est sans effet (tout variable stabilisant à 0)', () => {
+    const a = pick(mk(-5, -4, false, true)), b = pick(mk(-5, -4, false, false)), none = pick(mk(0, 0, false, undefined));
+    expect(a.sumH).toBeCloseTo(b.sumH, 9);
+    expect(a.Ms_nominal).toBeCloseTo(b.Ms_nominal, 9);
+    expect(a.sumH).toBeCloseTo(none.sumH, 9);
+  });
+});

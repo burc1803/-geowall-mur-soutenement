@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AnalysisResult, WallGeometry, SoilProperties, ConcreteProperties, LoadsConfig } from '../lib/types';
 import { BearingPressureDiagram } from './BearingPressureDiagram';
 import { FACTEUR_H_SISMIQUE } from '../lib/analysis';
-import { buildLoadTables, countStabilizingVariable, sumsByType } from './loadTables';
+import { buildLoadTables, countStabilizingHM, countStabilizingVariable, sumsByType } from './loadTables';
 import { buildBarSchedule, buildZoneRows, SCHEDULE_DISCLAIMER, totalScheduleMass } from '../lib/rebarPlans';
 import { Fm } from './Fm';
 import { Eq } from './Eq';
@@ -242,6 +242,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
   const ep = result.earthPressures;
   const loadTables = buildLoadTables(geo, soil, result, loads);
   const countVar = countStabilizingVariable(loads); // MUR-06 D5/D7
+  const countHM = countStabilizingHM(loads); // MUR-06 M6-A1
   const MUR06_MENTION = 'Choix de l’utilisateur, moins prudent que le facteur 0 ; CNB 4.1.3.2.(3) n’impose pas le facteur 0 à une charge principale (lu) ; pratique CFEM : À CONFIRMER.';
 
   return (
@@ -443,7 +444,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
                     { name: 'Bras de levier', unit: '(m)', align: 'center' },
                     { name: 'Moment / orteil', unit: '(kN·m/m)', align: 'center' },
                   ]}
-                  rows={rowsR.map(r => [r.desc, r.type + (!countVar && (r.type === 'L' || r.type === 'S') && n === '2a' ? ' *' : ''), num(r.fh), r.kind === 'data' ? 'non comptée' : num(r.fv), num(r.arm), r.moment === null ? '—' : fmt(r.moment, 2)])}
+                  rows={rowsR.map(r => [r.desc, r.type + (n === '2a' && (r.type === 'L' || r.type === 'S' || r.type === 'W') && (!countVar || (!countHM && (r.kind === 'moment' || (r.kind === 'force' && r.fh !== null)))) ? ' *' : ''), num(r.fh), r.kind === 'data' ? 'non comptée' : num(r.fv), num(r.arm), r.moment === null ? '—' : fmt(r.moment, 2)])}
                   footer={sums.map(t => ({ shaded: t.shaded, cells: [t.label, '', fmt(t.fh, 2), fmt(t.fv, 2), '', fmt(t.moment, 2)] }))}
                 />
               </div>
@@ -453,7 +454,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
             <p className="text-[10px] text-slate-600">Données hors force : {loadTables.dataNotes.join(' ; ')}.</p>
           )}
           <p className="text-[10px] text-slate-500">Classement par rapport au glissement et au renversement autour de l’orteil. {countVar
-            ? `Les charges variables verticales stabilisantes (L, S, W) sont comptées avec le facteur de la combinaison (MUR-06). ${MUR06_MENTION}`
+            ? `Les charges variables verticales stabilisantes (L, S, W) sont comptées avec le facteur de la combinaison (MUR-06). ${countHM ? 'Les forces horizontales et les moments variables stabilisants (L, S, W) le sont aussi (MUR-06, amendement A1).' : '* Les forces horizontales et les moments variables stabilisants (L, S, W) sont pris à 0 : case « Compter aussi les forces horizontales et les moments » décochée (amendement A1).'} ${MUR06_MENTION}`
             : '* Une charge variable stabilisante (L, S) est prise à 0 dans les vérifications de stabilité (CNB 4.1.3.2.(3)) : option « Compter les charges variables stabilisantes » décochée.'}</p>
           <p className="text-[10px] text-slate-500">Fh : force horizontale, Fv : force verticale (valeurs absolues). Bras de levier : x depuis l’orteil pour Fv, y depuis la sous-face de la semelle pour Fh ; « — » pour un moment saisi (moment direct). Moment = force × bras, positif dans son tableau. Les moments saisis, la butée et l’eau à l’avant sont inclus ; le type CNB H désigne ici les terres et l’eau. {countVar
             ? 'Surcharges uniformes (kPa) : leur poids vertical Fv = q × longueur (talon ou patin) est compté dans Σ L, avec son bras et son moment ; leur poussée horizontale figure au tableau 2b.'
@@ -1113,7 +1114,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
             ] },
             { title: 'Charges', rows: [
               ['Charges variables stabilisantes (MUR-06)', countVar
-                ? <>Option « Compter les charges variables stabilisantes (L, S, W) » cochée : le poids de la surcharge (amont sur le talon, aval sur le patin), la charge de tête Fy et les charges verticales saisies reçoivent le facteur de la combinaison dans toutes les vérifications ; la poussée garde le même facteur ; le séisme E est inchangé. {MUR06_MENTION} Hypothèse : la surcharge est présente en même temps que la poussée qu’elle produit ; pour une surcharge qui peut n’occuper qu’une bande derrière le talon (camion, entreposage partiel), décocher l’option.</>
+                ? <>Option « Compter les charges variables stabilisantes (L, S, W) » cochée : le poids de la surcharge (amont sur le talon, aval sur le patin), la charge de tête Fy et les charges verticales saisies reçoivent le facteur de la combinaison dans toutes les vérifications ; la poussée garde le même facteur ; le séisme E est inchangé. {countHM ? 'Case « Compter aussi les forces horizontales et les moments variables stabilisants (L, S, W) » cochée (amendement A1) : Fx et Mz stabilisants reçoivent aussi le facteur de la combinaison.' : 'Case « Compter aussi les forces horizontales et les moments » décochée (amendement A1) : Fx et Mz variables stabilisants pris à 0.'} {MUR06_MENTION} Hypothèse : la surcharge est présente en même temps que la poussée qu’elle produit ; pour une surcharge qui peut n’occuper qu’une bande derrière le talon (camion, entreposage partiel), décocher l’option.</>
                 : <>Option décochée : charges variables verticales stabilisantes prises à 0 en stabilité (option prudente, CNB 4.1.3.2.(3)) ; leur poussée garde le facteur de la combinaison.</>, 'confirmer'],
               ['Charges linéaires derrière le mur', <>CFEM 5e, fig. 20.8 (p. 694) : <V n="H" /> = <V n="H" s="p" /> = <V n="h" s="r" /> + <V n="t" s="s" />, distance mesurée depuis la face arrière du voile, origine à la surface du remblai (décision de l’utilisateur du 2026-11-08) ; aucune pression au-dessus du remblai.</>, 'applique'],
               ['Charges ponctuelles et réparties', <>Charges ponctuelles de la fig. 20.8 non implémentées ; charges réparties assimilées à leur résultante : approximation À CONFIRMER.</>, 'confirmer'],

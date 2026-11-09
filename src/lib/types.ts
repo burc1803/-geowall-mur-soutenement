@@ -244,6 +244,9 @@ export interface LoadsConfig {
   /** MUR-06 D5 : compter le poids des charges variables verticales L, S, W (surcharge amont/aval, charge de tête Fy, charges saisies) avec le facteur
    *  de la combinaison, y compris comme force stabilisante. Absent = true (choix de l'utilisateur) ; false = facteur 0 (comportement antérieur, prudent). Le séisme E est inchangé (D4). */
   countStabilizingVariable?: boolean;
+  /** MUR-06 M6-A1 (A1-D1) : compter aussi les forces horizontales Fx et les moments Mz de type L, S, W qui stabilisent avec le facteur de la combinaison.
+   *  Absent = true ; sans effet si countStabilizingVariable est false (tout variable stabilisant à 0). Séisme E, butée et eau à l'avant inchangés (A1-D4). */
+  countStabilizingVariableHM?: boolean;
 }
 
 export interface VisualizerDisplayOptions {

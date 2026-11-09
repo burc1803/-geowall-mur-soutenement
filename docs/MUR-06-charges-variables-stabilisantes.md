@@ -48,3 +48,19 @@ h = 4,00 m ; t = 0,35 m ; patin 0,80 m ; talon 1,75 m ; semelle 0,35 m ; hr = 3,
 | ELS S1 (1D + 1L) : ΣV | 193,7 | 214,7 kN/m (note mur3 3 : 214,7) |
 
 Critère d'acceptation : écarts ≤ 0,1 kN/m ; option décochée = résultats actuels inchangés (tous les tests existants passent sans modification de valeur).
+
+## 6. Amendement M6-A1 — forces horizontales et moments variables stabilisants (2026-11-08)
+
+| Champ | Valeur |
+|---|---|
+| Statut | **APPROUVÉ** le 2026-11-08 : décision dictée par l'utilisateur, à la question « garder la règle (vertical seulement) ou l'étendre aux forces horizontales et aux moments ? » : « laisser le choix utilisateur, mettre pour cocher, mais par défaut, il faut tenir en compte ». |
+
+| N° | Décision |
+|---|---|
+| A1-D1 | Nouvelle case, sous la case D5 : « Compter aussi les forces horizontales et les moments variables stabilisants (L, S, W) », **cochée par défaut** ; absente (anciens projets) = cochée. |
+| A1-D2 | Cochée (et D5 cochée) : une force horizontale Fx ou un moment Mz de type L, S ou W qui stabilise (s'oppose au glissement ou au renversement autour de l'orteil, ou au basculement vers le talon selon le cas étudié) reçoit le facteur de la combinaison, comme le poids (D1). Une même charge a ainsi le même facteur pour Fy, Fx et Mz. |
+| A1-D3 | Décochée : comportement de MUR-06 initial (Fx et Mz variables stabilisants à 0). D5 décochée : la case A1 est sans effet (tout variable stabilisant à 0) et apparaît désactivée. |
+| A1-D4 | Séisme E inchangé (D4). Butée et eau à l'avant inchangées (ce sont des résistances, type H/—). |
+| A1-D5 | Note : tableau 2a et section 5 indiquent l'état des deux cases ; la remarque « * prise à 0 » ne s'applique qu'aux composantes réellement mises à 0. |
+
+Cas de contrôle : projet par défaut, charge de tête activée, type L, Fy = 12, Fx = −5 kN/m (vers le remblai), Mz = −4 kN·m/m (stabilisant). Option cochée : par rapport à « A1 décochée », dans 0,9D + 1,5L, ΣH diminue de 1,5 × 5 = 7,5 kN/m et le moment stabilisant augmente de 1,5 × (5 × y_tête + 4). Option décochée : résultats de MUR-06 initial inchangés.
