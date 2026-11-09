@@ -64,3 +64,9 @@ Critère d'acceptation : écarts ≤ 0,1 kN/m ; option décochée = résultats a
 | A1-D5 | Note : tableau 2a et section 5 indiquent l'état des deux cases ; la remarque « * prise à 0 » ne s'applique qu'aux composantes réellement mises à 0. |
 
 Cas de contrôle : projet par défaut, charge de tête activée, type L, Fy = 12, Fx = −5 kN/m (vers le remblai), Mz = −4 kN·m/m (stabilisant). Option cochée : par rapport à « A1 décochée », dans 0,9D + 1,5L, ΣH diminue de 1,5 × 5 = 7,5 kN/m et le moment stabilisant augmente de 1,5 × (5 × y_tête + 4). Option décochée : résultats de MUR-06 initial inchangés.
+
+## 7. Erratum (2026-11-08) — Commentaire A du CNB 2020
+
+Lu après l'approbation, dans « Commentaires sur le calcul des structures (Guide de l'utilisateur – CNB 2020 : Partie 4 de la division B) », Commentaire A, Calcul aux états limites, ¶40 : « Pour les combinaisons de charges 2 à 5 dans le tableau 4.1.3.2.-A du CNB […], les charges variables contraires sont donc considérées être égales à zéro, le coefficient de charge pour la charge permanente contraire […] est considéré être égal à 0,9 […] ».
+
+La phrase du §2 « Le CNB ne prescrit pas de facteur 0 […] » reste exacte pour le texte de l'article 4.1.3.2, mais le Commentaire du CNB recommande le facteur 0. L'option cochée (D5, M6-A1) s'écarte donc du Commentaire. La mention de la note est corrigée en conséquence. Le maintien du défaut « cochée » est soumis de nouveau à l'utilisateur.

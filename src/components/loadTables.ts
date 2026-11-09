@@ -132,7 +132,7 @@ export function buildLoadTables(geo: WallGeometry, soil: SoilProperties, result:
   for (const c of result.lateral_nominal.filter(c => c.applied && c.name.includes('fig. 20.8'))) add(c.name, c.type, { Fx: c.Fx, y: c.y });
 
   if (result.hydro.hasWater) add('Sous-pression sous la semelle (uniforme sur B)', 'H', { Fy: -result.hydro.uplift_nominal, x: B / 2 });
-  if (ep.P_passive_nominal > 0) add('Butée du sol Pp′ (résistance)', '—', { Fx: ep.P_passive_nominal, y: ep.y_Pp, resistance: true, passive: true });
+  if (ep.P_passive_nominal > 0) add('Butée du sol Pp′ (résistance géotechnique : Ψ·φp, sans facteur 1,5)', 'H', { Fx: ep.P_passive_nominal, y: ep.y_Pp, resistance: true, passive: true });
   if (ep.frontWaterScenario === 'B') add('Eau à l\'avant Pw,a = ½·γw·hw,av² (résistance)', 'H', { Fx: ep.P_water_front, y: ep.y_Pw_front, resistance: true, passive: true });
   add('Poids propre du voile', 'D', { Fy: wn.stem, x: xStem });
   add('Poids propre de la semelle', 'D', { Fy: wn.base, x: B / 2 });

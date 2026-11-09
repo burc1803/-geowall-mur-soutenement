@@ -243,7 +243,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
   const loadTables = buildLoadTables(geo, soil, result, loads);
   const countVar = countStabilizingVariable(loads); // MUR-06 D5/D7
   const countHM = countStabilizingHM(loads); // MUR-06 M6-A1
-  const MUR06_MENTION = 'Choix de l’utilisateur, moins prudent que le facteur 0 ; CNB 4.1.3.2.(3) n’impose pas le facteur 0 à une charge principale (lu) ; pratique CFEM : À CONFIRMER.';
+  const MUR06_MENTION = 'Choix de l’utilisateur, moins prudent que le facteur 0. L’article 4.1.3.2 du CNB 2020 ne fixe pas lui-même ce facteur, mais le Commentaire A (Calcul aux états limites, ¶40) indique que, pour les combinaisons 2 à 5, « les charges variables contraires sont donc considérées être égales à zéro » : ce choix s’écarte du Commentaire. Pratique CFEM : À CONFIRMER.';
 
   return (
     <div id="note-officielle" className="flex flex-col gap-8 w-full max-w-6xl mx-auto p-2 md:p-6 print:p-0 print:max-w-none text-slate-800">
