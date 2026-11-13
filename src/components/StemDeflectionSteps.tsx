@@ -19,7 +19,7 @@ export function fmtSci(v: number, d = 3): string {
 }
 
 /** Nombre avec espace insécable comme séparateur de milliers (fr) pour h/Δ. */
-export const fmtInt = (v: number): string => (Number.isFinite(v) ? Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : v === Infinity ? '∞' : 'non défini');
+export const fmtInt = (v: number): string => (Number.isFinite(v) ? Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f') : v === Infinity ? '∞' : 'non défini');
 
 export const combId = (name: string): string => /ELS\s+(\S+)\s/.exec(name)?.[1] ?? name;
 
@@ -34,46 +34,59 @@ export function equivalentK(sd: WallDeflectionResult, row: WallDeflectionRow): n
 const I4 = () => <>mm<sup>4</sup>/m</>;
 
 /** Propriétés de section et facteurs (É1, É3, É5) : Ec, fr/2, Ig, yt, Mcr, n, c, Icr, Ie, ζs. Combinaison `row` pour Ie. */
-export function DeflectionPropEqs({ sd, row }: { sd: WallDeflectionResult; row: WallDeflectionRow }) {
+export function DeflectionPropEqs({ sd, row, eqNo }: { sd: WallDeflectionResult; row: WallDeflectionRow; eqNo?: (i: number) => string }) {
   const p = sd.props!;
   return (
     <div className="space-y-2">
       <Eq
-        general={<><V n="E" s="c" /> = 4500 <Sqrt><V n="f" s="c" prime /></Sqrt></>}
+        no={eqNo?.(0)}
+        lhs={<V n="E" s="c" />}
+        general={<>4500 <Sqrt><V n="f" s="c" prime /></Sqrt></>}
         substituted={<>4500 × √{fr(p.fc, 1)}</>}
-        result={<><V n="E" s="c" /> = {fr(p.Ec, 1)} MPa</>}
+        result={<>{fr(p.Ec, 1)} MPa</>}
         note="CSA A23.3 8.6.2.3, éq. 8.2 (béton de densité normale) ; Es = 200 000 MPa (8.5.4.1)."
       />
       <Eq
-        general={<><V n="f" s="r" />/2 = 0,6 <V n="λ" /> <Sqrt><V n="f" s="c" prime /></Sqrt> / 2</>}
-        substituted={<>0,6 × {fr(p.lambda, 2)} × √{fr(p.fc, 1)} / 2</>}
-        result={<><V n="f" s="r" /> = {fr(p.fr, 3)} MPa ; <V n="f" s="r" />/2 = {fr(p.frHalf, 3)} MPa</>}
+        no={eqNo?.(1)}
+        lines={[
+          { lhs: <><V n="f" s="r" />/2</>, general: <>0,6 <V n="λ" /> <Sqrt><V n="f" s="c" prime /></Sqrt> / 2</>, substituted: <>0,6 × {fr(p.lambda, 2)} × √{fr(p.fc, 1)} / 2</>, result: <>{fr(p.frHalf, 3)} MPa (<V n="f" s="r" /> = {fr(p.fr, 3)} MPa)</> },
+        ]}
         note="CSA A23.3 8.6.4, éq. 8.3 ; 9.8.2.3 : fr pris égal à la moitié de l'éq. 8.3 pour Mcr (flèche)."
       />
       <Eq
-        general={<><V n="I" s="g" /> = <V n="b" /><V n="t" p="3" />/12 ; <V n="y" s="t" /> = <V n="t" />/2 ; <V n="M" s="cr" /> = (<V n="f" s="r" />/2) <V n="I" s="g" /> / <V n="y" s="t" /></>}
-        substituted={<><V n="I" s="g" /> = {fmtSci(p.b * p.t ** 3 / 12, 3)} ; <V n="M" s="cr" /> = {fr(p.frHalf, 3)} × {fmtSci(p.Ig, 3)} / {fr(p.yt, 0)}</>}
-        result={<><V n="I" s="g" /> = {fmtSci(p.Ig, 3)} <I4 /> ; <V n="y" s="t" /> = {fr(p.yt, 0)} mm ; <V n="M" s="cr" /> = {fr(p.Mcr, 2)} kN·m/m</>}
+        no={eqNo?.(2)}
+        lines={[
+          { lhs: <V n="I" s="g" />, general: <><V n="b" /><V n="t" p="3" />/12</>, substituted: <>{fmtSci(p.b * p.t ** 3 / 12, 3)}</>, result: <>{fmtSci(p.Ig, 3)} <I4 /></> },
+          { lhs: <V n="y" s="t" />, general: <><V n="t" />/2</>, result: <>{fr(p.yt, 0)} mm</> },
+          { lhs: <V n="M" s="cr" />, general: <>(<V n="f" s="r" />/2) <V n="I" s="g" /> / <V n="y" s="t" /></>, substituted: <>{fr(p.frHalf, 3)} × {fmtSci(p.Ig, 3)} / {fr(p.yt, 0)}</>, result: <>{fr(p.Mcr, 2)} kN·m/m</> },
+        ]}
         note="CSA A23.3 9.8.2.3, éq. 9.2 (Mcr = fr·Ig/yt, avec fr/2). b = 1 000 mm."
       />
       <Eq
-        general={<><V n="n" /> = <V n="E" s="s" />/<V n="E" s="c" /> ; <V n="b" /><V n="c" p="2" />/2 + <V n="n" /><V n="A" s="s" /><V n="c" /> − <V n="n" /><V n="A" s="s" /><V n="d" /> = 0 ; <V n="I" s="cr" /> = <V n="b" /><V n="c" p="3" />/3 + <V n="n" /><V n="A" s="s" />(<V n="d" /> − <V n="c" />)<sup>2</sup></>}
-        substituted={<><V n="n" /> = {fr(p.Es, 0)}/{fr(p.Ec, 1)} ; <V n="n" /><V n="A" s="s" /> = {fr(p.n, 4)} × {fr(p.As, 1)} = {fr(p.n * p.As, 0)} mm² ; <V n="d" /> = {fr(p.d, 0)} mm</>}
-        result={<><V n="n" /> = {fr(p.n, 4)} ; <V n="c" /> = {fr(p.c, 2)} mm ; <V n="I" s="cr" /> = {fmtSci(p.Icr, 3)} <I4 /></>}
+        no={eqNo?.(3)}
+        lines={[
+          { lhs: <V n="n" />, general: <><V n="E" s="s" />/<V n="E" s="c" /></>, substituted: <>{fr(p.Es, 0)}/{fr(p.Ec, 1)}</>, result: <>{fr(p.n, 4)}</> },
+          { lhs: <V n="c" />, general: <>racine de <V n="b" /><V n="c" p="2" />/2 + <V n="n" /><V n="A" s="s" /><V n="c" /> − <V n="n" /><V n="A" s="s" /><V n="d" /> = 0</>, substituted: <><V n="n" /><V n="A" s="s" /> = {fr(p.n, 4)} × {fr(p.As, 1)} = {fr(p.n * p.As, 0)} mm² ; <V n="d" /> = {fr(p.d, 0)} mm</>, result: <>{fr(p.c, 2)} mm</> },
+          { lhs: <V n="I" s="cr" />, general: <><V n="b" /><V n="c" p="3" />/3 + <V n="n" /><V n="A" s="s" />(<V n="d" /> − <V n="c" />)<sup>2</sup></>, result: <>{fmtSci(p.Icr, 3)} <I4 /></> },
+        ]}
         note="Section fissurée transformée, armature tendue du voile (côté remblai) ; armature comprimée négligée (ρ′ = 0, MUR-05 D5). Chaallal §3.4.2."
       />
       <Eq
-        general={<><V n="I" s="e" /> = <V n="I" s="cr" /> + (<V n="I" s="g" /> − <V n="I" s="cr" />)(<V n="M" s="cr" />/<V n="M" s="a" />)<sup>3</sup> ≤ <V n="I" s="g" /></>}
+        no={eqNo?.(4)}
+        lhs={<V n="I" s="e" />}
+        general={<><V n="I" s="cr" /> + (<V n="I" s="g" /> − <V n="I" s="cr" />)(<V n="M" s="cr" />/<V n="M" s="a" />)<sup>3</sup> ≤ <V n="I" s="g" /></>}
         substituted={row.cracked
           ? <>{fmtSci(p.Icr, 3)} + ({fmtSci(p.Ig, 3)} − {fmtSci(p.Icr, 3)}) × ({fr(p.Mcr, 2)}/{fr(row.Ma, 2)})<sup>3</sup></>
-          : <><V n="M" s="a" /> = {fr(row.Ma, 2)} ≤ <V n="M" s="cr" /> = {fr(p.Mcr, 2)} kN·m/m : <V n="I" s="e" /> = <V n="I" s="g" /></>}
-        result={<><V n="I" s="e" /> = {fmtSci(row.Ie, 4)} <I4 /> ({fr(row.Ie / p.Ig, 3)} <V n="I" s="g" />) : section {row.cracked ? 'fissurée' : 'non fissurée'}</>}
+          : <><V n="I" s="g" /> (<V n="M" s="a" /> = {fr(row.Ma, 2)} ≤ <V n="M" s="cr" /> = {fr(p.Mcr, 2)} kN·m/m)</>}
+        result={<>{fmtSci(row.Ie, 4)} <I4 /> ({fr(row.Ie / p.Ig, 3)} <V n="I" s="g" />) : section {row.cracked ? 'fissurée' : 'non fissurée'}</>}
         note="CSA A23.3 9.8.2.3, éq. 9.1. Ie constant sur la hauteur, calculé avec Ma au pied (mur libre) ou le plus grand |M| (mur de sous-sol ; 9.8.2.4 non appliquée, À CONFIRMER) : MUR-05 D1."
       />
       <Eq
-        general={<><V n="ζ" s="s" /> = 1 + <Frac n={<V n="s" />} d={<>1 + 50 <V n="ρ" prime /></>} /></>}
-        substituted={<><V n="ζ" s="s" /> = 1 + {fr(sd.s, 1)} / (1 + 50 × {fr(sd.rhoPrime, 4)})</>}
-        result={<><V n="ζ" s="s" /> = {fr(sd.zetaS, 3)}</>}
+        no={eqNo?.(5)}
+        lhs={<V n="ζ" s="s" />}
+        general={<>1 + <Frac n={<V n="s" />} d={<>1 + 50 <V n="ρ" prime /></>} /></>}
+        substituted={<>1 + {fr(sd.s, 1)} / (1 + 50 × {fr(sd.rhoPrime, 4)})</>}
+        result={<>{fr(sd.zetaS, 3)}</>}
         note="CSA A23.3 9.8.2.5, éq. 9.5 : s = 2,0 (charge soutenue de 5 ans ou plus) ; ρ′ = 0 (MUR-05 D5)."
       />
     </div>

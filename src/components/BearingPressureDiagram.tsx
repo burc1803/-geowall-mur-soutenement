@@ -1,14 +1,34 @@
 import React, { useState } from 'react';
 import { AnalysisResult, WallGeometry, SoilProperties, CombinationResult } from '../lib/types';
+import { fr } from '../lib/theoryEquations';
+import { Fm } from './Fm';
+import { V } from './Eq';
+
+/** Symbole dans un texte SVG : nom en italique, indice droit en baisse. */
+const Sv = ({ n, s }: { n: string; s?: string }) => (
+  <>
+    <tspan fontStyle="italic">{n}</tspan>
+    {s && <tspan baselineShift="sub" fontSize="0.75em" fontStyle="normal">{s}</tspan>}
+  </>
+);
 import { ArrowDown, HelpCircle, AlertTriangle, CheckCircle2, ChevronRight, Gauge, Scale, Layers } from 'lucide-react';
 
 interface BearingPressureDiagramProps {
   geo: WallGeometry;
   soil: SoilProperties;
   result: AnalysisResult;
+  /** 'note' : version de la note de calcul (sans bandeau ni boutons de présélection). */
+  variant?: 'app' | 'note';
+  /** Variante note : numéro du tableau de synthèse et enveloppe de la figure (légende sous le schéma). */
+  tableNo?: string;
+  renderFigure?: (svg: React.ReactNode) => React.ReactNode;
 }
 
-export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDiagramProps) {
+export function BearingPressureDiagram({ geo, soil, result, variant = 'app', tableNo, renderFigure }: BearingPressureDiagramProps) {
+  const isNote = variant === 'note';
+  const wrapSvg = (n: React.ReactNode) => (isNote && renderFigure ? renderFigure(n) : n);
+  /** Les noms de combinaisons du moteur portent un point décimal (1.25D) : virgule décimale à l'affichage. */
+  const nm = (t: string) => t.replace(/(\d)\.(\d)/g, '$1,$2');
   // Selection mode for combination
   const [selectedCombName, setSelectedCombName] = useState<string>(
     result.governingULS ? result.governingULS.combName : result.combinations[0]?.combName || ''
@@ -86,7 +106,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
       ${heelEndX},${baseBottomY}
     `;
   } else {
-    // Cas 4: Triangle sur largeur comprimée 3*x1, puis décollement (0 kPa)
+    // Cas 4: Triangle sur largeur comprimée 3*x1, puis décollement (0 kPa)
     const compressedEndX = Math.min(padLeft + (3 * x1) * scaleX, heelEndX);
     pressurePolygonPoints = `
       ${toeStartX},${baseBottomY}
@@ -103,9 +123,9 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+    <div className={isNote ? 'flex flex-col gap-2' : 'bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col'}>
       {/* Top Banner & Combination Quick-Pickers */}
-      <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {!isNote && <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
@@ -166,7 +186,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Combinaison Dropdown Selector */}
       <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -180,14 +200,14 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             <optgroup label="Combinaisons ÉLU (États Limites Ultimes)">
               {result.combinations.filter(c => c.type === 'ULS').map(c => (
                 <option key={c.combName} value={c.combName}>
-                  {c.combName} — q1 = {c.outside_base ? NV : `${c.q_toe.toFixed(1)} kPa`} | e = {Math.abs(c.ecc).toFixed(3)} m
+                  {nm(c.combName)} — q1 = {c.outside_base ? NV : `${fr(c.q_toe, 1)} kPa`} | e = {fr(Math.abs(c.ecc), 3)} m
                 </option>
               ))}
             </optgroup>
             <optgroup label="Combinaisons ÉLTS (États Limites d'Utilisation / Tassement)">
               {result.combinations.filter(c => c.type === 'SLS').map(c => (
                 <option key={c.combName} value={c.combName}>
-                  {c.combName} — q1 = {c.outside_base ? NV : `${c.q_toe.toFixed(1)} kPa`} | e = {Math.abs(c.ecc).toFixed(3)} m
+                  {nm(c.combName)} — q1 = {c.outside_base ? NV : `${fr(c.q_toe, 1)} kPa`} | e = {fr(Math.abs(c.ecc), 3)} m
                 </option>
               ))}
             </optgroup>
@@ -202,7 +222,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             isBearingOk ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'
           }`}>
             {isBearingOk ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-            {outside ? 'q1 / q_cap : non vérifiable (hors base)' : <>q1 / q_cap = {(bearingRatio * 100).toFixed(1)} % {isBearingOk ? '(Conforme)' : '(Surcharge)'}</>}
+            {outside ? 'q1 / q_cap : non vérifiable (hors base)' : <>q1 / q_cap = {fr((bearingRatio * 100), 1)} % {isBearingOk ? '(Conforme)' : '(Surcharge)'}</>}
           </span>
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
             !isTensionSeparation ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
@@ -220,6 +240,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
       )}
 
       {/* SVG Interactive Canvas */}
+      {wrapSvg(
       <div className="p-4 flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100/60 overflow-x-auto">
         <svg
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
@@ -315,10 +336,10 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
 
           {/* Footing segment labels */}
           <text x={toeStartX + (geo.ePiedAv * scaleX) / 2} y={baseTopY + baseThicknessPx / 2 + 4} textAnchor="middle" fill="#334155" fontSize="10" fontWeight="bold">
-            Patin ({geo.ePiedAv.toFixed(2)} m)
+            Patin ({fr(geo.ePiedAv, 2)} m)
           </text>
           <text x={stemEndX + (geo.ePiedAr * scaleX) / 2} y={baseTopY + baseThicknessPx / 2 + 4} textAnchor="middle" fill="#334155" fontSize="10" fontWeight="bold">
-            Talon ({geo.ePiedAr.toFixed(2)} m)
+            Talon ({fr(geo.ePiedAr, 2)} m)
           </text>
 
           {/* Footing Centerline B/2 */}
@@ -332,7 +353,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             strokeDasharray="6,4"
           />
           <text x={centerX} y={baseTopY - 25} textAnchor="middle" fill="#64748b" fontSize="10" fontWeight="bold">
-            Axe Semelle (B/2 = {(B / 2).toFixed(2)} m)
+            Axe Semelle (B/2 = {fr((B / 2), 2)} m)
           </text>
 
           {/* Soil Pressure Diagram Under Footing */}
@@ -382,7 +403,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             fontSize="10"
             fontWeight="bold"
           >
-            {selectedComb.type === 'ULS' ? 'φgu·qu' : 'q_adm'} = {q_limit.toFixed(1)} kPa
+            {selectedComb.type === 'ULS' ? <><Sv n="φ" s="gu" />·<Sv n="q" s="u" /></> : <Sv n="q" s="adm" />} = {fr(q_limit, 1)} kPa
           </text>
 
           {/* Pressure arrows inside the diagram */}
@@ -426,11 +447,11 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             fontSize="12"
             fontWeight="black"
           >
-            q1 = {outside ? NV : `${q1.toFixed(1)} kPa`}
+            <Sv n="q" s="1" /> = {outside ? NV : `${fr(q1, 1)} kPa`}
           </text>
           {outside ? (
             <text x={heelEndX} y={baseBottomY + 16} textAnchor="end" fill="#e11d48" fontSize="11" fontWeight="bold">
-              q2 = {NV}
+              <Sv n="q" s="2" /> = {NV}
             </text>
           ) : !isTensionSeparation ? (
             <text
@@ -441,7 +462,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               fontSize="12"
               fontWeight="black"
             >
-              q2 = {q2.toFixed(1)} kPa
+              <Sv n="q" s="2" /> = {fr(q2, 1)} kPa
             </text>
           ) : (
             <text
@@ -452,7 +473,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               fontSize="11"
               fontWeight="bold"
             >
-              q2 = 0.0 kPa
+              <Sv n="q" s="2" /> = 0,0 kPa
             </text>
           )}
 
@@ -487,7 +508,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               fontSize="11"
               fontWeight="black"
             >
-              Rv = {Rv.toFixed(1)} kN/m
+              <Sv n="R" s="v" /> = {fr(Rv, 1)} kN/m
             </text>
           </g>
 
@@ -510,7 +531,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             fontSize="10"
             fontWeight="black"
           >
-            x1 = {x1.toFixed(3)} m
+            <Sv n="x" s="1" /> = {fr(x1, 3)} m
           </text>
 
           {/* Eccentricity e dimension line (between Center B/2 and Resultant x1) */}
@@ -534,7 +555,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
                 fontSize="10"
                 fontWeight="black"
               >
-                e = {ecc.toFixed(3)} m {ecc <= B_over_6 ? '≤ B/6' : '> B/6'}
+                <Sv n="e" /> = {fr(ecc, 3)} m {ecc <= B_over_6 ? '≤' : '>'} <Sv n="B" />/6
               </text>
             </g>
           )}
@@ -558,11 +579,14 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
             fontSize="11"
             fontWeight="bold"
           >
-            Largeur Totale de la Semelle B = {B.toFixed(2)} m (B/6 = {B_over_6.toFixed(3)} m)
+            Largeur Totale de la Semelle B = {fr(B, 2)} m (B/6 = {fr(B_over_6, 3)} m)
           </text>
         </svg>
       </div>
+      )}
 
+      {!isNote && (
+      <>
       {/* Numerical Analysis Dashboard & Step-by-Step Breakdown */}
       <div className="p-5 grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 border-t border-slate-200">
         {/* Card 1: Resultant Position */}
@@ -573,7 +597,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700">x1</span>
             </div>
             <div className="text-xl font-black text-slate-900 mt-1">
-              {x1.toFixed(3)} <span className="text-xs font-semibold text-slate-500">m</span>
+              {fr(x1, 3)} <span className="text-xs font-semibold text-slate-500">m</span>
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
               Mesurée depuis la pointe avant du patin. <br />
@@ -582,7 +606,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between">
             <span>Charge totale Rv :</span>
-            <strong className="text-slate-800">{Rv.toFixed(1)} kN/m</strong>
+            <strong className="text-slate-800">{fr(Rv, 1)} kN/m</strong>
           </div>
         </div>
 
@@ -600,8 +624,8 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               </span>
             </div>
             <div className="text-xl font-black text-slate-900 mt-1">
-              {ecc.toFixed(3)} <span className="text-xs font-semibold text-slate-500">m</span>
-              <span className="text-xs font-normal text-slate-500 ml-2">/ Limite {B_over_6.toFixed(3)} m</span>
+              {fr(ecc, 3)} <span className="text-xs font-semibold text-slate-500">m</span>
+              <span className="text-xs font-normal text-slate-500 ml-2">/ Limite {fr(B_over_6, 3)} m</span>
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
               {!isTensionSeparation
@@ -612,7 +636,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
           <div className="mt-2 pt-2 border-t border-slate-200/60 text-[11px] flex justify-between">
             <span className="text-slate-500">Zone comprimée :</span>
             <strong className={!isTensionSeparation ? 'text-emerald-700' : 'text-amber-700'}>
-              {(contactRatio * 100).toFixed(0)} % ({(!isTensionSeparation ? B : 3 * x1).toFixed(2)} m)
+              {fr((contactRatio * 100), 0)} % ({fr((!isTensionSeparation ? B : 3 * x1), 2)} m)
             </strong>
           </div>
         </div>
@@ -631,16 +655,16 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               </span>
             </div>
             <div className="text-xl font-black text-slate-900 mt-1">
-              {outside ? NV : <>{q1.toFixed(1)} <span className="text-xs font-semibold text-slate-500">kPa</span></>}
+              {outside ? NV : <>{fr(q1, 1)} <span className="text-xs font-semibold text-slate-500">kPa</span></>}
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
-              Capacité : <strong className="text-slate-800">{q_limit.toFixed(1)} kPa</strong> ({selectedComb.type === 'ULS' ? 'φgu·qu' : 'q_adm'}).
+              Capacité : <strong className="text-slate-800">{fr(q_limit, 1)} kPa</strong> ({selectedComb.type === 'ULS' ? 'φgu·qu' : 'q_adm'}).
             </p>
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] flex justify-between items-center">
             <span className="text-slate-500">Taux d'utilisation :</span>
             <span className={`font-black ${isBearingOk ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {outside ? NV : `${(bearingRatio * 100).toFixed(1)} %`}
+              {outside ? NV : `${fr((bearingRatio * 100), 1)} %`}
             </span>
           </div>
         </div>
@@ -653,7 +677,7 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
               <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-800">q2</span>
             </div>
             <div className="text-xl font-black text-slate-900 mt-1">
-              {outside ? NV : <>{q2.toFixed(1)} <span className="text-xs font-semibold text-slate-500">kPa</span></>}
+              {outside ? NV : <>{fr(q2, 1)} <span className="text-xs font-semibold text-slate-500">kPa</span></>}
             </div>
             <p className="text-[11px] text-slate-600 mt-1">
               {outside ? 'Résultante hors base : contact non vérifiable.' : q2 > 0 ? 'Pression positive continue sous le remblai arrière.' : 'Tension théorique nulle (non transmise au sol).'}
@@ -674,10 +698,34 @@ export function BearingPressureDiagram({ geo, soil, result }: BearingPressureDia
         <div className="space-y-1">
           <strong>Règle de dimensionnement géotechnique (CFEM 5e éd., § 20.7 & CNB {result.cnbEdition}) :</strong>
           <p className="text-blue-800 leading-relaxed text-[11px]">
-            Le sol ne pouvant pas reprendre d'effort de traction, si l'excentricité <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">e = |B/2 - x1|</code> dépasse le tiers central (<code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">B/6 = {B_over_6.toFixed(3)} m</code>), la répartition devient triangulaire sur une largeur réduite effective <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">B' = 3·x1</code> avec une contrainte de crête <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">q1 = 2·Rv / (3·x1)</code>. Les normes canadiennes tolèrent un décollement partiel sous conditions d'états limites ultimes tant que la portance ultime pondérée <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">φgu·qu</code> n'est pas dépassée.
+            Le sol ne pouvant pas reprendre d'effort de traction, si l'excentricité <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">e = |B/2 - x1|</code> dépasse le tiers central (<code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">B/6 = {fr(B_over_6, 3)} m</code>), la répartition devient triangulaire sur une largeur réduite effective <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">B' = 3·x1</code> avec une contrainte de crête <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">q1 = 2·Rv / (3·x1)</code>. Les normes canadiennes tolèrent un décollement partiel sous conditions d'états limites ultimes tant que la portance ultime pondérée <code className="bg-blue-100 px-1 py-0.5 rounded font-mono text-[10px]">φgu·qu</code> n'est pas dépassée.
           </p>
         </div>
       </div>
+      </>
+      )}
+      {isNote && (
+        <div className="break-inside-avoid print:break-inside-avoid">
+          <div className="note-caption"><span>Tableau {tableNo} — </span><Fm>Pressions de contact et excentricité de la combinaison affichée</Fm></div>
+          <table className="note-table text-left">
+            <thead><tr><th>Grandeur</th><th className="text-center">Symbole</th><th className="text-right">Valeur</th><th className="text-center">Unité</th><th>Remarque</th></tr></thead>
+            <tbody>
+              <tr><td>Position de la résultante</td><td className="text-center"><V n="x" s="1" /></td><td className="text-right">{fr(x1, 3)}</td><td className="text-center">m</td><td>Mesurée depuis la pointe avant du patin</td></tr>
+              <tr><td>Charge verticale totale</td><td className="text-center"><V n="R" s="v" /></td><td className="text-right">{fr(Rv, 1)}</td><td className="text-center">kN/m</td><td>—</td></tr>
+              <tr><td>Excentricité</td><td className="text-center"><V n="e" /></td><td className="text-right">{fr(ecc, 3)}</td><td className="text-center">m</td><td>{!isTensionSeparation ? 'Résultante à l’intérieur du tiers central : toute la semelle reste comprimée.' : 'Résultante hors du tiers central : décollement partiel du talon arrière.'}</td></tr>
+              <tr><td>Limite du tiers central</td><td className="text-center"><V n="B" />/6</td><td className="text-right">{fr(B_over_6, 3)}</td><td className="text-center">m</td><td>{!isTensionSeparation ? 'Cas 2 (e ≤ B/6)' : 'Cas 4 (e > B/6)'}</td></tr>
+              <tr><td>Pression à l’orteil (maximale)</td><td className="text-center"><V n="q" s="1" /></td><td className="text-right">{outside ? NV : fr(q1, 1)}</td><td className="text-center">kPa</td><td>—</td></tr>
+              <tr><td>Pression au talon</td><td className="text-center"><V n="q" s="2" /></td><td className="text-right">{outside ? NV : fr(q2, 1)}</td><td className="text-center">kPa</td><td>{outside ? 'Résultante hors base : contact non vérifiable.' : q2 > 0 ? 'Comprimé : pression positive continue sous le remblai arrière.' : 'Non comprimé : tension théorique nulle (non transmise au sol).'}</td></tr>
+              <tr><td>Zone comprimée</td><td className="text-center">{!isTensionSeparation ? <V n="B" /> : <V n="B" prime />}</td><td className="text-right">{fr(!isTensionSeparation ? B : 3 * x1, 2)}</td><td className="text-center">m</td><td>{fr(contactRatio * 100, 0)}{'\u00a0'}% de la largeur de la semelle</td></tr>
+              <tr><td>Capacité</td><td className="text-center">{selectedComb.type === 'ULS' ? <><V n="φ" s="gu" />·<V n="q" s="u" /></> : <V n="q" s="adm" />}</td><td className="text-right">{fr(q_limit, 1)}</td><td className="text-center">kPa</td><td>{selectedComb.type === 'ULS' ? 'Ψ·φgu·qu (ÉLU)' : 'Pression admissible (ÉLS)'}</td></tr>
+              <tr><td>Taux d’utilisation</td><td className="text-center"><V n="q" s="1" />/<V n="q" s="cap" /></td><td className="text-right">{outside ? NV : fr(bearingRatio * 100, 1)}</td><td className="text-center">%</td><td>{isBearingOk ? 'Conforme' : outside ? 'Non vérifiable' : 'Surcharge'}</td></tr>
+            </tbody>
+          </table>
+          <p className="mt-2 text-slate-800">
+            <Fm>{`Règle de dimensionnement géotechnique (CFEM 5e éd., § 20.7 et CNB ${result.cnbEdition}) : le sol ne pouvant pas reprendre d'effort de traction, si l'excentricité e = |B/2 − x1| dépasse le tiers central (B/6 = ${fr(B_over_6, 3)} m), la répartition devient triangulaire sur une largeur réduite effective B′ = 3·x1 avec une contrainte de crête q1 = 2·Rv/(3·x1). Les normes canadiennes tolèrent un décollement partiel sous conditions d'états limites ultimes tant que la portance ultime pondérée φgu·qu n'est pas dépassée.`}</Fm>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

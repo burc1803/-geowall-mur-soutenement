@@ -1,8 +1,9 @@
-// Section 2 de la note (tableaux 2a / 2b) : forces caractéristiques (non pondérées), bras de levier et moments autour de l'orteil.
+// Section 2 de la note (tableaux 2.1 et 2.2) : forces caractéristiques (non pondérées), bras de levier et moments autour de l'orteil.
 // AFFICHAGE SEULEMENT : toutes les positions et valeurs sont celles que le moteur (src/lib/analysis.ts) utilise dans aggregate() ;
 // rien n'est recalculé ici sauf le produit force × bras. Convention du moteur : Fy > 0 vers le bas, Fx > 0 vers l'orteil,
 // x depuis l'orteil, y depuis la sous-face de la semelle ; moment en valeur positive dans son tableau (stabilisant ou déstabilisant).
 import type { AnalysisResult, LoadsConfig, SoilProperties, WallGeometry } from '../lib/types';
+import { fr } from '../lib/theoryEquations';
 import { stabilizingRole, type StabilizingRole } from '../lib/loadDirection';
 
 export type LoadTableRow = {
@@ -46,7 +47,7 @@ export const countStabilizingVariable = (loads?: LoadsConfig) => loads?.countSta
 /** MUR-06 M6-A1 : option « compter aussi Fx et Mz variables stabilisants » ; absent = true ; sans effet si D5 est décochée (comme le moteur). */
 export const countStabilizingHM = (loads?: LoadsConfig) => countStabilizingVariable(loads) && loads?.countStabilizingVariableHM !== false;
 
-const f2 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : 'non disponible');
+const f2 = (v: number) => (Number.isFinite(v) ? fr(v, 2) : 'non disponible');
 
 export function latLabel(n: string): string {
   if (n === 'Pa_sol') return 'Poussée active des terres (γ)';

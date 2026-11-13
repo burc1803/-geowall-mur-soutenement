@@ -988,7 +988,7 @@ export default function App() {
             </div>
 
             {result.notices.length > 0 && (
-              <div className="bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold rounded-xl p-3">
+              <div className="bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold rounded-xl p-3 print:hidden">
                 {result.notices.map((n, i) => <div key={i}>{n}</div>)}
               </div>
             )}

@@ -1,11 +1,15 @@
 import React from 'react';
+import { Fm } from './Fm';
 
 /**
- * Mise en forme typographique des équations (sans dépendance) : police à empattements, variables en italique,
- * vrais indices et exposants, fractions empilées. Identique à l'écran et à l'impression.
+ * Mise en forme typographique des équations (sans dépendance) : police unique de la note (pile serif système, voir `index.css`),
+ * variables en italique avec indice droit, vrais indices et exposants, fractions empilées. Identique à l'écran et à l'impression.
  */
 
-/** Variable : nom en italique, indice `s`, exposant `p`, prime éventuelle (γ′). */
+/**
+ * Variable (symbole unique de la note) : nom en italique, indice `s` en romain (droit), exposant `p`, prime éventuelle (γ′).
+ * Les unités ne passent pas par ce composant : elles restent en romain, séparées de la valeur par une espace insécable.
+ */
 export function V({ n, s, p, prime }: { n: React.ReactNode; s?: React.ReactNode; p?: React.ReactNode; prime?: boolean }) {
   return (
     <span>
@@ -16,6 +20,9 @@ export function V({ n, s, p, prime }: { n: React.ReactNode; s?: React.ReactNode;
     </span>
   );
 }
+
+/** Alias de `V` : « Sym » désigne la grandeur écrite selon la convention unique de la note. */
+export const Sym = V;
 
 /** Fraction empilée. */
 export function Frac({ n, d }: { n: React.ReactNode; d: React.ReactNode }) {
@@ -39,25 +46,62 @@ export function Sqrt({ children }: { children: React.ReactNode }) {
 const LINE = 'font-serif text-[13px] leading-7 text-slate-900 print:text-black';
 
 /**
- * Équation sur trois lignes : formule générale, formule avec les valeurs substituées (lues du moteur), résultat avec unités.
- * `illustrative` : équation pédagogique sans équivalent direct dans le moteur.
+ * Équation sur trois lignes : formule symbolique, valeurs substituées (lues du moteur), résultat en gras avec unité, puis ligne de référence.
+ * - `lhs` (facultatif) : membre de gauche commun aux trois lignes ; les signes « = » (ou `op`) sont alors alignés en colonne.
+ *   Sans `lhs`, les lignes sont empilées (le résultat porte son propre membre de gauche).
+ * - `no` : numéro de l'équation, affiché à droite, par exemple « 4.1 ».
+ * - `note` : ligne de référence (norme, article) ou remarque ; `illustrative` : équation pédagogique sans équivalent direct dans le moteur.
  */
-export function Eq({ general, substituted, result, note, illustrative }: {
-  general: React.ReactNode;
+export type EqLine = { lhs: React.ReactNode; op?: React.ReactNode; general: React.ReactNode; substituted?: React.ReactNode; result?: React.ReactNode };
+
+export function Eq({ general, substituted, result, note, illustrative, lhs, op = '=', no, lines }: {
+  general?: React.ReactNode;
+  /** Plusieurs relations alignées sous un même numéro (chaque ligne : membre de gauche, formule, valeurs, résultat). */
+  lines?: EqLine[];
   substituted?: React.ReactNode;
   result?: React.ReactNode;
   note?: React.ReactNode;
   illustrative?: boolean;
+  lhs?: React.ReactNode;
+  op?: React.ReactNode;
+  no?: string;
 }) {
   return (
-    <div className="bg-white rounded-lg border border-slate-200 px-3 py-2 break-inside-avoid print:break-inside-avoid">
-      <div className={LINE}>{general}</div>
-      {substituted !== undefined && <div className={`${LINE} text-slate-700 border-t border-dashed border-slate-200`}>{substituted}</div>}
-      {result !== undefined && <div className={`${LINE} font-bold border-t border-dashed border-slate-200`}>{result}</div>}
+    <div className="note-eq break-inside-avoid print:break-inside-avoid border-l-2 border-slate-300 pl-3 py-1">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-x-3">
+        {lines ? (
+          <div className="grid grid-cols-[max-content_max-content_1fr] gap-x-2 items-baseline">
+            {lines.map((l, i) => (
+              <React.Fragment key={i}>
+                <div className={`${LINE} text-right`}>{l.lhs}</div>
+                <div className={LINE}>{l.op ?? '='}</div>
+                <div className={LINE}>{l.general}</div>
+                {l.substituted !== undefined && <><div /><div className={`${LINE} text-slate-700`}>=</div><div className={`${LINE} text-slate-700`}>{l.substituted}</div></>}
+                {l.result !== undefined && <><div /><div className={LINE}>=</div><div className={`${LINE} font-bold`}>{l.result}</div></>}
+              </React.Fragment>
+            ))}
+          </div>
+        ) : lhs !== undefined ? (
+          <div className="grid grid-cols-[max-content_max-content_1fr] gap-x-2 items-baseline">
+            <div className={`${LINE} text-right`}>{lhs}</div>
+            <div className={LINE}>{op}</div>
+            <div className={LINE}>{general}</div>
+            {substituted !== undefined && <><div /><div className={`${LINE} text-slate-700`}>=</div><div className={`${LINE} text-slate-700`}>{substituted}</div></>}
+            {result !== undefined && <><div /><div className={LINE}>=</div><div className={`${LINE} font-bold`}>{result}</div></>}
+          </div>
+        ) : (
+          <div>
+            <div className={LINE}>{general}</div>
+            {substituted !== undefined && <div className={`${LINE} text-slate-700`}>{substituted}</div>}
+            {result !== undefined && <div className={`${LINE} font-bold`}>{result}</div>}
+          </div>
+        )}
+        {no && <div className={`${LINE} text-right whitespace-nowrap`}>({no})</div>}
+      </div>
       {(note || illustrative) && (
-        <div className="text-[10.5px] text-slate-500 font-sans leading-snug">
+        <div className="note-s text-[10.5px] text-slate-600 font-sans leading-snug">
           {illustrative && <strong className="text-amber-700">Équation illustrative (sans équivalent direct dans le moteur). </strong>}
-          {note}
+          {typeof note === 'string' ? <Fm>{note}</Fm> : note}
         </div>
       )}
     </div>

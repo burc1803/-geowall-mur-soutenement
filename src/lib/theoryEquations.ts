@@ -6,8 +6,14 @@ import { STEM_PASSIVE_CHOICES, STEM_PASSIVE_LABEL, STEM_PASSIVE_FACTOR_TEXT } fr
  * Les champs numériques servent aux tests (recomposition de la valeur du moteur à partir des termes affichés).
  */
 
-/** Format français : virgule décimale ; ∞ si non fini. Arrondi à l'affichage seulement. */
-export const fr = (v: number, d = 2): string => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',') : v > 0 ? '∞' : 'non défini');
+/** Format français unique : virgule décimale, espace fine insécable pour les milliers ; ∞ si non fini. Arrondi à l'affichage seulement. */
+export const fr = (v: number, d = 2): string => {
+  if (!Number.isFinite(v)) return v > 0 ? '∞' : 'non défini';
+  const [ent, dec] = v.toFixed(d).split('.');
+  // Espace fine insécable (U+202F) entre les milliers (présentation seulement, la valeur n'est pas modifiée)
+  const grouped = ent.replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f');
+  return dec === undefined ? grouped : `${grouped},${dec}`;
+};
 
 export interface SlidingEq {
   condition: 'drained' | 'undrained'; // condition qui gouverne (MUR-04 R2)

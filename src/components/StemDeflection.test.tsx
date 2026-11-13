@@ -35,7 +35,8 @@ describe('MUR-05 : onglet Étapes & formules, section « Flèche du voile (ÉLS)
     ]) expect(t, v).toContain(v);
   });
   it('R1 : Ec = 24 647,5 ; Mcr = 24,65 ; Icr = 4,684 × 10⁸ ; Δi = 0,989 ; ΔLT = 2,967 (moteur) ; limite 10,00 ; CONFORME', () => {
-    expect(t).toContain('24647,5'); expect(t).toContain('24,65'); expect(t).toContain('4,684 × 10⁸'); expect(t).toContain('0,989'); expect(t).toContain('10,00');
+    // Format d'affichage : espace fine insécable (U+202F) entre les milliers
+    expect(t).toContain('24 647,5'); expect(t).toContain('24,65'); expect(t).toContain('4,684 × 10⁸'); expect(t).toContain('0,989'); expect(t).toContain('10,00');
     expect(t).toContain('section fissurée'); expect(t).toContain('CONFORME au critère');
   });
   it('mentions : K de Chaallal en comparaison seulement, rotation NON VÉRIFIÉE, limite = critère de l\'utilisateur, sources citées', () => {
