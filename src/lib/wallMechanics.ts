@@ -34,7 +34,9 @@ export function coulombKp(phi: number, delta: number, theta = 0, beta = 0): numb
  * - moment : moment M (kN·m/m) appliqué à la profondeur z (même sens que la poussée des terres).
  */
 export type StemItem =
-  | { kind: 'linear'; type: LoadCaseType; label: string; z1: number; z2: number; a: number; b: number }
+  | { kind: 'linear'; type: LoadCaseType; label: string; z1: number; z2: number; a: number; b: number;
+      /** MUR-07 : facteur propre à la charge (poussée passive sur le voile, de signe opposé) ; remplace le facteur de type et la règle du signe. */
+      fixedFactor?: number }
   | { kind: 'point'; type: LoadCaseType; label: string; z: number; F: number }
   | { kind: 'moment'; type: LoadCaseType; label: string; z: number; M: number };
 
@@ -44,6 +46,7 @@ export type StemItem =
  * (CNB, 4.1.3.2.(3), appliqué ici aux efforts du voile). La charge permanente garde le facteur de la combinaison.
  */
 export function stemItemFactor(item: StemItem, factors: Record<LoadCaseType, number>, dUnfav?: number): number {
+  if (item.kind === 'linear' && item.fixedFactor !== undefined) return item.fixedFactor;
   let f = factors[item.type] ?? 0;
   const signed = item.kind === 'linear' ? item.a + item.b * (item.z1 + item.z2) / 2
     : item.kind === 'point' ? item.F : item.M;

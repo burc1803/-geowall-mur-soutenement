@@ -21,8 +21,10 @@ import {
   GeotechResolved,
   FrostNoDfTreatment,
   SeismicScenario,
-  SeismicSummary
+  SeismicSummary,
+  StemPassiveChoice
 } from './types';
+import { resolveStemPassive } from './stemPassive';
 import { resolveBearingSoil, resolveFrontSoil } from './bearingSoil';
 import { solveBeamFEM, SupportBoundary } from './fem';
 import { computeWallDeflection, sustainedFactors, integrateDeflection, DEFAULT_DEFLECTION_DIVISOR, WallDeflectionCombInput } from './wallDeflection';
@@ -542,6 +544,21 @@ export function analyzeRetainingWall(
     M_passive_soil = s1.M + s2.M;
   }
   const y_Pp = P_passive_nominal > 0 ? M_passive_soil / P_passive_nominal : h_pass / 3;
+  // MUR-07 (D2) : partie de la butée située au-dessus du dessus de la semelle (hauteur hSolAv), agissant sur la face avant du voile.
+  // Mêmes règles que la butée de stabilité (h_pass, zone gelée zPassiveTop, nappe aval zDryP, γ′, Kp du sol avant) ; la stabilité n'est pas modifiée.
+  // t = profondeur sous la surface du sol avant ; z = profondeur sous le haut du voile = zFrontStem + t. p(t) = Kp·σ′v(t).
+  const stemPassiveChoice: StemPassiveChoice = resolveStemPassive(soil.stemPassive);
+  const zFrontStem = geo.hMur - soil.hSolAv;
+  const tLoStem = Math.max(zPassiveTop, soil.hSolAv - geo.hMur);
+  const stemPassiveActive = soil.hSolAv > 0 && h_pass > 0 && Kp > 0 && tLoStem < soil.hSolAv;
+  const passSegs: { z1: number; z2: number; a: number; b: number }[] = [];
+  if (stemPassiveActive) {
+    const tDryEnd = Math.min(zDryP, soil.hSolAv);
+    if (tDryEnd > tLoStem) passSegs.push({ z1: zFrontStem + tLoStem, z2: zFrontStem + tDryEnd, a: -Kp * foundation.gamma * zFrontStem, b: Kp * foundation.gamma });
+    const tSub = Math.max(tLoStem, zDryP);
+    if (soil.hSolAv > tSub) passSegs.push({ z1: zFrontStem + tSub, z2: zFrontStem + soil.hSolAv, a: Kp * (foundation.gamma - gammaPrimeP) * zDryP - Kp * gammaPrimeP * zFrontStem, b: Kp * gammaPrimeP });
+  }
+  const hvStem = stemPassiveActive ? soil.hSolAv - tLoStem : 0;
   // Eau à l'avant : composante séparée, résistante, de type H (scénario B seulement)
   // Tant que la sous-pression trapézoïdale n'est pas traitée (A3 §7.4), l'eau à l'avant exige une nappe à l'arrière
   // et hw,av_eff = min(hw,av ; hw ; h_pass) (sous-pression uniforme). Avis non bloquants dans `notices`.
@@ -1180,6 +1197,7 @@ export function analyzeRetainingWall(
   const stemVAtFns: ((dm: number) => number)[] = [];
   // MUR-05 : charges latérales du voile des combinaisons ÉLS, réutilisées pour la flèche (mêmes items que les efforts)
   const slsStem: { comb: LoadCombination; items: StemItem[] }[] = [];
+  const frontTensionCombs: string[] = []; // MUR-07 D6
   for (const { comb: comb0, scIdx } of expanded) {
     const sc = scIdx >= 0 ? scenarios[scIdx] : null;
     const kvSign: 0 | 1 | -1 = sc ? sc.sign : 0;
@@ -1187,7 +1205,18 @@ export function analyzeRetainingWall(
       ? { ...comb0, name: `${comb0.name} [kv ${sc.sign > 0 ? '↑' : '↓'}]` }
       : comb0;
     const allComps = sc ? components.concat(seismicComps[scIdx]) : components;
-    const stemItemsC = sc ? stemItems.concat(stemItemsE[scIdx]) : stemItems;
+    const stemItemsBaseC = sc ? stemItems.concat(stemItemsE[scIdx]) : stemItems;
+    // MUR-07 : poussée passive sur le voile, de signe opposé, avec son propre facteur (D3 : séisme -> Pp_factor, 0 si butée sismique nulle ; D4 : ÉLS -> 1,0 aux choix 1 à 3)
+    const isULSc = comb.type === 'ULS';
+    const passScale = sc ? sc.Pp_factor : 1;
+    const passFactorOf = (ch: StemPassiveChoice): number =>
+      ch === 0 ? 0 : ch === 1 ? 1 : !isULSc ? 1 : ch === 2 ? geotech.psi * phi_p : (comb.factors.H || 0); // ch 2 : Ψ·φp ; ch 3 : facteur de H
+    const passItemsOf = (ch: StemPassiveChoice): StemItem[] => {
+      const f = passFactorOf(ch);
+      if (f === 0 || passScale <= 0) return [];
+      return passSegs.map(s => ({ kind: 'linear' as const, type: 'H' as LoadCaseType, label: 'Poussée passive sur le voile', z1: s.z1, z2: s.z2, a: -passScale * s.a, b: -passScale * s.b, fixedFactor: f }));
+    };
+    const stemItemsC = stemItemsBaseC.concat(passItemsOf(stemPassiveChoice));
     // Résistances de la butée et de l'eau à l'avant : statiques, ou séisme (butée nulle / réduite KPE ; Westergaard sur l'eau à l'avant)
     let Pp_c = P_passive_nominal;
     let Mp_c = M_passive_soil;
@@ -1201,14 +1230,26 @@ export function analyzeRetainingWall(
 
     // Réaction(s) d'appui en tête (mur de sous-sol) : issue(s) des charges latérales du voile de CETTE combinaison (E10)
     const stemRes = stemAnalysis(comb.factors, comb.Dunfav, stemItemsC);
+    // MUR-07 : efforts du voile pour chacun des 4 choix (tableau de comparaison de la note) ; la stabilité (réaction en tête) garde le choix 0 (D2)
+    const stemResOf = (ch: StemPassiveChoice) => ch === stemPassiveChoice ? stemRes : stemAnalysis(comb.factors, comb.Dunfav, stemItemsBaseC.concat(passItemsOf(ch)));
+    const stemResAll = [stemResOf(0), stemResOf(1), stemResOf(2), stemResOf(3)];
+    const stabRes = stemResAll[0];
+    const footMoment = (r: { sections: { depth: number; moment: number }[] }) => r.sections.find(s => s.depth >= geo.hMur - 1e-9)?.moment ?? 0;
+    const footActive = footMoment(stabRes);
+    const footNet = footMoment(stemRes);
+    const footShear = stemRes.sections.find(x => x.depth >= geo.hMur - 1e-9)?.shear ?? 0;
+    // MUR-07 D6 : le moment net au pied change de signe -> face avant tendue
+    if (stemPassiveChoice !== 0 && Math.abs(footActive) > 1e-6 && footNet * footActive < 0) frontTensionCombs.push(comb.name);
+    let passP = 0; let passM = 0;
+    for (const s of passSegs) { const e = linearSegmentEffect(s.a, s.b, s.z1, s.z2, geo.hMur); passP += e.V * passScale; passM += e.M * passScale; }
     if (comb.type === 'SLS') slsStem.push({ comb, items: stemItemsC });
     // Forces latérales NON pondérées puis pondérées (kN/m) réellement appliquées au voile dans CETTE combinaison, par catégorie (lecture seule, mêmes items et facteurs que stemAnalysis)
-    const stemLat = { terre: 0, eau: 0, surcharge: 0, seisme: 0, autres: 0, total: 0 };
+    const stemLat = { terre: 0, eau: 0, surcharge: 0, seisme: 0, autres: 0, butee_voile: 0, total: 0 };
     for (const it of stemItemsC) {
       if (it.kind === 'moment') continue;
       const f = stemItemFactor(it, comb.factors, comb.Dunfav);
       const F = f * (it.kind === 'point' ? it.F : linearSegmentEffect(it.a, it.b, it.z1, it.z2, geo.hMur).V);
-      const cat = it.type === 'E' ? 'seisme' : it.label.startsWith('Poussée des terres') ? 'terre' : it.label === "Pression d'eau" ? 'eau' : it.label === 'Poussée de la surcharge' ? 'surcharge' : 'autres';
+      const cat = it.type === 'E' ? 'seisme' : it.label.startsWith('Poussée des terres') ? 'terre' : it.label === "Pression d'eau" ? 'eau' : it.label === 'Poussée de la surcharge' ? 'surcharge' : it.label === 'Poussée passive sur le voile' ? 'butee_voile' : 'autres';
       stemLat[cat] += F;
       stemLat.total += F;
     }
@@ -1218,7 +1259,7 @@ export function analyzeRetainingWall(
     }
     let sumRt = 0;
     let momRt = 0;
-    for (const r of stemRes.Rt) {
+    for (const r of stabRes.Rt) {
       sumRt += r.F;
       momRt += r.F * (geo.epBase + r.y);
     }
@@ -1532,6 +1573,11 @@ export function analyzeRetainingWall(
       mur_Mf: stemRes.maxM,
       mur_Vf: stemRes.maxV,
       stem_lateral: stemLat,
+      stem_passive: {
+        factor: passScale > 0 ? passFactorOf(stemPassiveChoice) : 0, seismic_null: stemPassiveChoice !== 0 && stemPassiveActive && passScale <= 0, foot_shear: footShear, Kp_eff: Kp * passScale, P_nominal: passP, M_nominal: passM,
+        Mf_choices: [stemResAll[0].maxM, stemResAll[1].maxM, stemResAll[2].maxM, stemResAll[3].maxM],
+        foot_active: footActive, foot_net: footNet
+      },
       mur_Vf_dv: stemRes.maxV,
       toe_Mf: maxOf(toeEv, 'M'),
       toe_Vf: maxOf(toeEv, 'V'),
@@ -1554,6 +1600,15 @@ export function analyzeRetainingWall(
       }
     }
   }
+
+  if (frontTensionCombs.length > 0) notices.push(`Poussée passive sur le voile (MUR-07 D6) : le moment net au pied change de signe (face avant tendue) dans ${frontTensionCombs.length} combinaison(s), dont « ${frontTensionCombs[0]} ». Vérifier l'armature de la face avant ; le choix retenu surestime peut-être la butée.`);
+
+  // MUR-07 : enveloppe ÉLU de M_f pour chacun des 4 choix (maximum sur toutes les combinaisons ÉLU) et combinaison qui gouverne ce choix
+  const stemEnvelope = ([0, 1, 2, 3] as const).map(ch => {
+    let best = { Mf: 0, comb: '' };
+    for (const r of results) if (r.type === 'ULS' && (best.comb === '' || r.stem_passive.Mf_choices[ch] > best.Mf)) best = { Mf: r.stem_passive.Mf_choices[ch], comb: r.combName };
+    return best;
+  });
 
   const defaultComb = results.find(r => r.combName.includes('ELS S1 ')) || results[0];
 
@@ -1935,6 +1990,7 @@ export function analyzeRetainingWall(
     geotech,
     seismic,
     frost: { deduct: frostDeduct, df: dfInput, df_entered: dfInput > 0, z_top: zPassiveTop, no_df_treatment: noDfTreatment, df_missing: dfMissing },
+    stemPassive: { choice: stemPassiveChoice, active: stemPassiveActive, hv: hvStem, zFront: zFrontStem, zGel: zPassiveTop, Kp, gamma: foundation.gamma, gammaPrime: gammaPrimeP, zDry: zDryP, envelope: stemEnvelope },
     eccentricity_ok_ULS: results.filter(r => r.type === 'ULS').every(r => r.status_ecc === 'OK'),
     eccentricity_ok_SLS: results.filter(r => r.type === 'SLS').every(r => r.status_ecc === 'OK'),
     lateral_nominal: components.concat(seismicComps[0] ?? []).filter(c => c.Fx !== 0).map(c => ({ name: c.name, type: c.type, Fx: c.Fx, y: c.y, applied: !!c.stemApplied })),

@@ -1,4 +1,5 @@
-import { AnalysisResult, CombinationResult, ConcreteProperties, SoilProperties, WallGeometry } from './types';
+import { AnalysisResult, CombinationResult, ConcreteProperties, SoilProperties, WallGeometry, StemPassiveChoice } from './types';
+import { STEM_PASSIVE_CHOICES, STEM_PASSIVE_LABEL, STEM_PASSIVE_FACTOR_TEXT } from './stemPassive';
 
 /**
  * Valeurs substituées des équations de l'onglet « Étapes & formules » : TOUTES lues de `result` (moteur), aucune règle recalculée.
@@ -143,5 +144,65 @@ export function inertiaStrings(r: AnalysisResult, geo: WallGeometry, conc: Concr
   return {
     stem: `${fr(conc.gamma_c, 1)} · ${fr(geo.hMur)} · ${fr(geo.epStem)} · ${fr(kh, 3)} = ${fr(r.earthPressures.E_stem_nominal, 2)} kN/m`,
     base: `${fr(conc.gamma_c, 1)} · ${fr(r.baseWidth)} · ${fr(geo.epBase)} · ${fr(kh, 3)} = ${fr(r.earthPressures.E_base_nominal, 2)} kN/m`
+  };
+}
+
+export interface StemPassiveEq {
+  comb: string; // combinaison qui gouverne le voile
+  choice: StemPassiveChoice;
+  active: boolean;
+  layered: boolean; // nappe aval dans la zone de pression : intégration par couches γ / γ′
+  seismicNull: boolean; // cas 5 avec butée sismique nulle : facteur effectif 0
+  Kp: number; Kp_eff: number; gamma: number; gammaPrime: number; zDry: number;
+  hSolAv: number; t0: number; hv: number;
+  P: number; M: number; factor: number;
+  P1: number; P2: number; M1: number; M2: number; // couches : sèche (γ) et déjaugée (γ′) ; P2 = M2 = 0 sans nappe dans la zone
+  Mactive: number; Mnet: number;
+  table: { choice: StemPassiveChoice; label: string; Mf: number; comb: string; governs: boolean }[]; // enveloppe ÉLU de chaque choix
+  hvSub: string; PSub: string; MSub: string; PRes: string; MRes: string; factorSub: string; netSub: string;
+}
+
+/**
+ * MUR-07 D5 : poussée passive du sol avant sur le voile, pour la combinaison qui gouverne le voile. Toutes les valeurs sont lues du moteur
+ * (`governingStem.stem_passive`, `stemPassive`) ; le tableau des 4 choix reprend l'enveloppe ÉLU de M_f calculée par le moteur pour chaque choix.
+ * Avec nappe aval : couche 1 (γ, de t₀ à la nappe) et couche 2 (γ′ sous la nappe), t = profondeur sous la surface du sol avant.
+ */
+export function buildStemPassiveEq(r: AnalysisResult, hSolAv: number): StemPassiveEq {
+  const c = r.governingStem;
+  const sp = r.stemPassive;
+  const p = c.stem_passive;
+  const H = hSolAv;
+  const t0 = H - sp.hv; // début de la zone sous pression
+  const layered = sp.active && sp.zDry < H - 1e-9;
+  const K = p.Kp_eff;
+  const g = sp.gamma, gp = sp.gammaPrime, zD = sp.zDry;
+  const tD = Math.min(zD, H); // fin de la couche 1
+  const tS = Math.max(t0, zD); // début de la couche 2
+  const l1 = layered && tD > t0;
+  const l2 = layered && H > tS;
+  const P1 = l1 ? 0.5 * K * g * (tD * tD - t0 * t0) : 0;
+  const M1 = l1 ? K * g * (H * (tD * tD - t0 * t0) / 2 - (tD ** 3 - t0 ** 3) / 3) : 0;
+  const P2 = l2 ? K * ((g - gp) * zD * (H - tS) + gp * (H * H - tS * tS) / 2) : 0;
+  const M2 = l2 ? K * ((g - gp) * zD * (H - tS) ** 2 / 2 + gp * (H * (H * H - tS * tS) / 2 - (H ** 3 - tS ** 3) / 3)) : 0;
+  const hvSub = `${fr(H)} − ${fr(t0)}`;
+  const PSub = layered
+    ? `couche γ : 0,5 · ${fr(K, 4)} · ${fr(g, 1)} · (${fr(tD)}² − ${fr(t0)}²) = ${fr(P1, 2)} ; couche γ′ : ${fr(K, 4)} · [ (${fr(g, 1)} − ${fr(gp, 1)}) · ${fr(zD)} · (${fr(H)} − ${fr(tS)}) + ${fr(gp, 1)} · (${fr(H)}² − ${fr(tS)}²)/2 ] = ${fr(P2, 2)}`
+    : `0,5 · ${fr(K, 4)} · ${fr(g, 1)} · (${fr(H)}² − ${fr(t0)}²)`;
+  const MSub = layered
+    ? `couche γ : ${fr(K, 4)} · ${fr(g, 1)} · [ ${fr(H)} · (${fr(tD)}² − ${fr(t0)}²)/2 − (${fr(tD)}³ − ${fr(t0)}³)/3 ] = ${fr(M1, 2)} ; couche γ′ : ${fr(K, 4)} · [ (${fr(g, 1)} − ${fr(gp, 1)}) · ${fr(zD)} · (${fr(H)} − ${fr(tS)})²/2 + ${fr(gp, 1)} · ( ${fr(H)} · (${fr(H)}² − ${fr(tS)}²)/2 − (${fr(H)}³ − ${fr(tS)}³)/3 ) ] = ${fr(M2, 2)}`
+    : `${fr(K, 4)} · ${fr(g, 1)} · [ ${fr(H)} · (${fr(H)}² − ${fr(t0)}²)/2 − (${fr(H)}³ − ${fr(t0)}³)/3 ]`;
+  const factorSub = p.seismic_null ? 'butée sismique nulle (option MUR-02 D9) : facteur effectif 0' : STEM_PASSIVE_FACTOR_TEXT[sp.choice];
+  return {
+    comb: c.combName, choice: sp.choice, active: sp.active, layered, seismicNull: p.seismic_null,
+    Kp: sp.Kp, Kp_eff: K, gamma: g, gammaPrime: gp, zDry: zD,
+    hSolAv: H, t0, hv: sp.hv, P: p.P_nominal, M: p.M_nominal, factor: p.factor,
+    P1, P2, M1, M2,
+    Mactive: p.foot_active, Mnet: p.foot_net,
+    table: STEM_PASSIVE_CHOICES.map(ch => ({ choice: ch, label: STEM_PASSIVE_LABEL[ch], Mf: sp.envelope[ch].Mf, comb: sp.envelope[ch].comb, governs: ch === sp.choice })),
+    hvSub, PSub, MSub,
+    PRes: layered ? `P = P₁ + P₂ = ${fr(P1, 2)} + ${fr(P2, 2)} = ${fr(P1 + P2, 2)}` : `P = ${fr(p.P_nominal, 2)}`,
+    MRes: layered ? `M = M₁ + M₂ = ${fr(M1, 2)} + ${fr(M2, 2)} = ${fr(M1 + M2, 2)}` : `M = ${fr(p.M_nominal, 2)}`,
+    factorSub,
+    netSub: `${fr(p.foot_active, 2)} − ${fr(p.factor, 3)} · ${fr(p.M_nominal, 2)}`
   };
 }

@@ -3,6 +3,7 @@
 import type { WallGeometry, SoilProperties, LoadsConfig, RebarCustomConfig, ConcreteProperties } from './types';
 import { DEFAULT_CONCRETE_PROPS, DEFAULT_REBAR_CONFIG, DEFAULT_SOIL_METHOD_CONFIG, resolveRebarConfig } from './analysis';
 import { resolveBearingSoil } from './bearingSoil';
+import { DEFAULT_STEM_PASSIVE, STEM_PASSIVE_LOAD_NOTICE } from './stemPassive';
 
 export const PROJECT_FORMAT = 'geowall-project';
 export const PROJECT_VERSION = 1;
@@ -48,7 +49,9 @@ export const INITIAL_SOIL: SoilProperties = {
   psi: 1.0,
   quFactored: false,
   // MUR-02 D9 / §11 : case « déduire la profondeur de gel » cochée ; df à saisir ; df non saisie -> butée nulle (défaut)
-  frost: { deduct: true, df: 0, noDf: 'zero' }
+  frost: { deduct: true, df: 0, noDf: 'zero' },
+  // MUR-07 D1 : poussée passive sur le voile, choix 3 par défaut
+  stemPassive: DEFAULT_STEM_PASSIVE
 };
 
 export const INITIAL_LOADS: LoadsConfig = {
@@ -119,7 +122,8 @@ export function projectFileName(name: string, now: Date = new Date()): string {
   return `${base}_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}${FILE_EXTENSION}`;
 }
 
-export type ParseResult = { ok: true; state: ProjectState } | { ok: false; error: string };
+/** `notices` : avis de chargement (ex. choix appliqué à un ancien projet sans le champ, MUR-07 D1). */
+export type ParseResult = { ok: true; state: ProjectState; notices?: string[] } | { ok: false; error: string };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -175,6 +179,9 @@ export function projectFromData(data: unknown): ParseResult {
   if (data.name !== undefined && typeof data.name !== 'string') return { ok: false, error: 'Fichier invalide : « name » doit être du texte.' };
 
   const soilGiven = isObj(data.soil) ? data.soil : {};
+  // MUR-07 : choix 0 à 3 seulement
+  if (soilGiven.stemPassive !== undefined && soilGiven.stemPassive !== null && ![0, 1, 2, 3].includes(soilGiven.stemPassive as number))
+    return { ok: false, error: 'Fichier invalide : valeur incorrecte pour « soil.stemPassive » (0 à 3 attendu).' };
   const soil = mergeSection(D.soil, soilGiven, ['methodConfig', 'frost', 'bearingSoil']);
   // Ancien fichier sans sol d'assise : ne pas injecter le défaut, laisser resolveBearingSoil migrer (R5).
   if (isObj(data.soil) && !isObj(soilGiven.bearingSoil)) delete soil.bearingSoil;
@@ -203,7 +210,9 @@ export function projectFromData(data: unknown): ParseResult {
     rebarConfig: resolveRebarConfig(rebarMerged),
   };
   try { resolveBearingSoil(state.soil); } catch { return { ok: false, error: 'Fichier invalide : sol d’assise illisible.' }; }
-  return { ok: true, state };
+  // MUR-07 D1 : ancien projet sans le champ -> choix 3 appliqué, avec avis (M_f du voile modifié par rapport à l'ancien calcul)
+  const notices = soilGiven.stemPassive === undefined || soilGiven.stemPassive === null ? [STEM_PASSIVE_LOAD_NOTICE] : undefined;
+  return notices ? { ok: true, state, notices } : { ok: true, state };
 }
 
 export function parseProjectText(text: string): ParseResult {

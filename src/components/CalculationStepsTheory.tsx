@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eq, V, Frac, Sqrt, Tx } from './Eq';
+import { StemPassiveSteps } from './StemPassiveSteps';
 import { DeflectionGoverningSteps, DeflectionMentions } from './StemDeflectionSteps';
 import { buildSlidingEq, buildOverturningEq, buildBearingEq, buildDeltaPaeEq, inertiaStrings, fr } from '../lib/theoryEquations';
 import { WallGeometry, SoilProperties, LoadsConfig, AnalysisResult, ConcreteProperties } from '../lib/types';
@@ -184,6 +185,7 @@ export function CalculationStepsTheory({ geo, soil, loads, result, conc, initial
                 note={<>z₀ = df ({fr(result.frost.df, 2)} m) si la case gel est cochée{result.frost.df_missing ? ` ; df non saisie : traitement « ${result.frost.no_df_treatment === 'zero' ? 'butée nulle' : result.frost.no_df_treatment === 'not_verifiable' ? 'non vérifiable' : 'butée pleine avec avis'} » (MUR-02 §11)` : ''}. La zone gelée reste comptée comme surcharge sur la zone de butée.</>}
               />
             </div>
+            <StemPassiveSteps result={result} hSolAv={soil.hSolAv} />
           </div>
         </div>
       )}

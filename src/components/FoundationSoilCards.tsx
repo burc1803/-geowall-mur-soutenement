@@ -3,6 +3,7 @@ import type { SoilProperties, AnalysisResult, BearingSoilProperties } from '../l
 import { USCS_CLASSES, USCS_LABEL, CONTACT_LABEL, type UscsClass, type BaseContact } from '../lib/cfemTable204';
 import { resolveBearingSoil, resolveFrontSoil } from '../lib/bearingSoil';
 import { DEFAULT_SOIL_METHOD_CONFIG } from '../lib/analysis';
+import { STEM_PASSIVE_CHOICES, STEM_PASSIVE_LABEL, STEM_PASSIVE_EXPLAIN, STEM_PASSIVE_FACTOR_TEXT, resolveStemPassive } from '../lib/stemPassive';
 
 interface Props {
   soil: SoilProperties;
@@ -22,6 +23,7 @@ export function FoundationSoilCards({ soil, setSoil, result }: Props) {
   const setBearing = (patch: Partial<BearingSoilProperties>) => setSoil(prev => ({ ...prev, bearingSoil: { ...stored, ...(prev.bearingSoil ?? {}), ...patch } }));
   const num = (v: string) => parseFloat(v) || 0;
   const manual = soil.bearingSoil?.deltaB !== undefined;
+  const stemChoice = resolveStemPassive(soil.stemPassive);
 
   return (
     <>
@@ -61,6 +63,28 @@ export function FoundationSoilCards({ soil, setSoil, result }: Props) {
           </div>
         </div>
         <p className="text-[10px] text-slate-500">Butée (Kp, couches, profondeur de gel) et poids du sol sur le patin (déjaugé sous la nappe).</p>
+
+        {/* MUR-07 : poussée passive du sol avant sur la face avant du voile */}
+        <div className="flex flex-col gap-1 border-t border-amber-200 pt-2">
+          <label className="flex flex-col gap-1">
+            <span className={labelCls}>Poussée passive sur le voile</span>
+            <select
+              className="p-1.5 border rounded bg-white text-xs font-semibold"
+              value={stemChoice}
+              onChange={e => setSoil(prev => ({ ...prev, stemPassive: resolveStemPassive(parseInt(e.target.value, 10)) }))}
+            >
+              {STEM_PASSIVE_CHOICES.map(c => <option key={c} value={c}>{c} — {STEM_PASSIVE_LABEL[c]}</option>)}
+            </select>
+          </label>
+          <p className={`text-[10px] ${stemChoice === 3 ? 'text-rose-700 font-bold' : 'text-slate-600'}`} role={stemChoice === 3 ? 'alert' : undefined}>
+            <strong>Facteur : </strong>{STEM_PASSIVE_FACTOR_TEXT[stemChoice]}. {STEM_PASSIVE_EXPLAIN[stemChoice]}
+          </p>
+          <p className="text-[10px] font-mono text-amber-900">
+            {result.stemPassive.active
+              ? `h_v = ${fr(result.stemPassive.hv)} m (de ${fr(result.stemPassive.zGel)} m de gel à hs,av = ${fr(soil.hSolAv)} m) ; Kp = ${fr(result.stemPassive.Kp, 3)}`
+              : 'Aucune pression passive sur le voile (h_v = 0 ou Kp = 0).'}
+          </p>
+        </div>
       </div>
 
       {/* Sol d'assise : glissement, portance */}

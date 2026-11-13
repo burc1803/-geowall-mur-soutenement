@@ -117,7 +117,7 @@ export default function App() {
     const r = parseProjectText(text);
     if ("error" in r) { setFileMessage({ kind: "error", text: `${r.error} État inchangé.` }); return; }
     applyProject(r.state);
-    setFileMessage({ kind: 'ok', text: `Projet ouvert : ${r.state.name}` });
+    setFileMessage({ kind: 'ok', text: `Projet ouvert : ${r.state.name}${r.notices?.length ? ` — ${r.notices.join(' ')}.${analyzeRetainingWall(r.state.geo, r.state.soil, r.state.loads, r.state.conc, r.state.rebarConfig).stemPassive.hv > 0 ? " M_f du voile modifié par rapport à l'ancien calcul." : ''}` : ''}` });
   };
 
   const handleSaveAs = () => {

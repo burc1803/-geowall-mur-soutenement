@@ -9,6 +9,7 @@ import { Eq } from './Eq';
 import { V } from './Eq';
 import { DeflectionPropEqs, DeflectionMentions, combId, fmtInt } from './StemDeflectionSteps';
 import { fr as frc } from '../lib/theoryEquations';
+import { STEM_PASSIVE_LABEL, STEM_PASSIVE_EXPLAIN, STEM_PASSIVE_FACTOR_TEXT } from '../lib/stemPassive';
 import { Printer, FileText, CheckCircle2, AlertTriangle, Info, Scale, Shield, Building } from 'lucide-react';
 
 interface OfficialNoteDeCalculProps {
@@ -235,6 +236,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
   };
 
   const ulsCombs = result.combinations.filter(c => c.type === 'ULS');
+  const showStemPassiveCol = result.stemPassive.choice !== 0 && result.stemPassive.active; // MUR-07 : colonne « Butée voile »
   const showOtherStem = ulsCombs.some(c => Math.abs(c.stem_lateral.autres) > 0.05); // charges de tête, charges linéaires, etc.
   const slsCombs = result.combinations.filter(c => c.type === 'SLS');
 
@@ -896,6 +898,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
                   <th className="px-1 py-1.5 font-bold text-right">Surcharge<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
                   <th className="px-1 py-1.5 font-bold text-right">Séisme<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
                   {showOtherStem && <th className="px-1 py-1.5 font-bold text-right">Autres<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>}
+                  {showStemPassiveCol && <th className="px-1 py-1.5 font-bold text-right">Butée voile<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>}
                   <th className="px-1 py-1.5 font-bold text-right bg-indigo-900">Mf<span className="block text-[9px] font-normal text-slate-300">(kN·m/m)</span></th>
                   <th className="px-1 py-1.5 font-bold text-right">Vf<span className="block text-[9px] font-normal text-slate-300">(kN/m)</span></th>
                   <th className="px-1 py-1.5 font-bold text-right">As fournie<span className="block text-[9px] font-normal text-slate-300">(mm²/m)</span></th>
@@ -926,6 +929,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
                       <td className="px-1 py-1 text-right">{c.stem_lateral.surcharge.toFixed(1)}</td>
                       <td className="px-1 py-1 text-right">{c.stem_lateral.seisme.toFixed(1)}</td>
                       {showOtherStem && <td className="px-1 py-1 text-right">{c.stem_lateral.autres.toFixed(1)}</td>}
+                      {showStemPassiveCol && <td className="px-1 py-1 text-right">{c.stem_lateral.butee_voile.toFixed(1)}</td>}
                       <td className="px-1 py-1 text-right font-black text-indigo-900 bg-indigo-50/50">{c.mur_Mf.toFixed(1)}</td>
                       <td className="px-1 py-1 text-right">{c.mur_Vf.toFixed(1)}</td>
                       <td className="px-1 py-1 text-right">{result.concreteDesign.mur_interieur.As_provided.toFixed(0)}</td>
@@ -943,7 +947,22 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
               </tbody>
             </table>
           </div>
-          <p className="text-[10px] text-slate-500">Forces latérales pondérées réellement appliquées au voile par le calcul (sol sec et déjaugé, hauteur remblayée h<sub>r</sub>, nappe, surcharge, séisme). Mur en porte-à-faux : leur somme égale V<sub>f</sub> à la base du voile.</p>
+          <p className="text-[10px] text-slate-500">Forces latérales pondérées réellement appliquées au voile par le calcul (sol sec et déjaugé, hauteur remblayée h<sub>r</sub>, nappe, surcharge, séisme). Mur en porte-à-faux : la somme des colonnes de forces (terres, eau, surcharge, séisme, autres, butée voile) égale l’effort tranchant net au pied du voile ; V<sub>f</sub> affiché est le maximum en valeur absolue le long du voile (il peut différer de l’effort au pied lorsque l’effort tranchant change de signe, notamment avec la butée sur le voile). Mur de sous-sol : la réaction de tête R<sub>top</sub> utilisée pour la stabilité provient du choix 0 (MUR-07 D2) ; les diagrammes et les efforts du voile utilisent le choix retenu.</p>
+          {(() => {
+            // MUR-07 D5 : ligne « Poussée passive sur le voile », valeurs lues du moteur (combinaison qui gouverne le voile)
+            const sp = result.stemPassive;
+            const g = result.governingStem;
+            const q = g.stem_passive;
+            return (
+              <p className="text-[10px] text-slate-700" data-testid="note-stem-passive">
+                <strong>Poussée passive sur le voile</strong> (MUR-07) : choix {sp.choice}, {STEM_PASSIVE_LABEL[sp.choice]}.{' '}
+                {sp.choice === 0 || !sp.active
+                  ? (sp.choice === 0 ? 'Non comptée.' : 'Aucune pression sur le voile (h_v = 0 ou K_p = 0).')
+                  : <>h<sub>v</sub> = {fmt(sp.hv, 2)} m ; K<sub>p</sub> = {fmt(q.Kp_eff, 3)} ; résultante nominale <V n="P" s="p,v" /> = {fmt(q.P_nominal, 1)} kN/m ; facteur {fmt(q.factor, 3)}{q.seismic_null ? ' (butée sismique nulle, option MUR-02 D9)' : ''} ; moment retranché au pied = {fmt(q.factor * q.M_nominal, 2)} kN·m/m (moment nominal {fmt(q.M_nominal, 2)}) dans « {shortComb(g.combName)} ».</>}
+                {sp.choice === 3 && !q.seismic_null && <strong className="text-rose-700"> Moins sécuritaire : augmente une résistance par un facteur de charge.</strong>}
+              </p>
+            );
+          })()}
         </div>
 
         {/* TABLE 3: ELU - SEMELLE */}
@@ -1090,6 +1109,7 @@ export function OfficialNoteDeCalcul({ projectName, geo, soil, conc, result, loa
           const groups: { title: string; rows: [string, React.ReactNode, Pill][] }[] = [
             { title: 'Géotechnique', rows: [
               ['Éléments non vérifiés', <>Stabilité d’ensemble (glissement profond), gel et profondeur de la semelle (hors profondeur déduite de la butée), drainage, tassement calculé, pression de compactage (fig. 20.9), liquéfaction.</>, 'nonverifie'],
+              ['Poussée passive sur le voile (MUR-07)', <>Choix {result.stemPassive.choice} : {STEM_PASSIVE_LABEL[result.stemPassive.choice]}. {STEM_PASSIVE_EXPLAIN[result.stemPassive.choice]} Facteur : {STEM_PASSIVE_FACTOR_TEXT[result.stemPassive.choice]}. La stabilité (glissement, renversement) garde sa butée Ψ·φ<sub>p</sub> ; M<sub>f</sub> et V<sub>f</sub> du voile seulement (D2).</>, result.stemPassive.choice === 3 ? 'confirmer' : 'applique'],
               ['Poids volumique sous la nappe', <><V n="γ" prime /> = <V n="γ" /> − <V n="γ" s="w" /> : le <V n="γ" /> saisi est pris comme poids volumique saturé.</>, 'applique'],
               ['Limite d’excentricité', <><V n="e" /> ≤ <V n="B" />/6 à l’ÉLU et à l’ÉLS (CFEM 5e, p. 348 et 20.7.3.4-20.7.3.5), statut calculé pour chaque combinaison. Une limite plus large (par ex. <V n="B" />/3) n’a aucune source lue : non appliquée.</>, 'applique'],
               ['Frottement et adhérence de la base (MUR-04)', <>tan <V n="δ" s="b" /> du sol d’assise (tableau 20.4(a), CFEM 5e, p. 691 : borne inférieure, plafonnée à <V n="φ" prime />), <V n="c" s="a" prime /> = 0 à long terme (p. 351). Assise cohérente (CL) : adhérence <V n="c" s="a" /> du tableau 20.4(b) interpolée linéairement, <V n="B" prime /> = <V n="B" /> − 2<V n="e" />, butée nulle à court terme ; le plus défavorable des deux conditions gouverne.</>, 'confirmer'],

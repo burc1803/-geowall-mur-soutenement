@@ -176,6 +176,8 @@ export interface BearingSoilProperties {
   cu?: number; // kPa, seulement pour la classe CL
 }
 
+export type StemPassiveChoice = 0 | 1 | 2 | 3;
+
 /** Sol de REMBLAI (poussée sur le voile, poids sur le talon). Le sol de fondation est dans `foundation`. */
 export interface SoilProperties {
   gamma: number; // Poids volumique du sol de remblai humide (kN/m3)
@@ -192,6 +194,8 @@ export interface SoilProperties {
   mu?: number;
   methodConfig?: SoilMethodConfig;
   hSolAv: number; // Hauteur de sol à l'avant (m)
+  /** MUR-07 : poussée passive du sol avant sur le voile (0 non comptée, 1 nominale, 2 Ψ·φp, 3 facteur de H). Absent = 3 (D1). */
+  stemPassive?: StemPassiveChoice;
   qAllowable_SLS: number; // Portance admissible SLS (kPa) pour tassement <= 25mm
   qUltimate_ULS: number; // Portance ultime ULS (kPa)
   geotechFactors?: GeotechnicalFactors; // @deprecated (ignoré)
@@ -330,7 +334,19 @@ export interface CombinationResult {
   mur_Mf: number;
   mur_Vf: number;
   /** Forces latérales pondérées appliquées au voile dans cette combinaison (kN/m), par catégorie ; `total` = somme (= Vf à la base d'un mur en porte-à-faux). Lecture seule. */
-  stem_lateral: { terre: number; eau: number; surcharge: number; seisme: number; autres: number; total: number };
+  stem_lateral: { terre: number; eau: number; surcharge: number; seisme: number; autres: number; butee_voile: number; total: number };
+  /** MUR-07 : poussée passive sur le voile, pour cette combinaison. `Mf_choices` = M_f du voile (kN·m/m) pour les choix 0 à 3 (calcul du moteur). */
+  stem_passive: {
+    factor: number; // facteur du choix retenu (0 si non comptée)
+    Kp_eff: number; // Kp (ou Kp·PPE/PP au séisme) utilisé
+    P_nominal: number; // résultante nominale sur h_v (kN/m)
+    M_nominal: number; // moment nominal au pied du voile (kN·m/m)
+    Mf_choices: [number, number, number, number];
+    foot_active: number; // moment signé au pied sans butée sur le voile (kN·m/m)
+    foot_shear: number; // effort tranchant net signé au pied (kN/m), choix retenu
+    seismic_null: boolean; // séisme avec butée sismique nulle (MUR-02 D9) : facteur effectif 0
+    foot_net: number; // moment signé au pied, choix retenu (kN·m/m)
+  };
   mur_Vf_dv: number; // effort tranchant du voile à dv de la face de la semelle (information ; 11.3.2 À CONFIRMER)
   slab_ok: boolean; // au moins un état (Z, F, H) a la résultante dans la base : efforts du patin et du talon valides
   toe_Mf: number;
@@ -517,6 +533,19 @@ export interface AnalysisResult {
   geotech: GeotechResolved;
   seismic: SeismicSummary;
   frost: { deduct: boolean; df: number; df_entered: boolean; z_top: number; no_df_treatment: FrostNoDfTreatment; df_missing: boolean };
+  /** MUR-07 : géométrie de la poussée passive sur le voile (sol avant, au-dessus du dessus de la semelle). */
+  stemPassive: {
+    choice: StemPassiveChoice;
+    active: boolean; // h_v > 0 et Kp > 0
+    hv: number; // hauteur sous pression (m) = hSolAv − z_gel
+    zFront: number; // profondeur de la surface du sol avant sous le haut du voile (m)
+    zGel: number; // zone gelée déduite (m), mesurée depuis la surface du sol avant
+    Kp: number;
+    gamma: number; // γ du sol avant (kN/m³)
+    gammaPrime: number; // γ′ du sol avant (kN/m³)
+    zDry: number; // profondeur de la nappe aval sous la surface du sol avant (m)
+    envelope: { Mf: number; comb: string }[]; // enveloppe ÉLU de M_f pour les choix 0 à 3 et combinaison qui gouverne
+  };
   eccentricity_ok_ULS: boolean; // e ≤ B/6 pour toutes les combinaisons ELU applicables
   eccentricity_ok_SLS: boolean; // e ≤ B/6 pour toutes les combinaisons ELS
   // Poids propres NON pondérés (kN/m), lecture seule : exposés pour la note de calcul
